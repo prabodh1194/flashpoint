@@ -22,3 +22,10 @@ variable "availability_zones" {
   type    = list(string)
   default = ["us-east-1a", "us-east-1b", "us-east-1c"]
 }
+
+# When true: private subnets + VPC interface endpoints for ECR/CWL (no public IPs on compute).
+# When false (default): public subnets, no NAT, no endpoints — zero idle cost for dev.
+variable "enable_vpc_endpoints" {
+  type    = bool
+  default = false
+}

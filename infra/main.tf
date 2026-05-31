@@ -9,5 +9,8 @@ terraform {
 }
 
 provider "aws" {
-  region = var.region
+  region  = var.region
+  profile = "personal-aws"
 }
+
+data "aws_caller_identity" "current" {}
