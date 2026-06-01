@@ -37,7 +37,15 @@ resource "aws_security_group" "spark_task" {
     cidr_blocks = [var.vpc_cidr]
   }
 
-  # Spark driver RPC + block manager
+  # Spark driver RPC
+  ingress {
+    from_port   = 7078
+    to_port     = 7078
+    protocol    = "tcp"
+    cidr_blocks = [var.vpc_cidr]
+  }
+
+  # Spark block manager
   ingress {
     from_port   = 7337
     to_port     = 7337
@@ -115,6 +123,7 @@ resource "aws_ecs_task_definition" "driver" {
     portMappings = [
       { containerPort = 15002, protocol = "tcp" },
       { containerPort = 7077,  protocol = "tcp" },
+      { containerPort = 7078,  protocol = "tcp" },
       { containerPort = 7337,  protocol = "tcp" }
     ]
 
@@ -128,6 +137,49 @@ resource "aws_ecs_task_definition" "driver" {
         "awslogs-group"         = aws_cloudwatch_log_group.driver.name
         "awslogs-region"        = var.region
         "awslogs-stream-prefix" = "driver"
+      }
+    }
+  }])
+
+  tags = local.tags
+}
+
+# Executor task definition — Spark Standalone worker connecting to driver master
+resource "aws_ecs_task_definition" "executor" {
+  family                   = "${local.prefix}-executor"
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+  cpu                      = "2048"
+  memory                   = "8192"
+  execution_role_arn       = aws_iam_role.ecs_execution.arn
+  task_role_arn            = aws_iam_role.spark_task.arn
+
+  runtime_platform {
+    operating_system_family = "LINUX"
+    cpu_architecture        = "ARM64"
+  }
+
+  container_definitions = jsonencode([{
+    name       = "spark-executor"
+    image      = "${aws_ecr_repository.driver.repository_url}:latest"
+    essential  = true
+    entryPoint = ["/opt/executor-entrypoint.sh"]
+
+    portMappings = [
+      { containerPort = 7337, protocol = "tcp" }
+    ]
+
+    environment = [
+      { name = "SPARK_EXECUTOR_CORES",  value = "2" },
+      { name = "SPARK_EXECUTOR_MEMORY", value = "6g" }
+    ]
+
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        "awslogs-group"         = aws_cloudwatch_log_group.executor.name
+        "awslogs-region"        = var.region
+        "awslogs-stream-prefix" = "executor"
       }
     }
   }])

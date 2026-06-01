@@ -24,6 +24,7 @@ uv sync --python python3.12
 cat > /etc/flashpoint-gateway.env <<EOF
 FLASHPOINT_ECS_CLUSTER=${cluster}
 FLASHPOINT_DRIVER_TASK_DEF=${task_def}
+FLASHPOINT_EXECUTOR_TASK_DEF=${executor_task_def}
 FLASHPOINT_SUBNETS=${subnets}
 FLASHPOINT_SECURITY_GROUP=${security_group}
 AWS_DEFAULT_REGION=${region}

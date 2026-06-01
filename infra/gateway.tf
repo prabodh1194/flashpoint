@@ -103,12 +103,13 @@ resource "aws_instance" "gateway" {
   associate_public_ip_address = true
 
   user_data = base64encode(templatefile("${path.module}/gateway-init.sh", {
-    cluster        = aws_ecs_cluster.flashpoint.name
-    task_def       = aws_ecs_task_definition.driver.arn
-    subnets        = join(",", aws_subnet.public[*].id)
-    security_group = aws_security_group.spark_task.id
-    region         = var.region
-    branch         = var.gateway_branch
+    cluster            = aws_ecs_cluster.flashpoint.name
+    task_def           = aws_ecs_task_definition.driver.arn
+    executor_task_def  = aws_ecs_task_definition.executor.arn
+    subnets            = join(",", aws_subnet.public[*].id)
+    security_group     = aws_security_group.spark_task.id
+    region             = var.region
+    branch             = var.gateway_branch
   }))
 
   tags = merge(local.tags, { Name = "${local.prefix}-gateway" })

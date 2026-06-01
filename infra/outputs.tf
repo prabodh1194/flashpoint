@@ -22,6 +22,10 @@ output "driver_task_definition_arn" {
   value = aws_ecs_task_definition.driver.arn
 }
 
+output "executor_task_definition_arn" {
+  value = aws_ecs_task_definition.executor.arn
+}
+
 output "gateway_public_ip" {
   value = aws_instance.gateway.public_ip
 }

@@ -20,9 +20,10 @@ RUN echo "127.0.0.1 spark-driver" >> /etc/hosts
 ENV HOSTNAME=spark-driver
 
 COPY entrypoint.sh /opt/entrypoint.sh
-RUN chmod +x /opt/entrypoint.sh
+COPY executor-entrypoint.sh /opt/executor-entrypoint.sh
+RUN chmod +x /opt/entrypoint.sh /opt/executor-entrypoint.sh
 
-# Spark Connect gRPC port
-EXPOSE 15002
+# Spark Connect gRPC | Standalone master | driver RPC | block manager
+EXPOSE 15002 7077 7078 7337
 
 ENTRYPOINT ["/opt/entrypoint.sh"]

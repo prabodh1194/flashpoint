@@ -19,14 +19,16 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 log = logging.getLogger(__name__)
 
 # --- Config (env vars set on the EC2 gateway host) ---
-CLUSTER        = os.environ["FLASHPOINT_ECS_CLUSTER"]
-TASK_DEF       = os.environ["FLASHPOINT_DRIVER_TASK_DEF"]
-SUBNETS        = os.environ["FLASHPOINT_SUBNETS"].split(",")
-SECURITY_GROUP = os.environ["FLASHPOINT_SECURITY_GROUP"]
-REGION         = os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
-GRPC_PORT      = int(os.environ.get("FLASHPOINT_GRPC_PORT", "15002"))
+CLUSTER          = os.environ["FLASHPOINT_ECS_CLUSTER"]
+TASK_DEF         = os.environ["FLASHPOINT_DRIVER_TASK_DEF"]
+EXECUTOR_TASK_DEF = os.environ["FLASHPOINT_EXECUTOR_TASK_DEF"]
+SUBNETS          = os.environ["FLASHPOINT_SUBNETS"].split(",")
+SECURITY_GROUP   = os.environ["FLASHPOINT_SECURITY_GROUP"]
+REGION           = os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
+GRPC_PORT        = int(os.environ.get("FLASHPOINT_GRPC_PORT", "15002"))
+EXECUTOR_COUNT   = int(os.environ.get("FLASHPOINT_EXECUTOR_COUNT", "2"))
 # Stop idle tasks after this many seconds to prevent runaway Fargate cost
-SESSION_TTL_S  = int(os.environ.get("FLASHPOINT_SESSION_TTL_S", str(2 * 3600)))
+SESSION_TTL_S    = int(os.environ.get("FLASHPOINT_SESSION_TTL_S", str(2 * 3600)))
 
 ecs = boto3.client("ecs", region_name=REGION)
 ec2 = boto3.client("ec2", region_name=REGION)
@@ -61,15 +63,55 @@ def _wait_running(task_arn: str) -> None:
     waiter.wait(cluster=CLUSTER, tasks=[task_arn])
 
 
-def _public_ip(task_arn: str) -> str:
+def _eni_id(task_arn: str) -> str:
     resp = ecs.describe_tasks(cluster=CLUSTER, tasks=[task_arn])
-    eni_id = next(
+    return next(
         d["value"]
         for d in resp["tasks"][0]["attachments"][0]["details"]
         if d["name"] == "networkInterfaceId"
     )
-    iface = ec2.describe_network_interfaces(NetworkInterfaceIds=[eni_id])
+
+
+def _public_ip(task_arn: str) -> str:
+    iface = ec2.describe_network_interfaces(NetworkInterfaceIds=[_eni_id(task_arn)])
     return iface["NetworkInterfaces"][0]["Association"]["PublicIp"]
+
+
+def _private_ip(task_arn: str) -> str:
+    iface = ec2.describe_network_interfaces(NetworkInterfaceIds=[_eni_id(task_arn)])
+    return iface["NetworkInterfaces"][0]["PrivateIpAddress"]
+
+
+def _run_executor_tasks(master_url: str, n: int) -> list[str]:
+    """Launch N Fargate Spot executor workers pointing at the driver's master URL."""
+    arns = []
+    for _ in range(n):
+        resp = ecs.run_task(
+            cluster=CLUSTER,
+            taskDefinition=EXECUTOR_TASK_DEF,
+            launchType="FARGATE",
+            networkConfiguration={
+                "awsvpcConfiguration": {
+                    "subnets": SUBNETS,
+                    "securityGroups": [SECURITY_GROUP],
+                    "assignPublicIp": "ENABLED",
+                }
+            },
+            overrides={
+                "containerOverrides": [{
+                    "name": "spark-executor",
+                    "environment": [
+                        {"name": "SPARK_MASTER_URL", "value": master_url}
+                    ],
+                }]
+            },
+        )
+        failures = resp.get("failures", [])
+        if failures:
+            log.error("Executor RunTask failed: %s", failures)
+            continue
+        arns.append(resp["tasks"][0]["taskArn"])
+    return arns
 
 
 def _is_running(task_arn: str) -> bool:
@@ -101,11 +143,12 @@ async def _reap_idle_sessions():
         for sid in expired:
             s = sessions.pop(sid, None)
             if s:
-                log.warning("Reaping idle session %s (task %s)", sid, s["task_arn"])
-                try:
-                    ecs.stop_task(cluster=CLUSTER, task=s["task_arn"])
-                except Exception as exc:
-                    log.error("Failed to stop task %s: %s", s["task_arn"], exc)
+                log.warning("Reaping idle session %s", sid)
+                for arn in [s["task_arn"]] + s.get("executor_arns", []):
+                    try:
+                        ecs.stop_task(cluster=CLUSTER, task=arn)
+                    except Exception as exc:
+                        log.error("Failed to stop task %s: %s", arn, exc)
 
 
 @asynccontextmanager
@@ -127,16 +170,21 @@ def create_session():
     log.info("Creating session %s", session_id)
 
     task_arn = _run_driver_task()
-    log.info("Task launched: %s", task_arn)
+    log.info("Driver task launched: %s", task_arn)
 
     _wait_running(task_arn)
-    ip = _public_ip(task_arn)
-    endpoint = f"sc://{ip}:{GRPC_PORT}"
-    log.info("Session %s ready at %s", session_id, endpoint)
+    private_ip = _private_ip(task_arn)
+    master_url = f"spark://{private_ip}:7077"
+    endpoint = f"sc://{private_ip}:{GRPC_PORT}"
+    log.info("Driver ready — master=%s endpoint=%s", master_url, endpoint)
+
+    executor_arns = _run_executor_tasks(master_url, EXECUTOR_COUNT)
+    log.info("Launched %d executor tasks: %s", len(executor_arns), executor_arns)
 
     sessions[session_id] = {
         "task_arn": task_arn,
-        "task_ip": ip,
+        "executor_arns": executor_arns,
+        "task_ip": private_ip,
         "endpoint": endpoint,
         "status": "running",
         "created_at": time.time(),
@@ -165,8 +213,12 @@ def delete_session(session_id: str):
     s = sessions.pop(session_id, None)
     if not s:
         raise HTTPException(status_code=404, detail="session not found")
-    ecs.stop_task(cluster=CLUSTER, task=s["task_arn"])
-    log.info("Stopped task %s (session %s)", s["task_arn"], session_id)
+    for arn in [s["task_arn"]] + s.get("executor_arns", []):
+        try:
+            ecs.stop_task(cluster=CLUSTER, task=arn)
+        except Exception as exc:
+            log.error("Failed to stop task %s: %s", arn, exc)
+    log.info("Stopped driver + %d executors (session %s)", len(s.get("executor_arns", [])), session_id)
 
 
 @app.get("/healthz")

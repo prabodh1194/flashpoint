@@ -4,3 +4,10 @@ resource "aws_cloudwatch_log_group" "driver" {
 
   tags = local.tags
 }
+
+resource "aws_cloudwatch_log_group" "executor" {
+  name              = "/flashpoint/executor"
+  retention_in_days = 1
+
+  tags = local.tags
+}
