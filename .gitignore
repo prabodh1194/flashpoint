@@ -35,3 +35,4 @@ infra/*.tfstate
 infra/*.tfstate.backup
 infra/*.tfstate.*.backup
 infra/*.tfplan
+infra/dev.tfvars

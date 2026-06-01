@@ -108,6 +108,7 @@ resource "aws_instance" "gateway" {
     subnets        = join(",", aws_subnet.public[*].id)
     security_group = aws_security_group.spark_task.id
     region         = var.region
+    branch         = var.gateway_branch
   }))
 
   tags = merge(local.tags, { Name = "${local.prefix}-gateway" })

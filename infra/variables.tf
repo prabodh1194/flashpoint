@@ -29,3 +29,9 @@ variable "enable_vpc_endpoints" {
   type    = bool
   default = false
 }
+
+variable "gateway_branch" {
+  type        = string
+  default     = "main"
+  description = "Git branch to deploy on the gateway EC2 instance"
+}

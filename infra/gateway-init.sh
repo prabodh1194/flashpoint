@@ -7,10 +7,13 @@ curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin s
 
 # Clone repo (or pull if exists)
 REPO_DIR="/opt/flashpoint"
+REPO_BRANCH="${branch}"
 if [ -d "$REPO_DIR/.git" ]; then
-  git -C "$REPO_DIR" pull
+  git -C "$REPO_DIR" fetch origin
+  git -C "$REPO_DIR" checkout "$REPO_BRANCH"
+  git -C "$REPO_DIR" pull origin "$REPO_BRANCH"
 else
-  git clone https://github.com/prabodh1194/flashpoint.git "$REPO_DIR"
+  git clone --branch "$REPO_BRANCH" https://github.com/prabodh1194/flashpoint.git "$REPO_DIR"
 fi
 
 # Install gateway deps
