@@ -3,7 +3,9 @@
 Launches Fargate driver tasks on demand and returns their gRPC endpoints.
 In-memory session map only; persistence and HA deferred to Kindle #8/#10.
 """
+import asyncio
 import os
+import time
 import uuid
 import logging
 from contextlib import asynccontextmanager
@@ -23,6 +25,8 @@ SUBNETS        = os.environ["FLASHPOINT_SUBNETS"].split(",")
 SECURITY_GROUP = os.environ["FLASHPOINT_SECURITY_GROUP"]
 REGION         = os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
 GRPC_PORT      = int(os.environ.get("FLASHPOINT_GRPC_PORT", "15002"))
+# Stop idle tasks after this many seconds to prevent runaway Fargate cost
+SESSION_TTL_S  = int(os.environ.get("FLASHPOINT_SESSION_TTL_S", str(2 * 3600)))
 
 ecs = boto3.client("ecs", region_name=REGION)
 ec2 = boto3.client("ec2", region_name=REGION)
@@ -85,10 +89,31 @@ class SessionResponse(BaseModel):
 
 # --- App ---
 
+async def _reap_idle_sessions():
+    """Stop Fargate tasks that have exceeded SESSION_TTL_S to prevent runaway cost."""
+    while True:
+        await asyncio.sleep(60)
+        now = time.time()
+        expired = [
+            sid for sid, s in list(sessions.items())
+            if now - s.get("created_at", now) > SESSION_TTL_S
+        ]
+        for sid in expired:
+            s = sessions.pop(sid, None)
+            if s:
+                log.warning("Reaping idle session %s (task %s)", sid, s["task_arn"])
+                try:
+                    ecs.stop_task(cluster=CLUSTER, task=s["task_arn"])
+                except Exception as exc:
+                    log.error("Failed to stop task %s: %s", s["task_arn"], exc)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    log.info("Flashpoint gateway starting (cluster=%s)", CLUSTER)
+    log.info("Flashpoint gateway starting (cluster=%s, ttl=%ds)", CLUSTER, SESSION_TTL_S)
+    reaper = asyncio.create_task(_reap_idle_sessions())
     yield
+    reaper.cancel()
     log.info("Flashpoint gateway shutting down")
 
 
@@ -114,6 +139,7 @@ def create_session():
         "task_ip": ip,
         "endpoint": endpoint,
         "status": "running",
+        "created_at": time.time(),
     }
     return SessionResponse(
         session_id=session_id, task_arn=task_arn, endpoint=endpoint, status="running"
