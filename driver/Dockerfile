@@ -8,12 +8,16 @@ ENV PATH="${SPARK_HOME}/bin:${PATH}"
 ENV SPARK_VERSION=${SPARK_VERSION}
 
 # Install Spark
-RUN apt-get update && apt-get install -y --no-install-recommends curl procps python3 python3-pip && \
+RUN apt-get update && apt-get install -y --no-install-recommends curl procps iproute2 coreutils && \
     curl -fsSL "https://dlcdn.apache.org/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-hadoop${HADOOP_VERSION}.tgz" \
       | tar -xz -C /opt && \
     mv "/opt/spark-${SPARK_VERSION}-bin-hadoop${HADOOP_VERSION}" "${SPARK_HOME}" && \
-    apt-get clean && rm -rf /var/lib/apt/lists/* && \
-    pip3 install --no-cache-dir pandas pyarrow grpcio grpcio-status
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Pre-register a fixed hostname so InetAddress.getLocalHost() resolves
+# even in Lambda containers where the UUID hostname has no DNS entry.
+RUN echo "127.0.0.1 spark-driver" >> /etc/hosts
+ENV HOSTNAME=spark-driver
 
 COPY entrypoint.sh /opt/entrypoint.sh
 RUN chmod +x /opt/entrypoint.sh
