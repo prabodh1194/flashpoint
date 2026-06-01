@@ -21,3 +21,11 @@ output "ecs_cluster_arn" {
 output "driver_task_definition_arn" {
   value = aws_ecs_task_definition.driver.arn
 }
+
+output "gateway_public_ip" {
+  value = aws_instance.gateway.public_ip
+}
+
+output "gateway_api" {
+  value = "http://${aws_instance.gateway.public_ip}:8080"
+}
