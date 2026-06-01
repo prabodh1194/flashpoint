@@ -2,8 +2,8 @@
 set -euo pipefail
 
 # Install Python + uv
-dnf install -y python3.12 python3.12-pip git
-pip3.12 install uv
+dnf install -y python3.12 git
+curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh
 
 # Clone repo (or pull if exists)
 REPO_DIR="/opt/flashpoint"
@@ -15,7 +15,7 @@ fi
 
 # Install gateway deps
 cd "$REPO_DIR/gateway"
-uv sync
+uv sync --python python3.12
 
 # Write environment config
 cat > /etc/flashpoint-gateway.env <<EOF

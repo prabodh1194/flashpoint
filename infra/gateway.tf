@@ -84,6 +84,11 @@ resource "aws_iam_role_policy" "gateway_ecs" {
   })
 }
 
+resource "aws_iam_role_policy_attachment" "gateway_ssm" {
+  role       = aws_iam_role.gateway.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
 resource "aws_iam_instance_profile" "gateway" {
   name = "${local.prefix}-gateway"
   role = aws_iam_role.gateway.name
