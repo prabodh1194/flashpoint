@@ -6,18 +6,18 @@ output "public_subnet_ids" {
   value = aws_subnet.public[*].id
 }
 
-output "capacity_provider_name" {
-  value = terraform_data.capacity_provider.input.name
-}
-
-output "capacity_provider_security_group_id" {
-  value = aws_security_group.capacity_provider.id
+output "task_security_group_id" {
+  value = aws_security_group.spark_task.id
 }
 
 output "ecr_repository_url" {
   value = aws_ecr_repository.driver.repository_url
 }
 
-output "driver_function_name" {
-  value = terraform_data.driver_function.input.name
+output "ecs_cluster_arn" {
+  value = aws_ecs_cluster.flashpoint.arn
+}
+
+output "driver_task_definition_arn" {
+  value = aws_ecs_task_definition.driver.arn
 }

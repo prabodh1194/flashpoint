@@ -22,7 +22,7 @@ resource "aws_vpc_endpoint" "ecr_api" {
   service_name        = "com.amazonaws.${var.region}.ecr.api"
   vpc_endpoint_type   = "Interface"
   subnet_ids          = local.endpoint_subnets
-  security_group_ids  = [aws_security_group.capacity_provider.id]
+  security_group_ids  = [aws_security_group.spark_task.id]
   private_dns_enabled = true
   tags                = merge(local.tags, { Name = "${local.prefix}-ecr-api" })
 }
@@ -33,7 +33,7 @@ resource "aws_vpc_endpoint" "ecr_dkr" {
   service_name        = "com.amazonaws.${var.region}.ecr.dkr"
   vpc_endpoint_type   = "Interface"
   subnet_ids          = local.endpoint_subnets
-  security_group_ids  = [aws_security_group.capacity_provider.id]
+  security_group_ids  = [aws_security_group.spark_task.id]
   private_dns_enabled = true
   tags                = merge(local.tags, { Name = "${local.prefix}-ecr-dkr" })
 }
@@ -44,7 +44,7 @@ resource "aws_vpc_endpoint" "logs" {
   service_name        = "com.amazonaws.${var.region}.logs"
   vpc_endpoint_type   = "Interface"
   subnet_ids          = local.endpoint_subnets
-  security_group_ids  = [aws_security_group.capacity_provider.id]
+  security_group_ids  = [aws_security_group.spark_task.id]
   private_dns_enabled = true
   tags                = merge(local.tags, { Name = "${local.prefix}-logs" })
 }
