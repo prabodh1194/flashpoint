@@ -4,16 +4,20 @@ Launches Fargate driver tasks on demand and returns their gRPC endpoints.
 In-memory session map only; persistence and HA deferred to Kindle #8/#10.
 """
 import asyncio
+import hashlib
 import os
 import time
 import uuid
 import logging
+from collections import deque
 from contextlib import asynccontextmanager
 
 import boto3
 import uvicorn
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from pyspark.sql import SparkSession
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
@@ -29,12 +33,15 @@ GRPC_PORT        = int(os.environ.get("FLASHPOINT_GRPC_PORT", "15002"))
 EXECUTOR_COUNT   = int(os.environ.get("FLASHPOINT_EXECUTOR_COUNT", "2"))
 # Stop idle tasks after this many seconds to prevent runaway Fargate cost
 SESSION_TTL_S    = int(os.environ.get("FLASHPOINT_SESSION_TTL_S", str(2 * 3600)))
+MAX_SESSIONS     = int(os.environ.get("FLASHPOINT_MAX_SESSIONS", "3"))
 
 ecs = boto3.client("ecs", region_name=REGION)
-ec2 = boto3.client("ec2", region_name=REGION)
 
-# In-memory session store: session_id -> {task_arn, task_ip, endpoint, status}
+# In-memory session store: session_id -> {task_arn, executor_arns, task_ip, endpoint, ...}
 sessions: dict[str, dict] = {}
+
+# Query history: capped deque of completed query records
+query_history: deque[dict] = deque(maxlen=500)
 
 
 # --- Helpers ---
@@ -63,23 +70,11 @@ def _wait_running(task_arn: str) -> None:
     waiter.wait(cluster=CLUSTER, tasks=[task_arn])
 
 
-def _eni_id(task_arn: str) -> str:
-    resp = ecs.describe_tasks(cluster=CLUSTER, tasks=[task_arn])
-    return next(
-        d["value"]
-        for d in resp["tasks"][0]["attachments"][0]["details"]
-        if d["name"] == "networkInterfaceId"
-    )
-
-
-def _public_ip(task_arn: str) -> str:
-    iface = ec2.describe_network_interfaces(NetworkInterfaceIds=[_eni_id(task_arn)])
-    return iface["NetworkInterfaces"][0]["Association"]["PublicIp"]
-
-
 def _private_ip(task_arn: str) -> str:
-    iface = ec2.describe_network_interfaces(NetworkInterfaceIds=[_eni_id(task_arn)])
-    return iface["NetworkInterfaces"][0]["PrivateIpAddress"]
+    """Read private IP directly from ECS task attachment details — no ENI call needed."""
+    resp = ecs.describe_tasks(cluster=CLUSTER, tasks=[task_arn])
+    details = resp["tasks"][0]["attachments"][0]["details"]
+    return next(d["value"] for d in details if d["name"] == "privateIPv4Address")
 
 
 def _run_executor_tasks(master_url: str, n: int) -> list[str]:
@@ -120,6 +115,33 @@ def _is_running(task_arn: str) -> bool:
     return bool(tasks) and tasks[0].get("lastStatus") == "RUNNING"
 
 
+def _query_id(sql: str) -> str:
+    """Stable 16-char hex ID derived from normalized SQL content."""
+    normalized = " ".join(sql.strip().lower().split())
+    return hashlib.sha256(normalized.encode()).hexdigest()[:16]
+
+
+def _stop_orphaned_tasks() -> None:
+    """On startup: stop any ECS tasks that are not tracked in the sessions map."""
+    known_arns = {
+        arn
+        for s in sessions.values()
+        for arn in [s["task_arn"]] + s.get("executor_arns", [])
+    }
+    try:
+        paginator = ecs.get_paginator("list_tasks")
+        for page in paginator.paginate(cluster=CLUSTER, desiredStatus="RUNNING"):
+            for arn in page.get("taskArns", []):
+                if arn not in known_arns:
+                    log.warning("Stopping orphaned task %s", arn)
+                    try:
+                        ecs.stop_task(cluster=CLUSTER, task=arn, reason="orphan-cleanup")
+                    except Exception as exc:
+                        log.error("Failed to stop orphan %s: %s", arn, exc)
+    except Exception as exc:
+        log.error("Orphan cleanup failed: %s", exc)
+
+
 # --- API models ---
 
 class SessionResponse(BaseModel):
@@ -127,6 +149,18 @@ class SessionResponse(BaseModel):
     task_arn: str
     endpoint: str
     status: str
+
+
+class QueryRequest(BaseModel):
+    sql: str
+
+
+class QueryResponse(BaseModel):
+    query_id: str
+    columns: list[str]
+    rows: list[list]
+    duration_ms: int
+    row_count: int
 
 
 # --- App ---
@@ -144,6 +178,7 @@ async def _reap_idle_sessions():
             s = sessions.pop(sid, None)
             if s:
                 log.warning("Reaping idle session %s", sid)
+                _drop_spark(sid)
                 for arn in [s["task_arn"]] + s.get("executor_arns", []):
                     try:
                         ecs.stop_task(cluster=CLUSTER, task=arn)
@@ -154,6 +189,7 @@ async def _reap_idle_sessions():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     log.info("Flashpoint gateway starting (cluster=%s, ttl=%ds)", CLUSTER, SESSION_TTL_S)
+    _stop_orphaned_tasks()
     reaper = asyncio.create_task(_reap_idle_sessions())
     yield
     reaper.cancel()
@@ -162,10 +198,39 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Flashpoint Gateway", lifespan=lifespan)
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Cache one SparkSession per session_id so we don't reconnect on every query
+_spark_cache: dict[str, SparkSession] = {}
+
+
+def _get_spark(session_id: str, endpoint: str) -> SparkSession:
+    if session_id not in _spark_cache:
+        _spark_cache[session_id] = (
+            SparkSession.builder.remote(endpoint).getOrCreate()
+        )
+    return _spark_cache[session_id]
+
+
+def _drop_spark(session_id: str) -> None:
+    spark = _spark_cache.pop(session_id, None)
+    if spark:
+        try:
+            spark.stop()
+        except Exception:
+            pass
+
 
 @app.post("/sessions", response_model=SessionResponse, status_code=201)
 def create_session():
     """Launch a Fargate driver task and return its gRPC endpoint."""
+    if len(sessions) >= MAX_SESSIONS:
+        raise HTTPException(status_code=429, detail=f"session cap reached ({MAX_SESSIONS} max)")
     session_id = str(uuid.uuid4())
     log.info("Creating session %s", session_id)
 
@@ -208,17 +273,73 @@ def list_sessions():
     return {"sessions": list(sessions.keys()), "count": len(sessions)}
 
 
+@app.post("/sessions/{session_id}/query", response_model=QueryResponse)
+def run_query(session_id: str, req: QueryRequest):
+    """Execute SQL against a running session's Spark Connect driver."""
+    s = sessions.get(session_id)
+    if not s:
+        raise HTTPException(status_code=404, detail="session not found")
+    if not _is_running(s["task_arn"]):
+        raise HTTPException(status_code=409, detail="session not running")
+
+    spark = _get_spark(session_id, s["endpoint"])
+    t0 = time.time()
+    try:
+        df = spark.sql(req.sql)
+        collected = df.collect()
+    except Exception as exc:
+        qid = _query_id(req.sql)
+        query_history.append({
+            "query_id": qid, "sql": req.sql, "status": "failed",
+            "duration_ms": int((time.time() - t0) * 1000), "row_count": 0,
+            "session_id": session_id, "ts": time.strftime("%H:%M:%S", time.localtime()),
+        })
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    qid = _query_id(req.sql)
+    duration_ms = int((time.time() - t0) * 1000)
+    columns = df.columns
+    rows = [[str(v) for v in row] for row in collected]
+    query_history.append({
+        "query_id": qid, "sql": req.sql, "status": "success",
+        "duration_ms": duration_ms, "row_count": len(rows),
+        "session_id": session_id, "ts": time.strftime("%H:%M:%S", time.localtime()),
+    })
+    log.info("Query %s on session %s: %dms, %d rows", qid, session_id, duration_ms, len(rows))
+    return QueryResponse(
+        query_id=qid,
+        columns=columns,
+        rows=rows,
+        duration_ms=duration_ms,
+        row_count=len(rows),
+    )
+
+
 @app.delete("/sessions/{session_id}", status_code=204)
 def delete_session(session_id: str):
     s = sessions.pop(session_id, None)
     if not s:
         raise HTTPException(status_code=404, detail="session not found")
+    _drop_spark(session_id)
     for arn in [s["task_arn"]] + s.get("executor_arns", []):
         try:
             ecs.stop_task(cluster=CLUSTER, task=arn)
         except Exception as exc:
             log.error("Failed to stop task %s: %s", arn, exc)
     log.info("Stopped driver + %d executors (session %s)", len(s.get("executor_arns", [])), session_id)
+
+
+@app.get("/history")
+def list_history():
+    return {"history": list(query_history), "count": len(query_history)}
+
+
+@app.get("/history/{query_id}")
+def get_history_entry(query_id: str):
+    entry = next((e for e in query_history if e["query_id"] == query_id), None)
+    if not entry:
+        raise HTTPException(status_code=404, detail="query not found")
+    return entry
 
 
 @app.get("/healthz")
