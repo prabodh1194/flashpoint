@@ -23,6 +23,12 @@ export async function runQuery(sessionId, sql) {
   return r.json()
 }
 
+export async function listSessions() {
+  const r = await fetch(`${BASE}/sessions`)
+  if (!r.ok) throw new Error(`listSessions: ${r.status}`)
+  return r.json()  // { sessions: [id, ...], count: N }
+}
+
 export async function fetchHistory() {
   const r = await fetch(`${BASE}/history`)
   if (!r.ok) throw new Error(`history: ${r.status}`)
