@@ -75,6 +75,28 @@ resource "aws_iam_role_policy" "gateway_ecs" {
           aws_iam_role.spark_task.arn,
         ]
       },
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:DeleteItem",
+          "dynamodb:Query",
+          "dynamodb:Scan",
+          "dynamodb:BatchWriteItem",
+        ]
+        Resource = [
+          aws_dynamodb_table.sessions.arn,
+          aws_dynamodb_table.meters.arn,
+        ]
+      },
+      {
+        # AWS Pricing API does not support resource-level permissions
+        Effect   = "Allow"
+        Action   = "pricing:GetProducts"
+        Resource = "*"
+      },
     ]
   })
 }
@@ -105,6 +127,8 @@ resource "aws_instance" "gateway" {
     security_group     = aws_security_group.spark_task.id
     region             = var.region
     branch             = var.gateway_branch
+    sessions_table     = aws_dynamodb_table.sessions.name
+    meters_table       = aws_dynamodb_table.meters.name
   }))
 
   tags = merge(local.tags, { Name = "${local.prefix}-gateway" })

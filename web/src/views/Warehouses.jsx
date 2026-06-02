@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Zap, Play, Square, ChevronDown, Loader, RefreshCw } from 'lucide-react'
-import { listSessions, createSession, deleteSession, fetchHistory } from '../api'
+import { listSessions, createSession, deleteSession, suspendSession, resumeSession, resizeSession, fetchHistory } from '../api'
 
 // Warehouse name registry — persisted to localStorage so names survive page reloads.
 // Maps session_id -> { name, size, createdAt }
@@ -49,11 +49,11 @@ export function Warehouses() {
 
   useEffect(() => { refresh() }, [refresh])
 
-  const resume = async (size) => {
+  const createNew = async (size) => {
     setCreating(true)
     setShowSizePicker(false)
     try {
-      const session = await createSession()
+      const session = await createSession(size)
       const registry = loadRegistry()
       const name = `wh-${_whCounter++}`
       registry[session.session_id] = { name, size, createdAt: Date.now() }
@@ -69,6 +69,27 @@ export function Warehouses() {
   const suspend = async (sid) => {
     setWarehouses(ws => ws.map(w => w.session_id === sid ? { ...w, status: 'stopping' } : w))
     try {
+      await suspendSession(sid)
+      await refresh()
+    } catch {
+      await refresh()
+    }
+  }
+
+  const resume = async (sid) => {
+    setWarehouses(ws => ws.map(w => w.session_id === sid ? { ...w, status: 'resuming' } : w))
+    try {
+      await resumeSession(sid)
+      await refresh()
+    } catch (err) {
+      alert(`Failed to resume: ${err.message}`)
+      await refresh()
+    }
+  }
+
+  const destroy = async (sid) => {
+    setWarehouses(ws => ws.map(w => w.session_id === sid ? { ...w, status: 'stopping' } : w))
+    try {
       await deleteSession(sid)
       const registry = loadRegistry()
       delete registry[sid]
@@ -76,6 +97,15 @@ export function Warehouses() {
       await refresh()
     } catch {
       await refresh()
+    }
+  }
+
+  const resize = async (sid, size) => {
+    try {
+      await resizeSession(sid, size)
+      await refresh()
+    } catch (err) {
+      alert(`Failed to resize: ${err.message}`)
     }
   }
 
@@ -102,7 +132,7 @@ export function Warehouses() {
             {showSizePicker && (
               <div style={s.sizeMenu}>
                 {SIZES.map(sz => (
-                  <button key={sz} style={s.sizeOption} onClick={() => resume(sz)}>
+                  <button key={sz} style={s.sizeOption} onClick={() => createNew(sz)}>
                     <span style={s.sizeLabel}>{sz}</span>
                     <span style={s.sizeDetail}>{EXECUTOR_COUNTS[sz]} exec · ${HOURLY_RATE[sz].toFixed(2)}/hr</span>
                   </button>
@@ -128,6 +158,9 @@ export function Warehouses() {
               wh={wh}
               queryCount={queryCounts[wh.session_id] || 0}
               onSuspend={() => suspend(wh.session_id)}
+              onResume={() => resume(wh.session_id)}
+              onDestroy={() => destroy(wh.session_id)}
+              onResize={(size) => resize(wh.session_id, size)}
             />
           ))}
         </div>
@@ -138,33 +171,65 @@ export function Warehouses() {
   )
 }
 
-function WarehouseCard({ wh, queryCount, onSuspend }) {
-  const stopping = wh.status === 'stopping'
+function WarehouseCard({ wh, queryCount, onSuspend, onResume, onDestroy, onResize }) {
+  const [showResize, setShowResize] = useState(false)
+  const isBusy = ['stopping', 'resuming'].includes(wh.status)
+  const isRunning = wh.status === 'running'
+  const isSuspended = wh.status === 'suspended'
   return (
     <div style={s.card}>
       <div style={s.cardTop}>
         <div style={s.cardName}>
           <span style={s.cardId}>{wh.name}</span>
-          <StatusBadge status={stopping ? 'stopping' : wh.status} />
+          <StatusBadge status={wh.status} />
         </div>
-        <button
-          style={{ ...s.suspendBtn, ...(stopping ? s.suspendBtnBusy : {}) }}
-          onClick={onSuspend}
-          disabled={stopping}
-        >
-          {stopping
-            ? <Loader size={11} style={{ animation: 'spin 1s linear infinite' }} />
-            : <Square size={11} />}
-          {stopping ? 'Stopping…' : 'Suspend'}
-        </button>
+        <div style={{ display: 'flex', gap: 5 }}>
+          {isRunning && (
+            <button style={s.suspendBtn} onClick={onSuspend} disabled={isBusy}>
+              <Square size={11} />Suspend
+            </button>
+          )}
+          {isSuspended && (
+            <button style={s.resumeBtn} onClick={onResume} disabled={isBusy}>
+              {isBusy
+                ? <Loader size={11} style={{ animation: 'spin 1s linear infinite' }} />
+                : <Play size={11} />}
+              {isBusy ? 'Starting…' : 'Resume'}
+            </button>
+          )}
+          {isBusy && (
+            <button style={{ ...s.suspendBtn, ...s.suspendBtnBusy }} disabled>
+              <Loader size={11} style={{ animation: 'spin 1s linear infinite' }} />
+              {wh.status === 'stopping' ? 'Stopping…' : 'Starting…'}
+            </button>
+          )}
+          <button style={s.destroyBtn} onClick={onDestroy} title="Delete warehouse">×</button>
+        </div>
       </div>
 
       <div style={s.cardMeta}>
         <MetaPair label="Size" value={wh.size} mono />
-        <MetaPair label="Executors" value={`${EXECUTOR_COUNTS[wh.size] ?? '?'} active`} />
+        <MetaPair label="Executors" value={isRunning ? `${EXECUTOR_COUNTS[wh.size] ?? '?'} active` : '—'} />
         <MetaPair label="Queries run" value={String(queryCount)} mono />
         <MetaPair label="Rate" value={`$${HOURLY_RATE[wh.size]?.toFixed(2) ?? '?'}/hr`} mono />
       </div>
+
+      {isRunning && (
+        <div style={s.resizeRow}>
+          <button style={s.resizeToggle} onClick={() => setShowResize(v => !v)}>
+            <ChevronDown size={11} />Resize
+          </button>
+          {showResize && (
+            <div style={s.resizeOptions}>
+              {SIZES.filter(sz => sz !== wh.size).map(sz => (
+                <button key={sz} style={s.resizeOption} onClick={() => { onResize(sz); setShowResize(false) }}>
+                  {sz} ({EXECUTOR_COUNTS[sz]} exec)
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <div style={s.idRow}>
         <span style={s.sessionLabel}>Session</span>
@@ -176,10 +241,12 @@ function WarehouseCard({ wh, queryCount, onSuspend }) {
 
 function StatusBadge({ status }) {
   const cfg = {
-    running:  { bg: 'rgba(34,197,94,0.1)',   border: 'rgba(34,197,94,0.3)',   color: '#22c55e', dot: true },
-    stopping: { bg: 'rgba(239,68,68,0.08)',  border: 'rgba(239,68,68,0.25)',  color: 'var(--red)', dot: false },
+    running:   { bg: 'rgba(34,197,94,0.1)',   border: 'rgba(34,197,94,0.3)',   color: '#22c55e', dot: true },
+    suspended: { bg: 'rgba(139,147,168,0.1)', border: 'rgba(139,147,168,0.2)', color: '#8b93a8', dot: false },
+    stopping:  { bg: 'rgba(239,68,68,0.08)',  border: 'rgba(239,68,68,0.25)',  color: 'var(--red)', dot: false },
+    resuming:  { bg: 'rgba(245,158,11,0.08)', border: 'rgba(245,158,11,0.25)', color: 'var(--amber)', dot: false },
   }
-  const c = cfg[status] ?? cfg.running
+  const c = cfg[status] ?? cfg.suspended
   return (
     <div style={{ ...s.badge, background: c.bg, border: `1px solid ${c.border}`, color: c.color }}>
       {c.dot && <span style={{ ...s.dot, background: c.color }} />}
@@ -240,6 +307,33 @@ const s = {
     fontSize: 11, fontFamily: 'var(--font-ui)', flexShrink: 0,
   },
   suspendBtnBusy: { opacity: 0.6, cursor: 'not-allowed' },
+  resumeBtn: {
+    display: 'flex', alignItems: 'center', gap: 4, height: 24, padding: '0 8px',
+    background: 'var(--amber-bg)', border: '1px solid var(--amber-border)',
+    borderRadius: 'var(--radius-sm)', cursor: 'pointer', color: 'var(--amber)',
+    fontSize: 11, fontFamily: 'var(--font-ui)', flexShrink: 0,
+  },
+  destroyBtn: {
+    width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center',
+    background: 'none', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
+    cursor: 'pointer', color: 'var(--text-dim)', fontSize: 14, lineHeight: 1,
+  },
+  resizeRow: { position: 'relative' },
+  resizeToggle: {
+    display: 'flex', alignItems: 'center', gap: 4, height: 22, padding: '0 8px',
+    background: 'none', border: '1px solid var(--border-dim)', borderRadius: 'var(--radius-sm)',
+    cursor: 'pointer', color: 'var(--text-dim)', fontSize: 10, fontFamily: 'var(--font-ui)',
+  },
+  resizeOptions: {
+    position: 'absolute', top: 26, left: 0, zIndex: 10, display: 'flex', gap: 4, flexWrap: 'wrap',
+    background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--radius)',
+    padding: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+  },
+  resizeOption: {
+    height: 24, padding: '0 8px', background: 'var(--bg-surface)', border: '1px solid var(--border)',
+    borderRadius: 'var(--radius-sm)', cursor: 'pointer', color: 'var(--text-secondary)',
+    fontSize: 11, fontFamily: 'var(--font-mono)',
+  },
   badge: {
     display: 'flex', alignItems: 'center', gap: 5, padding: '2px 8px',
     borderRadius: 100, fontSize: 11, fontFamily: 'var(--font-mono)',

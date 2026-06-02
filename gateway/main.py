@@ -1,7 +1,8 @@
-"""Flashpoint gateway — minimal EC2 control plane (Ember #24).
+"""Flashpoint gateway — EC2 control plane (Kindle #10/#12/#11).
 
-Launches Fargate driver tasks on demand and returns their gRPC endpoints.
-In-memory session map only; persistence and HA deferred to Kindle #8/#10.
+Sessions are persisted to DynamoDB; the in-memory dict is a cache rebuilt
+from DynamoDB + live ECS state on startup. Executors run on Fargate Spot;
+the driver runs on-demand so Spot reclamation never kills the whole session.
 """
 import asyncio
 import hashlib
@@ -22,6 +23,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from pyspark.sql import SparkSession
 
+import store
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 
@@ -33,12 +36,15 @@ SUBNETS          = os.environ["FLASHPOINT_SUBNETS"].split(",")
 SECURITY_GROUP   = os.environ["FLASHPOINT_SECURITY_GROUP"]
 REGION           = os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
 GRPC_PORT        = int(os.environ.get("FLASHPOINT_GRPC_PORT", "15002"))
-EXECUTOR_COUNT   = int(os.environ.get("FLASHPOINT_EXECUTOR_COUNT", "2"))
 # Stop idle tasks after this many seconds to prevent runaway Fargate cost
 SESSION_TTL_S    = int(os.environ.get("FLASHPOINT_SESSION_TTL_S", str(2 * 3600)))
 MAX_SESSIONS     = int(os.environ.get("FLASHPOINT_MAX_SESSIONS", "3"))
 # Spark driver UI / SQL REST API port — source of query-profile DAGs (Beacon #19)
 SPARK_UI_PORT    = int(os.environ.get("FLASHPOINT_SPARK_UI_PORT", "4040"))
+
+# Warehouse size → executor count. Per-executor stays 2vCPU/8GB (the ECS task def).
+# Scale count, not size, to keep things simple. Bigger per-executor sizes in a future pass.
+SIZES: dict[str, int] = {"XS": 1, "S": 2, "M": 4, "L": 8, "XL": 16}
 
 ecs = boto3.client("ecs", region_name=REGION)
 
@@ -83,13 +89,17 @@ def _private_ip(task_arn: str) -> str:
 
 
 def _run_executor_tasks(master_url: str, n: int) -> list[str]:
-    """Launch N Fargate Spot executor workers pointing at the driver's master URL."""
+    """Launch N Fargate Spot executor workers pointing at the driver's master URL.
+
+    Executors use FARGATE_SPOT — they tolerate preemption (Spark Standalone
+    reschedules), and Spot is significantly cheaper than on-demand.
+    """
     arns = []
     for _ in range(n):
         resp = ecs.run_task(
             cluster=CLUSTER,
             taskDefinition=EXECUTOR_TASK_DEF,
-            launchType="FARGATE",
+            capacityProviderStrategy=[{"capacityProvider": "FARGATE_SPOT", "weight": 1}],
             networkConfiguration={
                 "awsvpcConfiguration": {
                     "subnets": SUBNETS,
@@ -259,38 +269,98 @@ def _sql_execution_ids(session: dict) -> set[int]:
         return set()
 
 
-def _stop_orphaned_tasks() -> None:
-    """On startup: stop any ECS tasks that are not tracked in the sessions map."""
-    known_arns = {
-        arn
-        for s in sessions.values()
-        for arn in [s["task_arn"]] + s.get("executor_arns", [])
-    }
+def _reconcile() -> None:
+    """On startup: rebuild the in-memory session cache from DynamoDB and live ECS state.
+
+    Three cases:
+      1. DynamoDB record + live driver task → rebuild in-memory entry (don't touch _spark_cache;
+         _get_spark will lazily reconnect on the next query).
+      2. DynamoDB record + dead driver task → orphaned session: suspend it in DynamoDB and stop
+         any still-running executor tasks.
+      3. Live ECS task + no DynamoDB record → orphaned task: stop it.
+         CRITICAL: orphan-stop is gated on "not referenced by any DynamoDB record" so we
+         never kill a session that survived a previous gateway restart (the old bug).
+    """
     try:
-        paginator = ecs.get_paginator("list_tasks")
-        for page in paginator.paginate(cluster=CLUSTER, desiredStatus="RUNNING"):
-            for arn in page.get("taskArns", []):
-                if arn not in known_arns:
-                    log.warning("Stopping orphaned task %s", arn)
-                    try:
-                        ecs.stop_task(cluster=CLUSTER, task=arn, reason="orphan-cleanup")
-                    except Exception as exc:
-                        log.error("Failed to stop orphan %s: %s", arn, exc)
+        db_sessions = store.list_sessions()
+        db_arns = {
+            arn
+            for s in db_sessions
+            for arn in ([s.get("task_arn")] if s.get("task_arn") else [])
+            + (s.get("executor_arns") or [])
+        }
+
+        # Collect live ECS task ARNs for orphan detection (step 3).
+        live_arns: set[str] = set()
+        try:
+            paginator = ecs.get_paginator("list_tasks")
+            for page in paginator.paginate(cluster=CLUSTER, desiredStatus="RUNNING"):
+                live_arns.update(page.get("taskArns", []))
+        except Exception as exc:
+            log.error("Could not list ECS tasks during reconcile: %s", exc)
+
+        for s in db_sessions:
+            sid = s["session_id"]
+            task_arn = s.get("task_arn", "")
+            status = s.get("status", "running")
+
+            if status == "suspended":
+                # Suspended warehouses have no live tasks — nothing to reconcile.
+                continue
+
+            if task_arn and task_arn in live_arns:
+                # Case 1: driver is alive — rebuild in-memory entry.
+                sessions[sid] = s
+                log.info("Reconciled session %s (driver live)", sid)
+            else:
+                # Case 2: driver is gone — mark suspended, clean up stale executor arns.
+                log.warning("Session %s driver gone — suspending", sid)
+                executor_arns = s.get("executor_arns") or []
+                for arn in executor_arns:
+                    if arn in live_arns:
+                        try:
+                            ecs.stop_task(cluster=CLUSTER, task=arn, reason="orphan-executor")
+                        except Exception as exc:
+                            log.error("Failed to stop orphan executor %s: %s", arn, exc)
+                store.update_session_status(
+                    sid, "suspended", task_arn=None, executor_arns=[], task_ip=None
+                )
+
+        # Case 3: live task not referenced by any DynamoDB record.
+        for arn in live_arns:
+            if arn not in db_arns:
+                log.warning("Stopping untracked orphan task %s", arn)
+                try:
+                    ecs.stop_task(cluster=CLUSTER, task=arn, reason="orphan-cleanup")
+                except Exception as exc:
+                    log.error("Failed to stop orphan %s: %s", arn, exc)
+
     except Exception as exc:
-        log.error("Orphan cleanup failed: %s", exc)
+        log.error("Reconcile failed: %s", exc)
 
 
 # --- API models ---
 
+class CreateSessionRequest(BaseModel):
+    size: str = "XS"
+
+
 class SessionResponse(BaseModel):
     session_id: str
-    task_arn: str
-    endpoint: str
+    task_arn: str | None = None
+    endpoint: str | None = None
     status: str
+    size: str = "XS"
+    executor_count: int = 1
+    name: str | None = None
 
 
 class QueryRequest(BaseModel):
     sql: str
+
+
+class ResizeRequest(BaseModel):
+    size: str
 
 
 class DagNode(BaseModel):
@@ -339,19 +409,25 @@ async def _reap_idle_sessions():
         for sid in expired:
             s = sessions.pop(sid, None)
             if s:
-                log.warning("Reaping idle session %s", sid)
+                log.warning("Reaping idle session %s (TTL exceeded)", sid)
                 _drop_spark(sid)
-                for arn in [s["task_arn"]] + s.get("executor_arns", []):
+                for arn in ([s["task_arn"]] if s.get("task_arn") else []) + (s.get("executor_arns") or []):
                     try:
                         ecs.stop_task(cluster=CLUSTER, task=arn)
                     except Exception as exc:
                         log.error("Failed to stop task %s: %s", arn, exc)
+                try:
+                    store.update_session_status(
+                        sid, "suspended", task_arn=None, executor_arns=[], task_ip=None
+                    )
+                except Exception as exc:
+                    log.error("Failed to update reaped session %s in DynamoDB: %s", sid, exc)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     log.info("Flashpoint gateway starting (cluster=%s, ttl=%ds)", CLUSTER, SESSION_TTL_S)
-    _stop_orphaned_tasks()
+    _reconcile()
     reaper = asyncio.create_task(_reap_idle_sessions())
     yield
     reaper.cancel()
@@ -389,12 +465,15 @@ def _drop_spark(session_id: str) -> None:
 
 
 @app.post("/sessions", response_model=SessionResponse, status_code=201)
-def create_session():
+def create_session(req: CreateSessionRequest = CreateSessionRequest()):
     """Launch a Fargate driver task and return its gRPC endpoint."""
+    if req.size not in SIZES:
+        raise HTTPException(status_code=400, detail=f"unknown size {req.size!r}, must be one of {list(SIZES)}")
     if len(sessions) >= MAX_SESSIONS:
         raise HTTPException(status_code=429, detail=f"session cap reached ({MAX_SESSIONS} max)")
     session_id = str(uuid.uuid4())
-    log.info("Creating session %s", session_id)
+    executor_count = SIZES[req.size]
+    log.info("Creating session %s (size=%s, executors=%d)", session_id, req.size, executor_count)
 
     task_arn = _run_driver_task()
     log.info("Driver task launched: %s", task_arn)
@@ -405,19 +484,24 @@ def create_session():
     endpoint = f"sc://{private_ip}:{GRPC_PORT}"
     log.info("Driver ready — master=%s endpoint=%s", master_url, endpoint)
 
-    executor_arns = _run_executor_tasks(master_url, EXECUTOR_COUNT)
-    log.info("Launched %d executor tasks: %s", len(executor_arns), executor_arns)
+    executor_arns = _run_executor_tasks(master_url, executor_count)
+    log.info("Launched %d executor tasks (Spot): %s", len(executor_arns), executor_arns)
 
-    sessions[session_id] = {
+    record = {
         "task_arn": task_arn,
         "executor_arns": executor_arns,
         "task_ip": private_ip,
         "endpoint": endpoint,
         "status": "running",
+        "size": req.size,
+        "executor_count": executor_count,
         "created_at": time.time(),
     }
+    store.put_session(session_id, record)
+    sessions[session_id] = record
     return SessionResponse(
-        session_id=session_id, task_arn=task_arn, endpoint=endpoint, status="running"
+        session_id=session_id, task_arn=task_arn, endpoint=endpoint,
+        status="running", size=req.size, executor_count=executor_count,
     )
 
 
@@ -426,12 +510,21 @@ def get_session(session_id: str):
     s = sessions.get(session_id)
     if not s:
         raise HTTPException(status_code=404, detail="session not found")
-    s["status"] = "running" if _is_running(s["task_arn"]) else "stopped"
-    return SessionResponse(session_id=session_id, **s)
+    task_arn = s.get("task_arn", "")
+    status = "running" if (task_arn and _is_running(task_arn)) else s.get("status", "stopped")
+    return SessionResponse(
+        session_id=session_id,
+        task_arn=task_arn or None,
+        endpoint=s.get("endpoint"),
+        status=status,
+        size=s.get("size", "XS"),
+        executor_count=s.get("executor_count", 1),
+        name=s.get("name"),
+    )
 
 
 @app.get("/sessions")
-def list_sessions():
+def list_sessions_endpoint():
     return {"sessions": list(sessions.keys()), "count": len(sessions)}
 
 
@@ -483,16 +576,119 @@ def run_query(session_id: str, req: QueryRequest):
 
 @app.delete("/sessions/{session_id}", status_code=204)
 def delete_session(session_id: str):
+    """Permanently destroy a session — stops tasks and removes the DynamoDB record."""
     s = sessions.pop(session_id, None)
     if not s:
         raise HTTPException(status_code=404, detail="session not found")
     _drop_spark(session_id)
-    for arn in [s["task_arn"]] + s.get("executor_arns", []):
+    _stop_tasks(s)
+    store.delete_session(session_id)
+    log.info("Deleted session %s (driver + %d executors stopped)", session_id, len(s.get("executor_arns") or []))
+
+
+@app.post("/sessions/{session_id}/suspend", status_code=200)
+def suspend_session(session_id: str):
+    """Stop tasks but keep the session record (warehouse is suspended, resumable)."""
+    s = sessions.get(session_id)
+    if not s:
+        raise HTTPException(status_code=404, detail="session not found")
+    if s.get("status") == "suspended":
+        return {"status": "suspended"}
+    _drop_spark(session_id)
+    _stop_tasks(s)
+    sessions[session_id] = {**s, "task_arn": None, "executor_arns": [], "task_ip": None, "status": "suspended"}
+    store.update_session_status(session_id, "suspended", task_arn=None, executor_arns=[], task_ip=None)
+    log.info("Suspended session %s", session_id)
+    return {"status": "suspended"}
+
+
+@app.post("/sessions/{session_id}/resume", status_code=200, response_model=SessionResponse)
+def resume_session(session_id: str):
+    """Reprovision a suspended warehouse — launches a fresh driver + executors."""
+    s = sessions.get(session_id)
+    if not s:
+        raise HTTPException(status_code=404, detail="session not found")
+    if s.get("status") == "running":
+        return SessionResponse(
+            session_id=session_id, task_arn=s.get("task_arn"),
+            endpoint=s.get("endpoint"), status="running",
+            size=s.get("size", "XS"), executor_count=s.get("executor_count", 1),
+        )
+
+    size = s.get("size", "XS")
+    executor_count = SIZES.get(size, 1)
+    log.info("Resuming session %s (size=%s)", session_id, size)
+
+    task_arn = _run_driver_task()
+    _wait_running(task_arn)
+    private_ip = _private_ip(task_arn)
+    master_url = f"spark://{private_ip}:7077"
+    endpoint = f"sc://{private_ip}:{GRPC_PORT}"
+    executor_arns = _run_executor_tasks(master_url, executor_count)
+
+    update = {
+        "task_arn": task_arn, "executor_arns": executor_arns,
+        "task_ip": private_ip, "endpoint": endpoint,
+        "executor_count": executor_count,
+    }
+    sessions[session_id] = {**s, **update, "status": "running"}
+    store.update_session_status(session_id, "running", **update)
+    log.info("Resumed session %s → driver %s", session_id, task_arn)
+    return SessionResponse(
+        session_id=session_id, task_arn=task_arn, endpoint=endpoint,
+        status="running", size=size, executor_count=executor_count,
+    )
+
+
+@app.post("/sessions/{session_id}/resize", status_code=200, response_model=SessionResponse)
+def resize_session(session_id: str, req: ResizeRequest):
+    """Change executor count live — scale up launches new Spot workers; scale down stops trailing ones."""
+    s = sessions.get(session_id)
+    if not s:
+        raise HTTPException(status_code=404, detail="session not found")
+    if s.get("status") != "running":
+        raise HTTPException(status_code=409, detail="session is not running")
+    if req.size not in SIZES:
+        raise HTTPException(status_code=400, detail=f"unknown size {req.size!r}")
+
+    new_count = SIZES[req.size]
+    current_count = s.get("executor_count", 1)
+    executor_arns: list[str] = list(s.get("executor_arns") or [])
+    master_url = f"spark://{s['task_ip']}:7077"
+
+    if new_count > current_count:
+        delta = new_count - current_count
+        new_arns = _run_executor_tasks(master_url, delta)
+        executor_arns.extend(new_arns)
+        log.info("Scaled session %s up: +%d executors (Spot)", session_id, delta)
+    elif new_count < current_count:
+        delta = current_count - new_count
+        to_stop = executor_arns[-delta:]
+        executor_arns = executor_arns[:-delta]
+        for arn in to_stop:
+            try:
+                ecs.stop_task(cluster=CLUSTER, task=arn)
+            except Exception as exc:
+                log.error("Failed to stop executor %s during resize: %s", arn, exc)
+        log.info("Scaled session %s down: -%d executors", session_id, delta)
+
+    sessions[session_id] = {**s, "size": req.size, "executor_count": new_count, "executor_arns": executor_arns}
+    store.update_session_status(session_id, "running", size=req.size, executor_count=new_count, executor_arns=executor_arns)
+    return SessionResponse(
+        session_id=session_id, task_arn=s["task_arn"], endpoint=s["endpoint"],
+        status="running", size=req.size, executor_count=new_count,
+    )
+
+
+def _stop_tasks(s: dict) -> None:
+    """Stop all tasks belonging to a session — used by delete, suspend, and reaper."""
+    task_arn = s.get("task_arn")
+    executor_arns = s.get("executor_arns") or []
+    for arn in ([task_arn] if task_arn else []) + executor_arns:
         try:
             ecs.stop_task(cluster=CLUSTER, task=arn)
         except Exception as exc:
             log.error("Failed to stop task %s: %s", arn, exc)
-    log.info("Stopped driver + %d executors (session %s)", len(s.get("executor_arns", [])), session_id)
 
 
 @app.get("/history")
@@ -510,7 +706,11 @@ def get_history_entry(query_id: str):
 
 @app.get("/healthz")
 def health():
-    return {"status": "ok", "sessions": len(sessions)}
+    return {
+        "status": "ok",
+        "sessions": len(sessions),
+        "sessions_table": store._TABLE_NAME,
+    }
 
 
 if __name__ == "__main__":

@@ -28,6 +28,8 @@ FLASHPOINT_EXECUTOR_TASK_DEF=${executor_task_def}
 FLASHPOINT_SUBNETS=${subnets}
 FLASHPOINT_SECURITY_GROUP=${security_group}
 AWS_DEFAULT_REGION=${region}
+FLASHPOINT_SESSIONS_TABLE=${sessions_table}
+FLASHPOINT_METERS_TABLE=${meters_table}
 EOF
 
 # Install and start systemd service
