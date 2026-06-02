@@ -21,6 +21,7 @@ export function Worksheet() {
   const [connecting, setConnecting] = useState(false)
   const [results, setResults] = useState(null)
   const [profile, setProfile] = useState(null)
+  const [resultTab, setResultTab] = useState('results')
   const [stats, setStats] = useState(null)
   const [error, setError] = useState(null)
   const [session, setSession] = useState(null)  // {session_id, endpoint}
@@ -73,6 +74,7 @@ export function Worksheet() {
       })
       setResults({ columns: result.columns, rows: result.rows })
       setProfile(result.profile || null)
+      setResultTab('results')
     } catch (err) {
       setError(err.message)
       // If session is gone, clear it so next run reconnects
@@ -155,8 +157,21 @@ export function Worksheet() {
             <ErrorMsg msg={error} onDismiss={() => setError(null)} />
           ) : (
             <>
-              <ResultTable results={results} />
-              <QueryDag profile={profile} />
+              <div style={s.resultTabs}>
+                <ResultTab active={resultTab === 'results'} onClick={() => setResultTab('results')}>
+                  Results
+                </ResultTab>
+                {profile && (
+                  <ResultTab active={resultTab === 'profile'} onClick={() => setResultTab('profile')}>
+                    Query Profile
+                  </ResultTab>
+                )}
+              </div>
+              <div style={s.resultBody}>
+                {resultTab === 'results'
+                  ? <ResultTable results={results} />
+                  : <QueryDag profile={profile} />}
+              </div>
             </>
           )}
         </div>
@@ -180,7 +195,7 @@ function SessionIndicator({ session, connecting, onDisconnect }) {
   return (
     <div style={indS.pill}>
       <span style={indS.dot} />
-      <span style={indS.text} title={session.endpoint}>{session.endpoint?.replace('sc://', '').split(':')[0].slice(-8)}</span>
+      <span style={indS.text} title={session.endpoint}>{session.endpoint?.replace('sc://', '').split(':')[0]}</span>
       <button style={indS.closeBtn} onClick={onDisconnect} title="Disconnect">
         <Unplug size={10} />
       </button>
@@ -193,6 +208,17 @@ function Tab({ children }) {
     <div style={{ ...tabS.tab, ...tabS.tabActive }}>
       <span>{children}</span>
     </div>
+  )
+}
+
+function ResultTab({ active, onClick, children }) {
+  return (
+    <button
+      style={{ ...rtabS.tab, ...(active ? rtabS.active : {}) }}
+      onClick={onClick}
+    >
+      {children}
+    </button>
   )
 }
 
@@ -314,7 +340,21 @@ const s = {
   },
   runBtnRunning: { opacity: 0.6, cursor: 'not-allowed' },
   kbd: { fontFamily: 'var(--font-mono)', fontSize: 10, opacity: 0.5, marginLeft: 2 },
-  resultsPane: { flex: '1 1 120px', overflow: 'auto', background: 'var(--bg-base)' },
+  resultsPane: { flex: '1 1 120px', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg-base)' },
+  resultTabs: {
+    display: 'flex', alignItems: 'center', gap: 2, height: 32, flexShrink: 0,
+    padding: '0 8px', background: 'var(--bg-surface)', borderBottom: '1px solid var(--border-dim)',
+  },
+  resultBody: { flex: 1, overflow: 'auto' },
+}
+
+const rtabS = {
+  tab: {
+    height: 24, padding: '0 10px', background: 'none', border: 'none', cursor: 'pointer',
+    color: 'var(--text-dim)', fontSize: 11, fontWeight: 500, fontFamily: 'var(--font-ui)',
+    letterSpacing: '0.02em', borderRadius: 'var(--radius-sm)',
+  },
+  active: { background: 'var(--bg-raised)', color: 'var(--text-primary)' },
 }
 
 const tabS = {

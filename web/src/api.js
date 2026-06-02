@@ -1,4 +1,4 @@
-const BASE = import.meta.env.VITE_GATEWAY_URL || 'http://54.211.212.137:8080'
+const BASE = import.meta.env.VITE_GATEWAY_URL || 'http://3.86.115.219:8080'
 
 export async function createSession() {
   const r = await fetch(`${BASE}/sessions`, { method: 'POST' })

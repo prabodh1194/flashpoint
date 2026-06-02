@@ -1,257 +1,282 @@
 import { useMemo, useState } from 'react'
-import { Droplet, Zap } from 'lucide-react'
+import { Droplet, Zap, ArrowDown, Repeat } from 'lucide-react'
 
-// Hand-rolled layered (Sugiyama-style) DAG of a Spark SQL execution plan.
-// Layout is computed in JS from the edge list — no graph library (Beacon #19).
-
-const NODE_W = 150
-const NODE_H = 46
-const COL_GAP = 40   // horizontal gap between sibling nodes
-const ROW_GAP = 54   // vertical gap between layers
-const PAD = 28
+// Snowflake-style query profile: a clean vertical operator tree (execution order,
+// top = data source, bottom = final result) where each node carries an inline
+// "% of execution time" bar — the bottleneck glows. A side panel ranks the most
+// expensive operators. We only ever show REAL Spark-reported durations; operators
+// Spark doesn't time (Exchange, Range, ...) show their true metric instead of a
+// fabricated bar (Beacon #19).
 
 export function QueryDag({ profile }) {
-  const [hover, setHover] = useState(null)  // { node, x, y }
+  const model = useMemo(() => profile ? buildModel(profile) : null, [profile])
+  const [selected, setSelected] = useState(null)
 
-  const layout = useMemo(() => profile ? computeLayout(profile) : null, [profile])
-
-  if (!profile || !profile.nodes?.length) return null
-
-  const { positioned, edges, width, height, maxDuration } = layout
+  if (!model || !model.spine.length) return null
+  const { spine, totalMs, totalRows, totalShuffleBytes, hasSpill, ranked } = model
 
   return (
-    <div style={s.wrap}>
-      <div style={s.header}>
-        <span style={s.title}>Query Profile</span>
-        <Legend />
+    <div style={s.root}>
+      <div style={s.treeCol}>
+        <div style={s.colHead}>EXECUTION TREE</div>
+        <div style={s.tree}>
+          {spine.map((row, i) => (
+            <div key={row.node.id}>
+              {row.shuffleBefore && <ShuffleBoundary />}
+              {i > 0 && !row.shuffleBefore && <Connector />}
+              <OpCard
+                row={row}
+                selected={selected === row.node.id}
+                onSelect={() => setSelected(selected === row.node.id ? null : row.node.id)}
+              />
+            </div>
+          ))}
+        </div>
       </div>
 
-      <div style={s.canvas}>
-        <svg width={width} height={height} style={{ display: 'block' }}>
-          {/* edges first, under nodes */}
-          {edges.map((e, i) => (
-            <path
-              key={i}
-              d={edgePath(e.fromPos, e.toPos)}
-              fill="none"
-              stroke={e.is_shuffle ? 'var(--amber)' : 'var(--border)'}
-              strokeWidth={e.is_shuffle ? 2.5 : 1.25}
-              opacity={e.is_shuffle ? 0.85 : 0.55}
-            />
-          ))}
+      <aside style={s.side}>
+        <div style={s.colHead}>PROFILE</div>
+        <div style={s.statGrid}>
+          <Stat label="Total time" value={fmtMs(totalMs)} accent />
+          <Stat label="Rows" value={totalRows != null ? fmtInt(totalRows) : '—'} />
+          <Stat label="Shuffled" value={totalShuffleBytes || '—'} />
+          <Stat label="Spill" value={hasSpill ? 'yes' : 'none'} danger={hasSpill} />
+        </div>
 
-          {positioned.map(p => (
-            <NodeBox
-              key={p.node.id}
-              p={p}
-              maxDuration={maxDuration}
-              onEnter={() => setHover({ node: p.node, x: p.x + NODE_W / 2, y: p.y })}
-              onLeave={() => setHover(null)}
-            />
+        <div style={s.sideHead}>Most expensive nodes</div>
+        <div style={s.rankList}>
+          {ranked.length === 0 && <div style={s.noData}>No per-operator timings reported.</div>}
+          {ranked.map(r => (
+            <button
+              key={r.node.id}
+              style={{ ...s.rankRow, ...(selected === r.node.id ? s.rankRowActive : {}) }}
+              onClick={() => setSelected(selected === r.node.id ? null : r.node.id)}
+            >
+              <span style={s.rankName}>{r.node.name}</span>
+              <span style={s.rankBarTrack}>
+                <span style={{ ...s.rankBarFill, width: `${r.pct}%`, background: heat(r.pct) }} />
+              </span>
+              <span style={s.rankPct}>{r.pct.toFixed(1)}%</span>
+            </button>
           ))}
-        </svg>
-
-        {hover && <Tooltip node={hover.node} x={hover.x} y={hover.y} />}
-      </div>
+        </div>
+      </aside>
     </div>
   )
 }
 
-function NodeBox({ p, maxDuration, onEnter, onLeave }) {
-  const { node, x, y } = p
-  const fill = heatColor(node.duration_ms, maxDuration)
+function OpCard({ row, selected, onSelect }) {
+  const { node, pct, primaryMetric } = row
   return (
-    <g transform={`translate(${x},${y})`} onMouseEnter={onEnter} onMouseLeave={onLeave} style={{ cursor: 'pointer' }}>
-      <rect
-        width={NODE_W} height={NODE_H} rx={6}
-        fill={fill}
-        stroke={node.is_shuffle ? 'var(--amber)' : 'var(--border)'}
-        strokeWidth={node.is_shuffle ? 1.5 : 1}
-      />
-      <text x={10} y={19} style={s.nodeName}>{shorten(node.name)}</text>
-      <text x={10} y={35} style={s.nodeMeta}>
-        {node.duration_ms != null ? `${node.duration_ms} ms` : (node.metrics['number of output rows'] ? `${node.metrics['number of output rows']} rows` : '')}
-      </text>
-      {node.has_spill && <Badge x={NODE_W - 18} icon="spill" />}
-      {node.has_skew && <Badge x={NODE_W - 34} icon="skew" />}
-    </g>
+    <button style={{ ...s.card, ...(selected ? s.cardSel : {}) }} onClick={onSelect}>
+      <div style={s.cardTop}>
+        <span style={s.opName}>{node.name}</span>
+        <span style={s.badges}>
+          {node.has_spill && <Droplet size={11} style={{ color: 'var(--red)' }} />}
+          {node.has_skew && <Zap size={11} style={{ color: 'var(--red)' }} />}
+        </span>
+      </div>
+
+      {pct != null ? (
+        <>
+          <div style={s.barTrack}>
+            <span style={{ ...s.barFill, width: `${Math.max(pct, 1.5)}%`, background: heat(pct) }} />
+          </div>
+          <div style={s.cardMeta}>
+            <span style={{ color: heat(pct), fontWeight: 600 }}>{pct.toFixed(1)}%</span>
+            <span style={s.metaDim}>{fmtMs(node.duration_ms)}</span>
+          </div>
+        </>
+      ) : (
+        <div style={s.cardMeta}>
+          <span style={s.metaDim}>{primaryMetric || 'no timing reported'}</span>
+        </div>
+      )}
+
+      {selected && <NodeDetail node={node} />}
+    </button>
   )
 }
 
-function Badge({ x, icon }) {
+function NodeDetail({ node }) {
+  const entries = Object.entries(node.metrics).filter(([, v]) => v && v !== '0' && v !== '0.0 B')
   return (
-    <g transform={`translate(${x},6)`}>
-      <circle cx={6} cy={6} r={8} fill="var(--bg-base)" stroke="var(--red)" strokeWidth={1} />
-      <foreignObject x={-1} y={-1} width={14} height={14}>
-        {icon === 'spill'
-          ? <Droplet size={10} style={{ color: 'var(--red)' }} />
-          : <Zap size={10} style={{ color: 'var(--red)' }} />}
-      </foreignObject>
-    </g>
-  )
-}
-
-function Tooltip({ node, x, y }) {
-  return (
-    <div style={{ ...tt.box, left: x, top: y - 8 }}>
-      <div style={tt.name}>{node.name}</div>
-      {node.duration_ms != null && <div style={tt.row}><span style={tt.k}>duration</span><span style={tt.v}>{node.duration_ms} ms</span></div>}
-      {Object.entries(node.metrics).slice(0, 10).map(([k, v]) => (
-        <div key={k} style={tt.row}><span style={tt.k}>{k}</span><span style={tt.v}>{v}</span></div>
+    <div style={s.detail}>
+      {entries.slice(0, 12).map(([k, v]) => (
+        <div key={k} style={s.detailRow}>
+          <span style={s.detailK}>{k}</span>
+          <span style={s.detailV}>{v}</span>
+        </div>
       ))}
     </div>
   )
 }
 
-function Legend() {
+function ShuffleBoundary() {
   return (
-    <div style={s.legend}>
-      <span style={s.legendItem}><span style={{ ...s.swatch, background: 'var(--amber)' }} />shuffle</span>
-      <span style={s.legendItem}><Droplet size={10} style={{ color: 'var(--red)' }} />spill</span>
-      <span style={s.legendItem}><span style={{ ...s.swatch, background: heatColor(100, 100) }} />slow</span>
+    <div style={s.shuffle}>
+      <span style={s.shuffleLine} />
+      <span style={s.shuffleTag}><Repeat size={10} /> shuffle</span>
+      <span style={s.shuffleLine} />
     </div>
   )
 }
 
-// ---- layout ----
+function Connector() {
+  return (
+    <div style={s.connector}>
+      <ArrowDown size={13} style={{ color: 'var(--text-dim)' }} />
+    </div>
+  )
+}
 
-function computeLayout(profile) {
+function Stat({ label, value, accent, danger }) {
+  return (
+    <div style={s.stat}>
+      <div style={s.statLabel}>{label}</div>
+      <div style={{ ...s.statValue, ...(accent ? { color: 'var(--amber)' } : {}), ...(danger ? { color: 'var(--red)' } : {}) }}>
+        {value}
+      </div>
+    </div>
+  )
+}
+
+// ---- model ----
+
+function buildModel(profile) {
   const nodes = profile.nodes
-  const byId = new Map(nodes.map(n => [n.id, n]))
-  const parents = new Map(nodes.map(n => [n.id, []]))   // id -> [parent ids]
-  const children = new Map(nodes.map(n => [n.id, []]))  // id -> [child ids]
+  // Spark lists SQL plan nodes in reverse-topological order: the data source
+  // (highest nodeId, e.g. Range) first, the final operator (AdaptiveSparkPlan,
+  // id 0) last. Some wrapper nodes (WholeStageCodegen, AQEShuffleRead) carry no
+  // edges, so an edge-walk would drop them. The node array order IS the
+  // execution order once we sort by descending id — use it directly for the spine.
+  const exec = [...nodes].sort((a, b) => b.id - a.id)
 
-  // Spark edges run child(fromId) -> parent(toId). We draw top-down with the
-  // root operator (AdaptiveSparkPlan) at the top, so "layer 0" = the final node.
-  for (const e of profile.edges) {
-    if (!byId.has(e.from) || !byId.has(e.to)) continue
-    children.get(e.to).push(e.from)   // parent .to has child .from
-    parents.get(e.from).push(e.to)
-  }
+  const totalMs = exec.reduce((a, n) => a + (n.duration_ms || 0), 0)
 
-  // Layer = longest path from a root (node with no parent), going downward.
-  const layer = new Map()
-  const roots = nodes.filter(n => parents.get(n.id).length === 0).map(n => n.id)
-  const assign = (id, depth, seen) => {
-    if (seen.has(id)) return
-    seen.add(id)
-    layer.set(id, Math.max(layer.get(id) ?? 0, depth))
-    for (const c of children.get(id)) assign(c, depth + 1, seen)
-    seen.delete(id)
-  }
-  for (const r of roots) assign(r, 0, new Set())
-  // any unreached node (cycle guard) -> layer 0
-  for (const n of nodes) if (!layer.has(n.id)) layer.set(n.id, 0)
+  const spine = exec.map(n => ({
+    node: n,
+    pct: n.duration_ms != null && totalMs > 0 ? (n.duration_ms / totalMs) * 100 : null,
+    primaryMetric: primaryMetric(n),
+    shuffleBefore: n.is_shuffle,
+  }))
 
-  // group by layer, order within layer by barycenter of parents' slots
-  const layers = new Map()
-  for (const n of nodes) {
-    const l = layer.get(n.id)
-    if (!layers.has(l)) layers.set(l, [])
-    layers.get(l).push(n.id)
-  }
-  const sortedLayerKeys = [...layers.keys()].sort((a, b) => a - b)
+  const ranked = spine
+    .filter(r => r.pct != null)
+    .sort((a, b) => b.pct - a.pct)
+    .slice(0, 6)
 
-  const slot = new Map()  // id -> x slot index within its layer
-  for (const l of sortedLayerKeys) {
-    const ids = layers.get(l)
-    ids.sort((a, b) => bary(a, parents, slot) - bary(b, parents, slot))
-    ids.forEach((id, i) => slot.set(id, i))
-  }
+  const totalRows = leafRows(exec)
+  const totalShuffleBytes = maxMetric(exec, 'shuffle bytes written')
+  const hasSpill = exec.some(n => n.has_spill)
 
-  const maxSlots = Math.max(...[...layers.values()].map(a => a.length))
-  const width = PAD * 2 + maxSlots * NODE_W + (maxSlots - 1) * COL_GAP
-  const height = PAD * 2 + (sortedLayerKeys.length) * NODE_H + (sortedLayerKeys.length - 1) * ROW_GAP
-
-  const pos = new Map()  // id -> {x, y}
-  for (const l of sortedLayerKeys) {
-    const ids = layers.get(l)
-    const layerWidth = ids.length * NODE_W + (ids.length - 1) * COL_GAP
-    const startX = (width - layerWidth) / 2
-    ids.forEach((id, i) => {
-      pos.set(id, {
-        x: startX + i * (NODE_W + COL_GAP),
-        y: PAD + l * (NODE_H + ROW_GAP),
-      })
-    })
-  }
-
-  const positioned = nodes.map(n => ({ node: n, x: pos.get(n.id).x, y: pos.get(n.id).y }))
-  const edges = profile.edges
-    .filter(e => pos.has(e.from) && pos.has(e.to))
-    .map(e => ({
-      is_shuffle: e.is_shuffle,
-      // draw from parent (top, .to) down to child (bottom, .from)
-      fromPos: pos.get(e.to),
-      toPos: pos.get(e.from),
-    }))
-
-  const durations = nodes.map(n => n.duration_ms).filter(d => d != null)
-  const maxDuration = durations.length ? Math.max(...durations) : 0
-
-  return { positioned, edges, width, height, maxDuration }
+  return { spine, totalMs, totalRows, totalShuffleBytes, hasSpill, ranked }
 }
 
-function bary(id, parents, slot) {
-  const ps = parents.get(id).map(p => slot.get(p)).filter(v => v != null)
-  if (!ps.length) return 0
-  return ps.reduce((a, b) => a + b, 0) / ps.length
+function primaryMetric(n) {
+  const m = n.metrics || {}
+  if (n.is_shuffle && m['shuffle bytes written']) return `${m['shuffle bytes written']} shuffled`
+  if (m['number of output rows']) return `${m['number of output rows']} rows`
+  if (m['data size']) return m['data size']
+  if (m['number of partitions']) return `${m['number of partitions']} partitions`
+  return null
 }
 
-function edgePath(from, to) {
-  // from = parent (top center bottom edge), to = child (bottom, top edge)
-  const x1 = from.x + NODE_W / 2, y1 = from.y + NODE_H
-  const x2 = to.x + NODE_W / 2, y2 = to.y
-  const my = (y1 + y2) / 2
-  return `M ${x1} ${y1} C ${x1} ${my}, ${x2} ${my}, ${x2} ${y2}`
-}
-
-// cool (fast) -> amber -> red (slow)
-function heatColor(duration, max) {
-  if (duration == null || max <= 0) return 'var(--bg-raised)'
-  const t = Math.min(1, duration / max)
-  if (t < 0.5) {
-    // bg-raised -> amber
-    const a = t / 0.5
-    return mix([38, 40, 46], [245, 158, 11], a)
+function leafRows(exec) {
+  for (const n of exec) {
+    const v = n.metrics?.['number of output rows']
+    if (v) return parseInt(v.replace(/,/g, ''), 10)
   }
-  const a = (t - 0.5) / 0.5
-  return mix([245, 158, 11], [239, 68, 68], a)
+  return null
 }
 
-function mix(c1, c2, t) {
-  const r = Math.round(c1[0] + (c2[0] - c1[0]) * t)
-  const g = Math.round(c1[1] + (c2[1] - c1[1]) * t)
-  const b = Math.round(c1[2] + (c2[2] - c1[2]) * t)
-  return `rgb(${r},${g},${b})`
+function maxMetric(exec, key) {
+  let best = null
+  for (const n of exec) if (n.metrics?.[key]) best = n.metrics[key]
+  return best
 }
 
-function shorten(name) {
-  return name.length > 20 ? name.slice(0, 19) + '…' : name
+// cool → amber → red by percentage of total time
+function heat(pct) {
+  if (pct == null) return 'var(--border)'
+  const t = Math.min(1, pct / 60)  // 60%+ is fully hot
+  if (t < 0.5) return mix([90, 96, 112], [245, 158, 11], t / 0.5)
+  return mix([245, 158, 11], [239, 68, 68], (t - 0.5) / 0.5)
 }
+function mix(a, b, t) {
+  const c = i => Math.round(a[i] + (b[i] - a[i]) * t)
+  return `rgb(${c(0)},${c(1)},${c(2)})`
+}
+
+function fmtMs(ms) {
+  if (ms == null) return '—'
+  if (ms < 1000) return `${ms} ms`
+  return `${(ms / 1000).toFixed(2)} s`
+}
+function fmtInt(n) { return n.toLocaleString() }
 
 // ---- styles ----
-const s = {
-  wrap: { padding: '12px 16px', borderTop: '1px solid var(--border-dim)' },
-  header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
-  title: { fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-dim)', fontWeight: 500 },
-  legend: { display: 'flex', gap: 12, alignItems: 'center' },
-  legendItem: { display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' },
-  swatch: { width: 10, height: 10, borderRadius: 2, display: 'inline-block' },
-  canvas: { position: 'relative', overflow: 'auto', maxHeight: '48vh' },
-  nodeName: { fontFamily: 'var(--font-ui)', fontSize: 11, fontWeight: 600, fill: 'var(--text-primary)' },
-  nodeMeta: { fontFamily: 'var(--font-mono)', fontSize: 9.5, fill: 'var(--text-secondary)' },
-}
+const COL_W = 300
 
-const tt = {
-  box: {
-    position: 'absolute', transform: 'translate(-50%, -100%)', zIndex: 20,
-    background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--radius)',
-    padding: '8px 10px', minWidth: 180, maxWidth: 280, boxShadow: '0 6px 20px rgba(0,0,0,0.4)',
-    pointerEvents: 'none',
+const s = {
+  root: { display: 'flex', gap: 0, height: '100%', overflow: 'hidden', background: 'var(--bg-base)' },
+  treeCol: { flex: 1, overflow: 'auto', padding: '16px 0 32px' },
+  colHead: {
+    fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-dim)',
+    fontWeight: 600, padding: '0 20px 10px',
   },
-  name: { fontFamily: 'var(--font-ui)', fontSize: 11.5, fontWeight: 600, color: 'var(--amber)', marginBottom: 5 },
-  row: { display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 10, fontFamily: 'var(--font-mono)', lineHeight: '1.5em' },
-  k: { color: 'var(--text-dim)', whiteSpace: 'nowrap' },
-  v: { color: 'var(--text-mono)', textAlign: 'right' },
+  tree: { display: 'flex', flexDirection: 'column', alignItems: 'center' },
+
+  card: {
+    width: COL_W, textAlign: 'left', display: 'block', cursor: 'pointer',
+    background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8,
+    padding: '10px 12px', fontFamily: 'var(--font-ui)',
+    transition: 'border-color 0.12s, background 0.12s',
+  },
+  cardSel: { borderColor: 'var(--amber)', background: 'var(--bg-raised)' },
+  cardTop: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+  opName: { fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)' },
+  badges: { display: 'flex', gap: 4, alignItems: 'center' },
+  barTrack: { height: 6, borderRadius: 3, background: 'var(--bg-base)', overflow: 'hidden', marginBottom: 6 },
+  barFill: { display: 'block', height: '100%', borderRadius: 3, transition: 'width 0.3s' },
+  cardMeta: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontFamily: 'var(--font-mono)', fontSize: 10.5 },
+  metaDim: { color: 'var(--text-dim)' },
+
+  detail: {
+    marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border-dim)',
+    display: 'flex', flexDirection: 'column', gap: 3,
+  },
+  detailRow: { display: 'flex', justifyContent: 'space-between', gap: 12, fontFamily: 'var(--font-mono)', fontSize: 10 },
+  detailK: { color: 'var(--text-dim)' },
+  detailV: { color: 'var(--text-mono)', textAlign: 'right' },
+
+  connector: { display: 'flex', justifyContent: 'center', height: 18, alignItems: 'center' },
+  shuffle: { display: 'flex', alignItems: 'center', gap: 8, width: COL_W, padding: '6px 0' },
+  shuffleLine: { flex: 1, height: 1, background: 'var(--amber)', opacity: 0.4 },
+  shuffleTag: {
+    display: 'flex', alignItems: 'center', gap: 4, fontSize: 9.5, fontFamily: 'var(--font-mono)',
+    color: 'var(--amber)', letterSpacing: '0.04em',
+  },
+
+  side: {
+    width: 280, flexShrink: 0, borderLeft: '1px solid var(--border-dim)',
+    background: 'var(--bg-surface)', padding: '16px 0', overflow: 'auto',
+  },
+  statGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, background: 'var(--border-dim)', margin: '0 16px 16px', borderRadius: 8, overflow: 'hidden' },
+  stat: { background: 'var(--bg-base)', padding: '10px 12px' },
+  statLabel: { fontSize: 9.5, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--text-dim)', marginBottom: 4 },
+  statValue: { fontSize: 14, fontWeight: 600, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' },
+
+  sideHead: { fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-dim)', fontWeight: 600, padding: '4px 16px 8px' },
+  rankList: { display: 'flex', flexDirection: 'column', gap: 2, padding: '0 10px' },
+  noData: { fontSize: 11, color: 'var(--text-dim)', padding: '6px 6px', fontStyle: 'italic' },
+  rankRow: {
+    display: 'flex', alignItems: 'center', gap: 8, padding: '6px 6px', cursor: 'pointer',
+    background: 'none', border: 'none', borderRadius: 6, width: '100%', textAlign: 'left',
+  },
+  rankRowActive: { background: 'var(--bg-raised)' },
+  rankName: { fontSize: 11, color: 'var(--text-secondary)', width: 96, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  rankBarTrack: { flex: 1, height: 5, borderRadius: 3, background: 'var(--bg-base)', overflow: 'hidden' },
+  rankBarFill: { display: 'block', height: '100%', borderRadius: 3 },
+  rankPct: { fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', width: 40, textAlign: 'right' },
 }
