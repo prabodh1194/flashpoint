@@ -75,11 +75,6 @@ resource "aws_iam_role_policy" "gateway_ecs" {
           aws_iam_role.spark_task.arn,
         ]
       },
-      {
-        Effect   = "Allow"
-        Action   = "ec2:DescribeNetworkInterfaces"
-        Resource = "*"
-      },
     ]
   })
 }
@@ -113,4 +108,69 @@ resource "aws_instance" "gateway" {
   }))
 
   tags = merge(local.tags, { Name = "${local.prefix}-gateway" })
+}
+
+# --- EC2 start/stop schedule via EventBridge ---
+
+resource "aws_iam_role" "gateway_scheduler" {
+  name = "${local.prefix}-gateway-scheduler"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "scheduler.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+
+  tags = local.tags
+}
+
+resource "aws_iam_role_policy" "gateway_scheduler" {
+  name = "ec2-start-stop"
+  role = aws_iam_role.gateway_scheduler.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["ec2:StartInstances", "ec2:StopInstances"]
+      Resource = aws_instance.gateway.arn
+    }]
+  })
+}
+
+resource "aws_scheduler_schedule" "gateway_start" {
+  count = var.gateway_start_cron != "" ? 1 : 0
+
+  name                         = "${local.prefix}-gateway-start"
+  schedule_expression          = var.gateway_start_cron
+  schedule_expression_timezone = "Asia/Kolkata"
+
+  flexible_time_window { mode = "OFF" }
+
+  target {
+    arn      = "arn:aws:scheduler:::aws-sdk:ec2:startInstances"
+    role_arn = aws_iam_role.gateway_scheduler.arn
+
+    input = jsonencode({ InstanceIds = [aws_instance.gateway.id] })
+  }
+}
+
+resource "aws_scheduler_schedule" "gateway_stop" {
+  count = var.gateway_stop_cron != "" ? 1 : 0
+
+  name                         = "${local.prefix}-gateway-stop"
+  schedule_expression          = var.gateway_stop_cron
+  schedule_expression_timezone = "Asia/Kolkata"
+
+  flexible_time_window { mode = "OFF" }
+
+  target {
+    arn      = "arn:aws:scheduler:::aws-sdk:ec2:stopInstances"
+    role_arn = aws_iam_role.gateway_scheduler.arn
+
+    input = jsonencode({ InstanceIds = [aws_instance.gateway.id] })
+  }
 }

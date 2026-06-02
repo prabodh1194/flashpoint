@@ -35,3 +35,17 @@ variable "gateway_branch" {
   default     = "main"
   description = "Git branch to deploy on the gateway EC2 instance"
 }
+
+# EventBridge cron expressions (UTC). Defaults: 9am–midnight IST = 3:30am–6:30pm UTC.
+# Set to empty string "" to disable scheduling entirely.
+variable "gateway_start_cron" {
+  type        = string
+  default     = "cron(30 3 * * ? *)"
+  description = "EventBridge cron to START the gateway EC2 (UTC). Default: 09:00 IST."
+}
+
+variable "gateway_stop_cron" {
+  type        = string
+  default     = "cron(30 18 * * ? *)"
+  description = "EventBridge cron to STOP the gateway EC2 (UTC). Default: 00:00 IST."
+}
