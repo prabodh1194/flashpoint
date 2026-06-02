@@ -53,6 +53,14 @@ resource "aws_security_group" "spark_task" {
     cidr_blocks = [var.vpc_cidr]
   }
 
+  # Spark driver UI / SQL REST API (consumed by the gateway for query profiles)
+  ingress {
+    from_port   = 4040
+    to_port     = 4040
+    protocol    = "tcp"
+    cidr_blocks = [var.vpc_cidr]
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
@@ -117,14 +125,15 @@ resource "aws_ecs_task_definition" "driver" {
 
   container_definitions = jsonencode([{
     name      = "spark-connect"
-    image     = "${aws_ecr_repository.driver.repository_url}:latest"
+    image     = "${aws_ecr_repository.driver.repository_url}:20260602-1130"
     essential = true
 
     portMappings = [
       { containerPort = 15002, protocol = "tcp" },
       { containerPort = 7077,  protocol = "tcp" },
       { containerPort = 7078,  protocol = "tcp" },
-      { containerPort = 7337,  protocol = "tcp" }
+      { containerPort = 7337,  protocol = "tcp" },
+      { containerPort = 4040,  protocol = "tcp" }
     ]
 
     environment = [
@@ -161,7 +170,7 @@ resource "aws_ecs_task_definition" "executor" {
 
   container_definitions = jsonencode([{
     name       = "spark-executor"
-    image      = "${aws_ecr_repository.driver.repository_url}:latest"
+    image      = "${aws_ecr_repository.driver.repository_url}:20260602-1130"
     essential  = true
     entryPoint = ["/opt/executor-entrypoint.sh"]
 

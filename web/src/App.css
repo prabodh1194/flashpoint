@@ -1,0 +1,9 @@
+/* Hover / selection states that can't be expressed inline */
+
+button:hover {
+  opacity: 0.85;
+}
+
+textarea::selection {
+  background: rgba(245, 158, 11, 0.25);
+}

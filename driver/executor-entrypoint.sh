@@ -1,14 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# SPARK_MASTER_URL is injected by the gateway when launching executor tasks.
 : "${SPARK_MASTER_URL:?SPARK_MASTER_URL must be set}"
 
-# Resolve our own IP for the block manager advertisement.
 METADATA_URI="${ECS_CONTAINER_METADATA_URI_V4:-}"
 if [ -n "$METADATA_URI" ]; then
-  EXECUTOR_IP=$(curl -s "${METADATA_URI}/task" | python3 -c \
-    "import sys, json; nets=json.load(sys.stdin)['Containers'][0]['Networks']; print(nets[0]['IPv4Addresses'][0])")
+  EXECUTOR_IP=$(curl -s "${METADATA_URI}/task" \
+    | jq -r '.Containers[0].Networks[0].IPv4Addresses[0]')
 else
   EXECUTOR_IP="127.0.0.1"
 fi

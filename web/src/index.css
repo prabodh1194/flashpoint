@@ -1,0 +1,87 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg-base:       #0d0e10;
+  --bg-surface:    #13151a;
+  --bg-raised:     #1c1f27;
+  --bg-overlay:    #242834;
+  --border:        #2a2f3d;
+  --border-dim:    #1e2230;
+
+  --text-primary:  #e8eaf0;
+  --text-secondary:#8b93a8;
+  --text-dim:      #4e5568;
+  --text-mono:     #c8cfe0;
+
+  --amber:         #f59e0b;
+  --amber-glow:    #fbbf24;
+  --amber-dim:     #78450a;
+  --amber-bg:      rgba(245, 158, 11, 0.08);
+  --amber-border:  rgba(245, 158, 11, 0.2);
+
+  --green:   #22c55e;
+  --red:     #ef4444;
+  --blue:    #3b82f6;
+  --purple:  #a78bfa;
+
+  --radius-sm: 3px;
+  --radius:    6px;
+  --radius-lg: 10px;
+
+  --font-ui:   'IBM Plex Sans', sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+
+  --nav-w:      52px;
+  --nav-w-open: 200px;
+  --topbar-h:   44px;
+
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --bg-base:       #f0f1f5;
+  --bg-surface:    #fafbfc;
+  --bg-raised:     #ffffff;
+  --bg-overlay:    #f4f5f8;
+  --border:        #dde0e8;
+  --border-dim:    #e8eaef;
+
+  --text-primary:  #1a1d27;
+  --text-secondary:#4e5568;
+  --text-dim:      #9aa0b4;
+  --text-mono:     #2d3348;
+
+  --amber:         #d97706;
+  --amber-glow:    #f59e0b;
+  --amber-dim:     #fde68a;
+  --amber-bg:      rgba(217, 119, 6, 0.06);
+  --amber-border:  rgba(217, 119, 6, 0.25);
+
+  color-scheme: light;
+}
+
+html, body, #root {
+  height: 100%;
+  font-family: var(--font-ui);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+
+.mono { font-family: var(--font-mono); }
+.truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+*:focus-visible {
+  outline: 1.5px solid var(--amber);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}

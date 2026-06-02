@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { Play, Plus, ChevronDown, Clock, Rows, Database, Cpu, Hash, X, Loader, Unplug } from 'lucide-react'
 import { createSession, deleteSession, runQuery } from '../api'
+import { QueryDag } from '../components/QueryDag'
 
 const PLACEHOLDER = `-- Flashpoint SQL Worksheet
 -- ⌘↵ to run  •  connects a warehouse automatically on first run
@@ -19,6 +20,7 @@ export function Worksheet() {
   const [running, setRunning] = useState(false)
   const [connecting, setConnecting] = useState(false)
   const [results, setResults] = useState(null)
+  const [profile, setProfile] = useState(null)
   const [stats, setStats] = useState(null)
   const [error, setError] = useState(null)
   const [session, setSession] = useState(null)  // {session_id, endpoint}
@@ -36,6 +38,7 @@ export function Worksheet() {
     await deleteSession(session.session_id).catch(() => {})
     setSession(null)
     setResults(null)
+    setProfile(null)
     setStats(null)
     setError(null)
   }
@@ -69,6 +72,7 @@ export function Worksheet() {
         endpoint: activeSession.endpoint,
       })
       setResults({ columns: result.columns, rows: result.rows })
+      setProfile(result.profile || null)
     } catch (err) {
       setError(err.message)
       // If session is gone, clear it so next run reconnects
@@ -150,7 +154,10 @@ export function Worksheet() {
           {error ? (
             <ErrorMsg msg={error} onDismiss={() => setError(null)} />
           ) : (
-            <ResultTable results={results} />
+            <>
+              <ResultTable results={results} />
+              <QueryDag profile={profile} />
+            </>
           )}
         </div>
       )}

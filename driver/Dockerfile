@@ -8,7 +8,7 @@ ENV PATH="${SPARK_HOME}/bin:${PATH}"
 ENV SPARK_VERSION=${SPARK_VERSION}
 
 # Install Spark
-RUN apt-get update && apt-get install -y --no-install-recommends curl procps iproute2 coreutils && \
+RUN apt-get update && apt-get install -y --no-install-recommends curl procps iproute2 coreutils jq && \
     curl -fsSL "https://dlcdn.apache.org/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-hadoop${HADOOP_VERSION}.tgz" \
       | tar -xz -C /opt && \
     mv "/opt/spark-${SPARK_VERSION}-bin-hadoop${HADOOP_VERSION}" "${SPARK_HOME}" && \
@@ -23,7 +23,7 @@ COPY entrypoint.sh /opt/entrypoint.sh
 COPY executor-entrypoint.sh /opt/executor-entrypoint.sh
 RUN chmod +x /opt/entrypoint.sh /opt/executor-entrypoint.sh
 
-# Spark Connect gRPC | Standalone master | driver RPC | block manager
-EXPOSE 15002 7077 7078 7337
+# gRPC | master RPC | master UI | driver RPC | block manager | driver UI (SQL REST API)
+EXPOSE 15002 7077 8080 7078 7337 4040
 
 ENTRYPOINT ["/opt/entrypoint.sh"]

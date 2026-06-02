@@ -5,10 +5,13 @@ In-memory session map only; persistence and HA deferred to Kindle #8/#10.
 """
 import asyncio
 import hashlib
+import json
 import os
+import re
 import time
 import uuid
 import logging
+import urllib.request
 from collections import deque
 from contextlib import asynccontextmanager
 
@@ -16,7 +19,7 @@ import boto3
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from pyspark.sql import SparkSession
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -34,6 +37,8 @@ EXECUTOR_COUNT   = int(os.environ.get("FLASHPOINT_EXECUTOR_COUNT", "2"))
 # Stop idle tasks after this many seconds to prevent runaway Fargate cost
 SESSION_TTL_S    = int(os.environ.get("FLASHPOINT_SESSION_TTL_S", str(2 * 3600)))
 MAX_SESSIONS     = int(os.environ.get("FLASHPOINT_MAX_SESSIONS", "3"))
+# Spark driver UI / SQL REST API port — source of query-profile DAGs (Beacon #19)
+SPARK_UI_PORT    = int(os.environ.get("FLASHPOINT_SPARK_UI_PORT", "4040"))
 
 ecs = boto3.client("ecs", region_name=REGION)
 
@@ -121,6 +126,139 @@ def _query_id(sql: str) -> str:
     return hashlib.sha256(normalized.encode()).hexdigest()[:16]
 
 
+# --- Query-profile DAG via the Spark driver UI REST API (Beacon #19) ---
+#
+# The Spark UI exposes per-query execution plans at
+# /api/v1/applications/{appId}/sql/{executionId}?details=true, returning operator
+# nodes, parent-child edges, and per-node metrics. We fetch this best-effort after
+# a query runs; any failure leaves the query result untouched (profile = None).
+
+_DURATION_UNITS_MS = {"ms": 1.0, "s": 1000.0, "m": 60_000.0, "min": 60_000.0, "h": 3_600_000.0}
+
+
+def _ui_get(driver_ip: str, path: str, timeout: float = 2.0):
+    """GET http://{driver_ip}:{SPARK_UI_PORT}/api/v1{path} and parse JSON."""
+    url = f"http://{driver_ip}:{SPARK_UI_PORT}/api/v1{path}"
+    with urllib.request.urlopen(url, timeout=timeout) as resp:
+        return json.loads(resp.read().decode())
+
+
+def _resolve_app_id(driver_ip: str) -> str | None:
+    """Return the running application's id (SparkConnectServer hosts exactly one)."""
+    apps = _ui_get(driver_ip, "/applications")
+    if not apps:
+        return None
+    running = [a for a in apps if any(not at.get("completed", True) for at in a.get("attempts", []))]
+    return (running or apps)[0]["id"]
+
+
+def _metric_total(value: str) -> str:
+    """Spark metric values may be 'total (min, med, max ...)\\nN unit (...)'.
+    Return the human total — the leading token of the last line."""
+    last = value.strip().splitlines()[-1].strip()
+    return last
+
+
+def _parse_duration_ms(value: str) -> int | None:
+    """Parse a Spark duration metric string like '390 ms' or the total line of an
+    aggregated metric into milliseconds. Returns None if unparseable."""
+    m = re.match(r"([\d,.]+)\s*(ms|min|s|m|h)\b", _metric_total(value))
+    if not m:
+        return None
+    num = float(m.group(1).replace(",", ""))
+    return int(num * _DURATION_UNITS_MS.get(m.group(2), 1.0))
+
+
+def _is_nonzero_size(value: str) -> bool:
+    """True if a Spark size metric ('0.0 B', '512.0 KiB') is greater than zero."""
+    m = re.match(r"([\d,.]+)", _metric_total(value))
+    return bool(m) and float(m.group(1).replace(",", "")) > 0
+
+
+def _transform_dag(detail: dict) -> dict:
+    """Map a raw Spark SQL execution detail into the compact UI schema."""
+    nodes = []
+    shuffle_node_ids = set()
+    for n in detail.get("nodes", []):
+        metrics = {m["name"]: m["value"] for m in n.get("metrics", [])}
+        name = n.get("nodeName", "")
+
+        is_shuffle = (
+            "Exchange" in name
+            or "Shuffle" in name
+            or "shuffle bytes written" in metrics
+        )
+        if is_shuffle:
+            shuffle_node_ids.add(n["nodeId"])
+
+        has_spill = "spill size" in metrics and _is_nonzero_size(metrics["spill size"])
+
+        duration_ms = None
+        for key in ("duration", "sort time", "time in aggregation build"):
+            if key in metrics:
+                duration_ms = _parse_duration_ms(metrics[key])
+                if duration_ms is not None:
+                    break
+
+        nodes.append({
+            "id": n["nodeId"],
+            "name": name,
+            "duration_ms": duration_ms,
+            "metrics": {k: _metric_total(v) for k, v in metrics.items()},
+            "is_shuffle": is_shuffle,
+            "has_skew": False,  # conservative: only set when an explicit skew metric exists
+            "has_spill": has_spill,
+        })
+
+    edges = [
+        {"from": e["fromId"], "to": e["toId"], "is_shuffle": e["fromId"] in shuffle_node_ids}
+        for e in detail.get("edges", [])
+    ]
+    return {"nodes": nodes, "edges": edges}
+
+
+def _fetch_query_dag(session: dict, before_ids: set[int]) -> dict | None:
+    """Best-effort: fetch the just-run query's execution DAG from the driver UI.
+
+    Polls the SQL execution list for a new COMPLETED execution (one not present
+    before the query ran), then fetches and transforms its detail. Returns None
+    on any failure so the query result is never affected.
+    """
+    driver_ip = session["task_ip"]
+    try:
+        app_id = session.get("app_id") or _resolve_app_id(driver_ip)
+        if not app_id:
+            return None
+        session["app_id"] = app_id
+
+        deadline = time.time() + 1.5
+        while time.time() < deadline:
+            execs = _ui_get(driver_ip, f"/applications/{app_id}/sql?details=false")
+            new = [e for e in execs if e["id"] not in before_ids and e.get("status") == "COMPLETED"]
+            if new:
+                exec_id = max(e["id"] for e in new)
+                detail = _ui_get(driver_ip, f"/applications/{app_id}/sql/{exec_id}?details=true")
+                if detail.get("nodes"):
+                    return _transform_dag(detail)
+            time.sleep(0.15)
+    except Exception as exc:
+        log.warning("Query DAG fetch failed for driver %s: %s", driver_ip, exc)
+    return None
+
+
+def _sql_execution_ids(session: dict) -> set[int]:
+    """Best-effort snapshot of existing SQL execution ids before a query runs."""
+    try:
+        app_id = session.get("app_id") or _resolve_app_id(session["task_ip"])
+        if not app_id:
+            return set()
+        session["app_id"] = app_id
+        execs = _ui_get(session["task_ip"], f"/applications/{app_id}/sql?details=false")
+        return {e["id"] for e in execs}
+    except Exception:
+        return set()
+
+
 def _stop_orphaned_tasks() -> None:
     """On startup: stop any ECS tasks that are not tracked in the sessions map."""
     known_arns = {
@@ -155,12 +293,36 @@ class QueryRequest(BaseModel):
     sql: str
 
 
+class DagNode(BaseModel):
+    id: int
+    name: str
+    duration_ms: int | None = None
+    metrics: dict[str, str] = {}
+    is_shuffle: bool = False
+    has_skew: bool = False
+    has_spill: bool = False
+
+
+class DagEdge(BaseModel):
+    from_: int = Field(alias="from")
+    to: int
+    is_shuffle: bool = False
+
+    model_config = {"populate_by_name": True}
+
+
+class QueryProfile(BaseModel):
+    nodes: list[DagNode]
+    edges: list[DagEdge]
+
+
 class QueryResponse(BaseModel):
     query_id: str
     columns: list[str]
     rows: list[list]
     duration_ms: int
     row_count: int
+    profile: QueryProfile | None = None
 
 
 # --- App ---
@@ -283,6 +445,7 @@ def run_query(session_id: str, req: QueryRequest):
         raise HTTPException(status_code=409, detail="session not running")
 
     spark = _get_spark(session_id, s["endpoint"])
+    before_ids = _sql_execution_ids(s)  # best-effort snapshot for DAG correlation
     t0 = time.time()
     try:
         df = spark.sql(req.sql)
@@ -300,18 +463,21 @@ def run_query(session_id: str, req: QueryRequest):
     duration_ms = int((time.time() - t0) * 1000)
     columns = df.columns
     rows = [[str(v) for v in row] for row in collected]
+    profile = _fetch_query_dag(s, before_ids)  # best-effort; None on any failure
     query_history.append({
         "query_id": qid, "sql": req.sql, "status": "success",
         "duration_ms": duration_ms, "row_count": len(rows),
         "session_id": session_id, "ts": time.strftime("%H:%M:%S", time.localtime()),
+        "profile": profile,
     })
-    log.info("Query %s on session %s: %dms, %d rows", qid, session_id, duration_ms, len(rows))
+    log.info("Query %s on session %s: %dms, %d rows\n%s", qid, session_id, duration_ms, len(rows), req.sql)
     return QueryResponse(
         query_id=qid,
         columns=columns,
         rows=rows,
         duration_ms=duration_ms,
         row_count=len(rows),
+        profile=profile,
     )
 
 
