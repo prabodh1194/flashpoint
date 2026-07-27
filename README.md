@@ -8,23 +8,25 @@ Spark Connect (gRPC).
 ```
 Client (SQL / DataFrame)
    │ gRPC (Spark Connect)
-Gateway            session routing, auth        (stateless Lambda)
+Gateway            session routing, auth, HA    (EC2, stateless)
    │
-Spark driver       Lambda Managed Instances     (container)
+Spark driver       ECS Fargate                  (container)
    │
-Executors          Lambda Managed Instances     (auto-scaled)
+Executors          ECS Fargate                  (auto-scaled)
    │
-Shuffle            local NVMe → async flush → S3 Files
+Shuffle            local ephemeral → async flush → S3 Files
+   │
+State              DynamoDB (session + warehouse metadata)
    │
 Tables             Iceberg on S3 Files, catalog in AWS Glue
 ```
 
-Shuffle approach: write to local NVMe, async-flush to S3 Files for durability; recover from S3 Files
-on executor loss instead of recomputing.
+Shuffle approach: write to local ephemeral storage, async-flush to S3 Files for durability; recover
+from S3 Files on executor loss instead of recomputing.
 
 ## Status
 
-Pre-implementation. Tracking: https://github.com/users/prabodh1194/projects/3
+Actively developing. Tracking: https://github.com/users/prabodh1194/projects/3
 
 | Milestone | Scope |
 |-----------|-------|
@@ -35,10 +37,11 @@ Pre-implementation. Tracking: https://github.com/users/prabodh1194/projects/3
 
 ## Key dependencies
 
-- Lambda Managed Instances (GA Nov 2025): EC2-backed Lambda compute, container support, warm
-  minimum (no scale-to-zero).
-- S3 Files (2026): NFS v4.1/4.2 over S3, built on EFS.
+- ECS Fargate: serverless container compute for driver and executors.
+- S3 Files: NFS v4.1/4.2 over S3 for shuffle persistence.
+- DynamoDB: session state and warehouse configuration.
 - Apache Spark Connect: gRPC client/server protocol.
+- OpenTofu: infrastructure-as-code for all AWS resources.
 
 ## Related work
 
