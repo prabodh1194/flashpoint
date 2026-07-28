@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 480" font-family="system-ui, -apple-system, sans-serif">
+  <defs>
+    <filter id="shadow" x="-2%" y="-2%" width="104%" height="104%">
+      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#f97316" flood-opacity="0.06"/>
+    </filter>
+  </defs>
+
+  <rect width="760" height="480" rx="12" fill="#fff"/>
+
+  <!-- 1. SQL Clients -->
+  <circle cx="222" cy="38" r="10" fill="#6ee7b7"/>
+  <text x="222" y="42" text-anchor="middle" fill="#064e3b" font-size="9" font-weight="700">1</text>
+  <rect x="240" y="16" width="300" height="44" rx="8" fill="#ecfdf5" stroke="#6ee7b7" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="390" y="36" text-anchor="middle" fill="#064e3b" font-size="13" font-weight="600">SQL Clients &amp; BI Tools</text>
+  <text x="390" y="51" text-anchor="middle" fill="#059669" font-size="10">Notebooks · dashboards · ad-hoc queries</text>
+
+  <line x1="390" y1="60" x2="390" y2="86" stroke="#6ee7b7" stroke-width="1.5"/>
+  <polygon points="386,84 394,84 390,90" fill="#6ee7b7"/>
+
+  <!-- 2. Gateway -->
+  <circle cx="247" cy="114" r="10" fill="#fca5a5"/>
+  <text x="247" y="118" text-anchor="middle" fill="#991b1b" font-size="9" font-weight="700">2</text>
+  <rect x="265" y="92" width="250" height="44" rx="8" fill="#fef2f2" stroke="#fca5a5" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="390" y="112" text-anchor="middle" fill="#991b1b" font-size="13" font-weight="700">Gateway (EC2)</text>
+  <text x="390" y="127" text-anchor="middle" fill="#dc2626" font-size="10">Session routing · query dispatch · HA</text>
+
+  <line x1="390" y1="136" x2="390" y2="166" stroke="#fca5a5" stroke-width="1.5"/>
+  <polygon points="386,164 394,164 390,170" fill="#fca5a5"/>
+
+  <!-- 3. Spark Connect gRPC -->
+  <circle cx="272" cy="182" r="10" fill="#fca5a5"/>
+  <text x="272" y="186" text-anchor="middle" fill="#991b1b" font-size="9" font-weight="700">3</text>
+  <rect x="290" y="172" width="200" height="20" rx="4" fill="#fef2f2"/>
+  <text x="390" y="186" text-anchor="middle" fill="#dc2626" font-size="9" font-weight="600">Spark Connect gRPC</text>
+
+  <!-- 4-5. Compute box -->
+  <rect x="80" y="202" width="600" height="140" rx="10" fill="#fffbeb" stroke="#fcd34d" stroke-width="1" stroke-dasharray="6,3"/>
+
+  <!-- 4. Driver -->
+  <circle cx="112" cy="270" r="10" fill="#fdba74"/>
+  <text x="112" y="274" text-anchor="middle" fill="#9a3412" font-size="9" font-weight="700">4</text>
+  <rect x="130" y="238" width="230" height="64" rx="8" fill="#fff7ed" stroke="#fdba74" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="245" y="262" text-anchor="middle" fill="#9a3412" font-size="13" font-weight="700">Spark Driver</text>
+  <text x="245" y="278" text-anchor="middle" fill="#ea580c" font-size="10">Spark Connect Server on gRPC :15002</text>
+  <text x="245" y="292" text-anchor="middle" fill="#fdba74" font-size="8">4 vCPU / 16 GB · On-Demand</text>
+
+  <line x1="360" y1="270" x2="404" y2="270" stroke="#fcd34d" stroke-width="1"/>
+  <polygon points="402,266 402,274 408,270" fill="#fcd34d"/>
+
+  <!-- 5. Executors -->
+  <circle cx="425" cy="270" r="10" fill="#93c5fd"/>
+  <text x="425" y="274" text-anchor="middle" fill="#1e3a5f" font-size="9" font-weight="700">5</text>
+  <rect x="443" y="238" width="217" height="64" rx="8" fill="#eff6ff" stroke="#93c5fd" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="551" y="262" text-anchor="middle" fill="#1e3a5f" font-size="13" font-weight="700">Executors ×N</text>
+  <text x="551" y="278" text-anchor="middle" fill="#2563eb" font-size="10">Spark Workers · auto-scale · Spot</text>
+  <text x="551" y="292" text-anchor="middle" fill="#60a5fa" font-size="8">2 vCPU / 8 GB each</text>
+
+  <!-- mini worker boxes -->
+  <rect x="443" y="308" width="34" height="18" rx="4" fill="#eff6ff" stroke="#93c5fd" stroke-width="1"/>
+  <text x="460" y="321" text-anchor="middle" fill="#2563eb" font-size="8">W1</text>
+  <rect x="485" y="308" width="34" height="18" rx="4" fill="#eff6ff" stroke="#93c5fd" stroke-width="1"/>
+  <text x="502" y="321" text-anchor="middle" fill="#2563eb" font-size="8">W2</text>
+  <rect x="527" y="308" width="34" height="18" rx="4" fill="#eff6ff" stroke="#93c5fd" stroke-width="1"/>
+  <text x="544" y="321" text-anchor="middle" fill="#2563eb" font-size="8">W3</text>
+  <text x="591" y="321" text-anchor="middle" fill="#93c5fd" font-size="9">…</text>
+
+  <!-- 6. DynamoDB -->
+  <circle cx="32" cy="270" r="10" fill="#fca5a5"/>
+  <text x="32" y="274" text-anchor="middle" fill="#991b1b" font-size="9" font-weight="700">6</text>
+  <rect x="48" y="248" width="48" height="44" rx="6" fill="#fef2f2" stroke="#fca5a5" stroke-width="1"/>
+  <text x="72" y="266" text-anchor="middle" fill="#991b1b" font-size="7" font-weight="600">DynamoDB</text>
+  <text x="72" y="280" text-anchor="middle" fill="#dc2626" font-size="6">session</text>
+  <text x="72" y="289" text-anchor="middle" fill="#dc2626" font-size="6">state</text>
+  <line x1="96" y1="270" x2="124" y2="270" stroke="#fca5a5" stroke-width="0.8" stroke-dasharray="2,2"/>
+
+  <!-- Arrow compute → storage -->
+  <line x1="380" y1="342" x2="380" y2="370" stroke="#fcd34d" stroke-width="1.5"/>
+  <polygon points="376,368 384,368 380,374" fill="#fcd34d"/>
+
+  <text x="380" y="360" text-anchor="middle" fill="#d97706" font-size="8">S3 Files · shuffle persistence</text>
+
+  <!-- 7. Storage -->
+  <circle cx="112" cy="408" r="10" fill="#fcd34d"/>
+  <text x="112" y="412" text-anchor="middle" fill="#78350f" font-size="9" font-weight="700">7</text>
+  <rect x="130" y="376" width="510" height="64" rx="10" fill="#fef3c7" stroke="#fcd34d" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="385" y="402" text-anchor="middle" fill="#78350f" font-size="14" font-weight="700">Apache Iceberg on S3</text>
+  <text x="385" y="422" text-anchor="middle" fill="#b45309" font-size="10">Glue Data Catalog · ACID transactions · time travel · schema evolution</text>
+
+</svg>

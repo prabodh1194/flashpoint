@@ -4,431 +4,59 @@ Sessions are persisted to DynamoDB; the in-memory dict is a cache rebuilt
 from DynamoDB + live ECS state on startup. Executors run on Fargate Spot;
 the driver runs on-demand so Spot reclamation never kills the whole session.
 """
-import asyncio
 import hashlib
-import json
-import os
-import re
 import time
 import uuid
 import logging
-import urllib.request
 from collections import deque
 from contextlib import asynccontextmanager
 
-import boto3
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
-from pyspark.sql import SparkSession
 
 import store
+import dag
+import ecs_tasks
+import spark_client
+import reconcile as _reconcile_mod
+from config import (
+    CLUSTER, GRPC_PORT, SESSION_TTL_S, MAX_SESSIONS, SIZES,
+)
+from models import (
+    CreateSessionRequest, SessionResponse, QueryRequest, ResizeRequest,
+    QueryResponse,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 
-# --- Config (env vars set on the EC2 gateway host) ---
-CLUSTER          = os.environ["FLASHPOINT_ECS_CLUSTER"]
-TASK_DEF         = os.environ["FLASHPOINT_DRIVER_TASK_DEF"]
-EXECUTOR_TASK_DEF = os.environ["FLASHPOINT_EXECUTOR_TASK_DEF"]
-SUBNETS          = os.environ["FLASHPOINT_SUBNETS"].split(",")
-SECURITY_GROUP   = os.environ["FLASHPOINT_SECURITY_GROUP"]
-REGION           = os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
-GRPC_PORT        = int(os.environ.get("FLASHPOINT_GRPC_PORT", "15002"))
-# Stop idle tasks after this many seconds to prevent runaway Fargate cost
-SESSION_TTL_S    = int(os.environ.get("FLASHPOINT_SESSION_TTL_S", str(2 * 3600)))
-MAX_SESSIONS     = int(os.environ.get("FLASHPOINT_MAX_SESSIONS", "3"))
-# Spark driver UI / SQL REST API port — source of query-profile DAGs (Beacon #19)
-SPARK_UI_PORT    = int(os.environ.get("FLASHPOINT_SPARK_UI_PORT", "4040"))
-
-# Warehouse size → executor count. Per-executor stays 2vCPU/8GB (the ECS task def).
-# Scale count, not size, to keep things simple. Bigger per-executor sizes in a future pass.
-SIZES: dict[str, int] = {"XS": 1, "S": 2, "M": 4, "L": 8, "XL": 16}
-
-ecs = boto3.client("ecs", region_name=REGION)
-
-# In-memory session store: session_id -> {task_arn, executor_arns, task_ip, endpoint, ...}
 sessions: dict[str, dict] = {}
-
-# Query history: capped deque of completed query records
 query_history: deque[dict] = deque(maxlen=500)
 
 
-# --- Helpers ---
-
-def _run_driver_task() -> str:
-    resp = ecs.run_task(
-        cluster=CLUSTER,
-        taskDefinition=TASK_DEF,
-        launchType="FARGATE",
-        networkConfiguration={
-            "awsvpcConfiguration": {
-                "subnets": SUBNETS,
-                "securityGroups": [SECURITY_GROUP],
-                "assignPublicIp": "ENABLED",
-            }
-        },
-    )
-    failures = resp.get("failures", [])
-    if failures:
-        raise RuntimeError(f"RunTask failed: {failures}")
-    return resp["tasks"][0]["taskArn"]
-
-
-def _wait_running(task_arn: str) -> None:
-    waiter = ecs.get_waiter("tasks_running")
-    waiter.wait(cluster=CLUSTER, tasks=[task_arn])
-
-
-def _private_ip(task_arn: str) -> str:
-    """Read private IP directly from ECS task attachment details — no ENI call needed."""
-    resp = ecs.describe_tasks(cluster=CLUSTER, tasks=[task_arn])
-    details = resp["tasks"][0]["attachments"][0]["details"]
-    return next(d["value"] for d in details if d["name"] == "privateIPv4Address")
-
-
-def _run_executor_tasks(master_url: str, n: int) -> list[str]:
-    """Launch N Fargate Spot executor workers pointing at the driver's master URL.
-
-    Executors use FARGATE_SPOT — they tolerate preemption (Spark Standalone
-    reschedules), and Spot is significantly cheaper than on-demand.
-    """
-    arns = []
-    for _ in range(n):
-        resp = ecs.run_task(
-            cluster=CLUSTER,
-            taskDefinition=EXECUTOR_TASK_DEF,
-            capacityProviderStrategy=[{"capacityProvider": "FARGATE_SPOT", "weight": 1}],
-            networkConfiguration={
-                "awsvpcConfiguration": {
-                    "subnets": SUBNETS,
-                    "securityGroups": [SECURITY_GROUP],
-                    "assignPublicIp": "ENABLED",
-                }
-            },
-            overrides={
-                "containerOverrides": [{
-                    "name": "spark-executor",
-                    "environment": [
-                        {"name": "SPARK_MASTER_URL", "value": master_url}
-                    ],
-                }]
-            },
-        )
-        failures = resp.get("failures", [])
-        if failures:
-            log.error("Executor RunTask failed: %s", failures)
-            continue
-        arns.append(resp["tasks"][0]["taskArn"])
-    return arns
-
-
-def _is_running(task_arn: str) -> bool:
-    resp = ecs.describe_tasks(cluster=CLUSTER, tasks=[task_arn])
-    tasks = resp.get("tasks", [])
-    return bool(tasks) and tasks[0].get("lastStatus") == "RUNNING"
-
-
 def _query_id(sql: str) -> str:
-    """Stable 16-char hex ID derived from normalized SQL content."""
     normalized = " ".join(sql.strip().lower().split())
     return hashlib.sha256(normalized.encode()).hexdigest()[:16]
 
 
-# --- Query-profile DAG via the Spark driver UI REST API (Beacon #19) ---
-#
-# The Spark UI exposes per-query execution plans at
-# /api/v1/applications/{appId}/sql/{executionId}?details=true, returning operator
-# nodes, parent-child edges, and per-node metrics. We fetch this best-effort after
-# a query runs; any failure leaves the query result untouched (profile = None).
-
-_DURATION_UNITS_MS = {"ms": 1.0, "s": 1000.0, "m": 60_000.0, "min": 60_000.0, "h": 3_600_000.0}
-
-
-def _ui_get(driver_ip: str, path: str, timeout: float = 2.0):
-    """GET http://{driver_ip}:{SPARK_UI_PORT}/api/v1{path} and parse JSON."""
-    url = f"http://{driver_ip}:{SPARK_UI_PORT}/api/v1{path}"
-    with urllib.request.urlopen(url, timeout=timeout) as resp:
-        return json.loads(resp.read().decode())
-
-
-def _resolve_app_id(driver_ip: str) -> str | None:
-    """Return the running application's id (SparkConnectServer hosts exactly one)."""
-    apps = _ui_get(driver_ip, "/applications")
-    if not apps:
-        return None
-    running = [a for a in apps if any(not at.get("completed", True) for at in a.get("attempts", []))]
-    return (running or apps)[0]["id"]
-
-
-def _metric_total(value: str) -> str:
-    """Spark metric values may be 'total (min, med, max ...)\\nN unit (...)'.
-    Return the human total — the leading token of the last line."""
-    last = value.strip().splitlines()[-1].strip()
-    return last
-
-
-def _parse_duration_ms(value: str) -> int | None:
-    """Parse a Spark duration metric string like '390 ms' or the total line of an
-    aggregated metric into milliseconds. Returns None if unparseable."""
-    m = re.match(r"([\d,.]+)\s*(ms|min|s|m|h)\b", _metric_total(value))
-    if not m:
-        return None
-    num = float(m.group(1).replace(",", ""))
-    return int(num * _DURATION_UNITS_MS.get(m.group(2), 1.0))
-
-
-def _is_nonzero_size(value: str) -> bool:
-    """True if a Spark size metric ('0.0 B', '512.0 KiB') is greater than zero."""
-    m = re.match(r"([\d,.]+)", _metric_total(value))
-    return bool(m) and float(m.group(1).replace(",", "")) > 0
-
-
-def _transform_dag(detail: dict) -> dict:
-    """Map a raw Spark SQL execution detail into the compact UI schema."""
-    nodes = []
-    shuffle_node_ids = set()
-    for n in detail.get("nodes", []):
-        metrics = {m["name"]: m["value"] for m in n.get("metrics", [])}
-        name = n.get("nodeName", "")
-
-        is_shuffle = (
-            "Exchange" in name
-            or "Shuffle" in name
-            or "shuffle bytes written" in metrics
-        )
-        if is_shuffle:
-            shuffle_node_ids.add(n["nodeId"])
-
-        has_spill = "spill size" in metrics and _is_nonzero_size(metrics["spill size"])
-
-        duration_ms = None
-        for key in ("duration", "sort time", "time in aggregation build"):
-            if key in metrics:
-                duration_ms = _parse_duration_ms(metrics[key])
-                if duration_ms is not None:
-                    break
-
-        nodes.append({
-            "id": n["nodeId"],
-            "name": name,
-            "duration_ms": duration_ms,
-            "metrics": {k: _metric_total(v) for k, v in metrics.items()},
-            "is_shuffle": is_shuffle,
-            "has_skew": False,  # conservative: only set when an explicit skew metric exists
-            "has_spill": has_spill,
-        })
-
-    edges = [
-        {"from": e["fromId"], "to": e["toId"], "is_shuffle": e["fromId"] in shuffle_node_ids}
-        for e in detail.get("edges", [])
-    ]
-    return {"nodes": nodes, "edges": edges}
-
-
 def _fetch_query_dag(session: dict, before_ids: set[int]) -> dict | None:
-    """Best-effort: fetch the just-run query's execution DAG from the driver UI.
-
-    Polls the SQL execution list for a new COMPLETED execution (one not present
-    before the query ran), then fetches and transforms its detail. Returns None
-    on any failure so the query result is never affected.
-    """
-    driver_ip = session["task_ip"]
-    try:
-        app_id = session.get("app_id") or _resolve_app_id(driver_ip)
-        if not app_id:
-            return None
-        session["app_id"] = app_id
-
-        deadline = time.time() + 1.5
-        while time.time() < deadline:
-            execs = _ui_get(driver_ip, f"/applications/{app_id}/sql?details=false")
-            new = [e for e in execs if e["id"] not in before_ids and e.get("status") == "COMPLETED"]
-            if new:
-                exec_id = max(e["id"] for e in new)
-                detail = _ui_get(driver_ip, f"/applications/{app_id}/sql/{exec_id}?details=true")
-                if detail.get("nodes"):
-                    return _transform_dag(detail)
-            time.sleep(0.15)
-    except Exception as exc:
-        log.warning("Query DAG fetch failed for driver %s: %s", driver_ip, exc)
-    return None
+    return dag.fetch_query_dag(session, before_ids)
 
 
 def _sql_execution_ids(session: dict) -> set[int]:
-    """Best-effort snapshot of existing SQL execution ids before a query runs."""
-    try:
-        app_id = session.get("app_id") or _resolve_app_id(session["task_ip"])
-        if not app_id:
-            return set()
-        session["app_id"] = app_id
-        execs = _ui_get(session["task_ip"], f"/applications/{app_id}/sql?details=false")
-        return {e["id"] for e in execs}
-    except Exception:
-        return set()
-
-
-def _reconcile() -> None:
-    """On startup: rebuild the in-memory session cache from DynamoDB and live ECS state.
-
-    Three cases:
-      1. DynamoDB record + live driver task → rebuild in-memory entry (don't touch _spark_cache;
-         _get_spark will lazily reconnect on the next query).
-      2. DynamoDB record + dead driver task → orphaned session: suspend it in DynamoDB and stop
-         any still-running executor tasks.
-      3. Live ECS task + no DynamoDB record → orphaned task: stop it.
-         CRITICAL: orphan-stop is gated on "not referenced by any DynamoDB record" so we
-         never kill a session that survived a previous gateway restart (the old bug).
-    """
-    try:
-        db_sessions = store.list_sessions()
-        db_arns = {
-            arn
-            for s in db_sessions
-            for arn in ([s.get("task_arn")] if s.get("task_arn") else [])
-            + (s.get("executor_arns") or [])
-        }
-
-        # Collect live ECS task ARNs for orphan detection (step 3).
-        live_arns: set[str] = set()
-        try:
-            paginator = ecs.get_paginator("list_tasks")
-            for page in paginator.paginate(cluster=CLUSTER, desiredStatus="RUNNING"):
-                live_arns.update(page.get("taskArns", []))
-        except Exception as exc:
-            log.error("Could not list ECS tasks during reconcile: %s", exc)
-
-        for s in db_sessions:
-            sid = s["session_id"]
-            task_arn = s.get("task_arn", "")
-            status = s.get("status", "running")
-
-            if status == "suspended":
-                # Suspended warehouses have no live tasks — nothing to reconcile.
-                continue
-
-            if task_arn and task_arn in live_arns:
-                # Case 1: driver is alive — rebuild in-memory entry.
-                sessions[sid] = s
-                log.info("Reconciled session %s (driver live)", sid)
-            else:
-                # Case 2: driver is gone — mark suspended, clean up stale executor arns.
-                log.warning("Session %s driver gone — suspending", sid)
-                executor_arns = s.get("executor_arns") or []
-                for arn in executor_arns:
-                    if arn in live_arns:
-                        try:
-                            ecs.stop_task(cluster=CLUSTER, task=arn, reason="orphan-executor")
-                        except Exception as exc:
-                            log.error("Failed to stop orphan executor %s: %s", arn, exc)
-                store.update_session_status(
-                    sid, "suspended", task_arn=None, executor_arns=[], task_ip=None
-                )
-
-        # Case 3: live task not referenced by any DynamoDB record.
-        for arn in live_arns:
-            if arn not in db_arns:
-                log.warning("Stopping untracked orphan task %s", arn)
-                try:
-                    ecs.stop_task(cluster=CLUSTER, task=arn, reason="orphan-cleanup")
-                except Exception as exc:
-                    log.error("Failed to stop orphan %s: %s", arn, exc)
-
-    except Exception as exc:
-        log.error("Reconcile failed: %s", exc)
-
-
-# --- API models ---
-
-class CreateSessionRequest(BaseModel):
-    size: str = "XS"
-
-
-class SessionResponse(BaseModel):
-    session_id: str
-    task_arn: str | None = None
-    endpoint: str | None = None
-    status: str
-    size: str = "XS"
-    executor_count: int = 1
-    name: str | None = None
-
-
-class QueryRequest(BaseModel):
-    sql: str
-
-
-class ResizeRequest(BaseModel):
-    size: str
-
-
-class DagNode(BaseModel):
-    id: int
-    name: str
-    duration_ms: int | None = None
-    metrics: dict[str, str] = {}
-    is_shuffle: bool = False
-    has_skew: bool = False
-    has_spill: bool = False
-
-
-class DagEdge(BaseModel):
-    from_: int = Field(alias="from")
-    to: int
-    is_shuffle: bool = False
-
-    model_config = {"populate_by_name": True}
-
-
-class QueryProfile(BaseModel):
-    nodes: list[DagNode]
-    edges: list[DagEdge]
-
-
-class QueryResponse(BaseModel):
-    query_id: str
-    columns: list[str]
-    rows: list[list]
-    duration_ms: int
-    row_count: int
-    profile: QueryProfile | None = None
+    return dag.sql_execution_ids(session)
 
 
 # --- App ---
 
-async def _reap_idle_sessions():
-    """Stop Fargate tasks that have exceeded SESSION_TTL_S to prevent runaway cost."""
-    while True:
-        await asyncio.sleep(60)
-        now = time.time()
-        expired = [
-            sid for sid, s in list(sessions.items())
-            if now - s.get("created_at", now) > SESSION_TTL_S
-        ]
-        for sid in expired:
-            s = sessions.pop(sid, None)
-            if s:
-                log.warning("Reaping idle session %s (TTL exceeded)", sid)
-                _drop_spark(sid)
-                for arn in ([s["task_arn"]] if s.get("task_arn") else []) + (s.get("executor_arns") or []):
-                    try:
-                        ecs.stop_task(cluster=CLUSTER, task=arn)
-                    except Exception as exc:
-                        log.error("Failed to stop task %s: %s", arn, exc)
-                try:
-                    store.update_session_status(
-                        sid, "suspended", task_arn=None, executor_arns=[], task_ip=None
-                    )
-                except Exception as exc:
-                    log.error("Failed to update reaped session %s in DynamoDB: %s", sid, exc)
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     log.info("Flashpoint gateway starting (cluster=%s, ttl=%ds)", CLUSTER, SESSION_TTL_S)
-    _reconcile()
-    reaper = asyncio.create_task(_reap_idle_sessions())
+    _reconcile_mod.reconcile(sessions, CLUSTER, SESSION_TTL_S)
+    reaper = asyncio.create_task(
+        _reconcile_mod.reap_idle_sessions(sessions, spark_client, SESSION_TTL_S, CLUSTER)
+    )
     yield
     reaper.cancel()
     log.info("Flashpoint gateway shutting down")
@@ -443,54 +71,35 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Cache one SparkSession per session_id so we don't reconnect on every query
-_spark_cache: dict[str, SparkSession] = {}
 
-
-def _get_spark(session_id: str, endpoint: str) -> SparkSession:
-    if session_id not in _spark_cache:
-        _spark_cache[session_id] = (
-            SparkSession.builder.remote(endpoint).getOrCreate()
-        )
-    return _spark_cache[session_id]
-
-
-def _drop_spark(session_id: str) -> None:
-    spark = _spark_cache.pop(session_id, None)
-    if spark:
-        try:
-            spark.stop()
-        except Exception:
-            pass
-
+# --- Routes ---
 
 @app.post("/sessions", response_model=SessionResponse, status_code=201)
 def create_session(req: CreateSessionRequest = CreateSessionRequest()):
-    """Launch a Fargate driver task and return its gRPC endpoint."""
     if req.size not in SIZES:
-        raise HTTPException(status_code=400, detail=f"unknown size {req.size!r}, must be one of {list(SIZES)}")
+        raise HTTPException(status_code=400, detail=f"unknown size {req.size!r}")
     if len(sessions) >= MAX_SESSIONS:
         raise HTTPException(status_code=429, detail=f"session cap reached ({MAX_SESSIONS} max)")
     session_id = str(uuid.uuid4())
     executor_count = SIZES[req.size]
     log.info("Creating session %s (size=%s, executors=%d)", session_id, req.size, executor_count)
 
-    task_arn = _run_driver_task()
+    task_arn = ecs_tasks.run_driver_task()
     log.info("Driver task launched: %s", task_arn)
 
-    _wait_running(task_arn)
-    private_ip = _private_ip(task_arn)
-    master_url = f"spark://{private_ip}:7077"
-    endpoint = f"sc://{private_ip}:{GRPC_PORT}"
+    ecs_tasks.wait_running(task_arn)
+    task_ip = ecs_tasks.private_ip(task_arn)
+    master_url = f"spark://{task_ip}:7077"
+    endpoint = f"sc://{task_ip}:{GRPC_PORT}"
     log.info("Driver ready — master=%s endpoint=%s", master_url, endpoint)
 
-    executor_arns = _run_executor_tasks(master_url, executor_count)
+    executor_arns = ecs_tasks.run_executor_tasks(master_url, executor_count)
     log.info("Launched %d executor tasks (Spot): %s", len(executor_arns), executor_arns)
 
     record = {
         "task_arn": task_arn,
         "executor_arns": executor_arns,
-        "task_ip": private_ip,
+        "task_ip": task_ip,
         "endpoint": endpoint,
         "status": "running",
         "size": req.size,
@@ -511,7 +120,7 @@ def get_session(session_id: str):
     if not s:
         raise HTTPException(status_code=404, detail="session not found")
     task_arn = s.get("task_arn", "")
-    status = "running" if (task_arn and _is_running(task_arn)) else s.get("status", "stopped")
+    status = "running" if (task_arn and ecs_tasks.is_running(task_arn)) else s.get("status", "stopped")
     return SessionResponse(
         session_id=session_id,
         task_arn=task_arn or None,
@@ -530,15 +139,14 @@ def list_sessions_endpoint():
 
 @app.post("/sessions/{session_id}/query", response_model=QueryResponse)
 def run_query(session_id: str, req: QueryRequest):
-    """Execute SQL against a running session's Spark Connect driver."""
     s = sessions.get(session_id)
     if not s:
         raise HTTPException(status_code=404, detail="session not found")
-    if not _is_running(s["task_arn"]):
+    if not ecs_tasks.is_running(s["task_arn"]):
         raise HTTPException(status_code=409, detail="session not running")
 
-    spark = _get_spark(session_id, s["endpoint"])
-    before_ids = _sql_execution_ids(s)  # best-effort snapshot for DAG correlation
+    spark = spark_client.get(s["endpoint"], session_id)
+    before_ids = _sql_execution_ids(s)
     t0 = time.time()
     try:
         df = spark.sql(req.sql)
@@ -556,7 +164,7 @@ def run_query(session_id: str, req: QueryRequest):
     duration_ms = int((time.time() - t0) * 1000)
     columns = df.columns
     rows = [[str(v) for v in row] for row in collected]
-    profile = _fetch_query_dag(s, before_ids)  # best-effort; None on any failure
+    profile = _fetch_query_dag(s, before_ids)
     query_history.append({
         "query_id": qid, "sql": req.sql, "status": "success",
         "duration_ms": duration_ms, "row_count": len(rows),
@@ -576,26 +184,24 @@ def run_query(session_id: str, req: QueryRequest):
 
 @app.delete("/sessions/{session_id}", status_code=204)
 def delete_session(session_id: str):
-    """Permanently destroy a session — stops tasks and removes the DynamoDB record."""
     s = sessions.pop(session_id, None)
     if not s:
         raise HTTPException(status_code=404, detail="session not found")
-    _drop_spark(session_id)
-    _stop_tasks(s)
+    spark_client.drop(session_id)
+    ecs_tasks.stop_tasks(s)
     store.delete_session(session_id)
     log.info("Deleted session %s (driver + %d executors stopped)", session_id, len(s.get("executor_arns") or []))
 
 
 @app.post("/sessions/{session_id}/suspend", status_code=200)
 def suspend_session(session_id: str):
-    """Stop tasks but keep the session record (warehouse is suspended, resumable)."""
     s = sessions.get(session_id)
     if not s:
         raise HTTPException(status_code=404, detail="session not found")
     if s.get("status") == "suspended":
         return {"status": "suspended"}
-    _drop_spark(session_id)
-    _stop_tasks(s)
+    spark_client.drop(session_id)
+    ecs_tasks.stop_tasks(s)
     sessions[session_id] = {**s, "task_arn": None, "executor_arns": [], "task_ip": None, "status": "suspended"}
     store.update_session_status(session_id, "suspended", task_arn=None, executor_arns=[], task_ip=None)
     log.info("Suspended session %s", session_id)
@@ -604,7 +210,6 @@ def suspend_session(session_id: str):
 
 @app.post("/sessions/{session_id}/resume", status_code=200, response_model=SessionResponse)
 def resume_session(session_id: str):
-    """Reprovision a suspended warehouse — launches a fresh driver + executors."""
     s = sessions.get(session_id)
     if not s:
         raise HTTPException(status_code=404, detail="session not found")
@@ -619,16 +224,16 @@ def resume_session(session_id: str):
     executor_count = SIZES.get(size, 1)
     log.info("Resuming session %s (size=%s)", session_id, size)
 
-    task_arn = _run_driver_task()
-    _wait_running(task_arn)
-    private_ip = _private_ip(task_arn)
-    master_url = f"spark://{private_ip}:7077"
-    endpoint = f"sc://{private_ip}:{GRPC_PORT}"
-    executor_arns = _run_executor_tasks(master_url, executor_count)
+    task_arn = ecs_tasks.run_driver_task()
+    ecs_tasks.wait_running(task_arn)
+    task_ip = ecs_tasks.private_ip(task_arn)
+    master_url = f"spark://{task_ip}:7077"
+    endpoint = f"sc://{task_ip}:{GRPC_PORT}"
+    executor_arns = ecs_tasks.run_executor_tasks(master_url, executor_count)
 
     update = {
         "task_arn": task_arn, "executor_arns": executor_arns,
-        "task_ip": private_ip, "endpoint": endpoint,
+        "task_ip": task_ip, "endpoint": endpoint,
         "executor_count": executor_count,
     }
     sessions[session_id] = {**s, **update, "status": "running"}
@@ -642,7 +247,6 @@ def resume_session(session_id: str):
 
 @app.post("/sessions/{session_id}/resize", status_code=200, response_model=SessionResponse)
 def resize_session(session_id: str, req: ResizeRequest):
-    """Change executor count live — scale up launches new Spot workers; scale down stops trailing ones."""
     s = sessions.get(session_id)
     if not s:
         raise HTTPException(status_code=404, detail="session not found")
@@ -658,7 +262,7 @@ def resize_session(session_id: str, req: ResizeRequest):
 
     if new_count > current_count:
         delta = new_count - current_count
-        new_arns = _run_executor_tasks(master_url, delta)
+        new_arns = ecs_tasks.run_executor_tasks(master_url, delta)
         executor_arns.extend(new_arns)
         log.info("Scaled session %s up: +%d executors (Spot)", session_id, delta)
     elif new_count < current_count:
@@ -667,7 +271,7 @@ def resize_session(session_id: str, req: ResizeRequest):
         executor_arns = executor_arns[:-delta]
         for arn in to_stop:
             try:
-                ecs.stop_task(cluster=CLUSTER, task=arn)
+                ecs_tasks.ecs.stop_task(cluster=CLUSTER, task=arn)
             except Exception as exc:
                 log.error("Failed to stop executor %s during resize: %s", arn, exc)
         log.info("Scaled session %s down: -%d executors", session_id, delta)
@@ -678,17 +282,6 @@ def resize_session(session_id: str, req: ResizeRequest):
         session_id=session_id, task_arn=s["task_arn"], endpoint=s["endpoint"],
         status="running", size=req.size, executor_count=new_count,
     )
-
-
-def _stop_tasks(s: dict) -> None:
-    """Stop all tasks belonging to a session — used by delete, suspend, and reaper."""
-    task_arn = s.get("task_arn")
-    executor_arns = s.get("executor_arns") or []
-    for arn in ([task_arn] if task_arn else []) + executor_arns:
-        try:
-            ecs.stop_task(cluster=CLUSTER, task=arn)
-        except Exception as exc:
-            log.error("Failed to stop task %s: %s", arn, exc)
 
 
 @app.get("/history")

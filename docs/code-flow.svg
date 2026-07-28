@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 560" font-family="system-ui, -apple-system, sans-serif">
+  <defs>
+    <filter id="shadow" x="-2%" y="-2%" width="104%" height="104%">
+      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-opacity="0.06"/>
+    </filter>
+    <marker id="arrGreen" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+      <path d="M0,1 L8,5 L0,9" fill="#6ee7b7"/>
+    </marker>
+    <marker id="arrRed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+      <path d="M0,1 L8,5 L0,9" fill="#fca5a5"/>
+    </marker>
+    <marker id="arrOrange" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+      <path d="M0,1 L8,5 L0,9" fill="#fdba74"/>
+    </marker>
+    <marker id="arrBlue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+      <path d="M0,1 L8,5 L0,9" fill="#93c5fd"/>
+    </marker>
+    <marker id="arrAmber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+      <path d="M0,1 L8,5 L0,9" fill="#fcd34d"/>
+    </marker>
+  </defs>
+
+  <rect width="760" height="560" rx="12" fill="#fff"/>
+
+  <!-- Box 1: SQL Clients -->
+  <rect x="280" y="20" width="200" height="52" rx="8" fill="#ecfdf5" stroke="#6ee7b7" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="380" y="42" text-anchor="middle" fill="#064e3b" font-size="13" font-weight="700">1. SQL Clients &amp; BI Tools</text>
+  <text x="380" y="58" text-anchor="middle" fill="#059669" font-size="9">Notebooks · dashboards · ad-hoc</text>
+
+  <!-- Arrow 1→2 -->
+  <line x1="380" y1="72" x2="380" y2="104" stroke="#6ee7b7" stroke-width="1.5" marker-end="url(#arrGreen)"/>
+
+  <!-- Box 2: Gateway -->
+  <rect x="280" y="108" width="200" height="52" rx="8" fill="#fef2f2" stroke="#fca5a5" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="380" y="130" text-anchor="middle" fill="#991b1b" font-size="13" font-weight="700">2. Gateway (EC2)</text>
+  <text x="380" y="146" text-anchor="middle" fill="#dc2626" font-size="9">Session routing · query dispatch</text>
+
+  <!-- Arrow 2→3 -->
+  <line x1="380" y1="160" x2="380" y2="192" stroke="#fca5a5" stroke-width="1.5" marker-end="url(#arrRed)"/>
+
+  <!-- Box 3: Spark Connect gRPC -->
+  <rect x="280" y="196" width="200" height="38" rx="8" fill="#fef2f2" stroke="#fca5a5" stroke-width="1"/>
+  <text x="380" y="220" text-anchor="middle" fill="#dc2626" font-size="11" font-weight="600">3. Spark Connect gRPC</text>
+
+  <!-- Arrow 3→4 -->
+  <line x1="380" y1="234" x2="380" y2="266" stroke="#fdba74" stroke-width="1.5" marker-end="url(#arrOrange)"/>
+
+  <!-- Box 4: Spark Driver -->
+  <rect x="260" y="270" width="240" height="60" rx="8" fill="#fff7ed" stroke="#fdba74" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="380" y="294" text-anchor="middle" fill="#9a3412" font-size="13" font-weight="700">4. Spark Driver (Fargate)</text>
+  <text x="380" y="312" text-anchor="middle" fill="#ea580c" font-size="9">SparkConnectServer :15002 · 4vCPU / 16GB</text>
+
+  <!-- Arrow 4→5 (right) -->
+  <line x1="500" y1="300" x2="544" y2="300" stroke="#93c5fd" stroke-width="1.5" marker-end="url(#arrBlue)"/>
+
+  <!-- Box 5: Executors -->
+  <rect x="550" y="270" width="180" height="60" rx="8" fill="#eff6ff" stroke="#93c5fd" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="640" y="294" text-anchor="middle" fill="#1e3a5f" font-size="13" font-weight="700">5. Executors ×N</text>
+  <text x="640" y="312" text-anchor="middle" fill="#2563eb" font-size="9">Spark Workers · Spot · 2vCPU/8GB</text>
+
+  <!-- Box 6: DynamoDB (left side) -->
+  <rect x="30" y="276" width="160" height="48" rx="8" fill="#fef2f2" stroke="#fca5a5" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="110" y="298" text-anchor="middle" fill="#991b1b" font-size="13" font-weight="700">6. DynamoDB</text>
+  <text x="110" y="314" text-anchor="middle" fill="#dc2626" font-size="9">session state + meters</text>
+
+  <!-- Dotted arrow 6→4 (DynamoDB → Driver) -->
+  <line x1="190" y1="300" x2="256" y2="300" stroke="#fca5a5" stroke-width="1" stroke-dasharray="5,3" marker-end="url(#arrRed)"/>
+
+  <!-- Arrow 4→7 -->
+  <line x1="380" y1="330" x2="380" y2="370" stroke="#fcd34d" stroke-width="1.5" marker-end="url(#arrAmber)"/>
+
+  <!-- Arrow 5→7 -->
+  <line x1="640" y1="330" x2="640" y2="370" stroke="#fcd34d" stroke-width="1.5"/>
+  <line x1="380" y1="370" x2="640" y2="370" stroke="#fcd34d" stroke-width="1.5"/>
+  <polygon points="632,366 632,374 626,370" fill="#fcd34d"/>
+
+  <!-- Box 7: Iceberg -->
+  <rect x="230" y="376" width="300" height="60" rx="8" fill="#fef3c7" stroke="#fcd34d" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="380" y="400" text-anchor="middle" fill="#78350f" font-size="14" font-weight="700">7. Apache Iceberg on S3</text>
+  <text x="380" y="420" text-anchor="middle" fill="#b45309" font-size="9">Glue Catalog · ACID · time travel</text>
+
+  <!-- Key -->
+  <rect x="200" y="470" width="360" height="74" rx="8" fill="#fafafa" stroke="#e5e7eb" stroke-width="1"/>
+  <text x="380" y="488" text-anchor="middle" fill="#64748b" font-size="9" font-weight="600">Read order</text>
+
+  <line x1="230" y1="500" x2="260" y2="500" stroke="#6ee7b7" stroke-width="2"/>
+  <text x="270" y="504" fill="#64748b" font-size="9">UI first (green)</text>
+
+  <line x1="360" y1="500" x2="390" y2="500" stroke="#fca5a5" stroke-width="2"/>
+  <text x="400" y="504" fill="#64748b" font-size="9">then gateway (red)</text>
+
+  <line x1="230" y1="520" x2="260" y2="520" stroke="#fdba74" stroke-width="2"/>
+  <text x="270" y="524" fill="#64748b" font-size="9">then compute (orange, blue)</text>
+
+  <line x1="420" y1="520" x2="450" y2="520" stroke="#fcd34d" stroke-width="2"/>
+  <text x="460" y="524" fill="#64748b" font-size="9">finish at storage (amber)</text>
+</svg>
