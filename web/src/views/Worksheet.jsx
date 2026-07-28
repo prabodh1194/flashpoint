@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { Play, Plus, ChevronDown, Clock, Rows, Database, Cpu, Hash, X, Loader, Unplug } from 'lucide-react'
-import { createSession, deleteSession, runQuery } from '../api'
+import { createWarehouse, deleteWarehouse, runQuery } from '../api'
 import { QueryDag } from '../components/QueryDag'
 
 const PLACEHOLDER = `-- Flashpoint SQL Worksheet
@@ -30,13 +30,13 @@ export function Worksheet() {
   // Clean up session when unmounting
   useEffect(() => {
     return () => {
-      if (session) deleteSession(session.session_id).catch(() => {})
+      if (session) deleteWarehouse(session.session_id).catch(() => {})
     }
   }, [session])
 
   const disconnect = async () => {
     if (!session) return
-    await deleteSession(session.session_id).catch(() => {})
+    await deleteWarehouse(session.session_id).catch(() => {})
     setSession(null)
     setResults(null)
     setProfile(null)
@@ -49,20 +49,20 @@ export function Worksheet() {
     setError(null)
 
     try {
-      let activeSession = session
+      let activeWarehouse = session
 
       // Auto-connect on first run
-      if (!activeSession) {
+      if (!activeWarehouse) {
         setConnecting(true)
         try {
-          activeSession = await createSession()
-          setSession(activeSession)
+          activeWarehouse = await createWarehouse()
+          setSession(activeWarehouse)
         } finally {
           setConnecting(false)
         }
       }
 
-      const result = await runQuery(activeSession.session_id, sql.trim())
+      const result = await runQuery(activeWarehouse.session_id, sql.trim())
       setStats({
         duration: result.duration_ms,
         rows: result.row_count,
@@ -70,7 +70,7 @@ export function Worksheet() {
         bytes: '—',
         tasks: '—',
         executors: '—',
-        endpoint: activeSession.endpoint,
+        endpoint: activeWarehouse.endpoint,
       })
       setResults({ columns: result.columns, rows: result.rows })
       setProfile(result.profile || null)

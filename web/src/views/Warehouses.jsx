@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Zap, Play, Square, ChevronDown, Loader, RefreshCw } from 'lucide-react'
-import { listSessions, createSession, deleteSession, suspendSession, resumeSession, resizeSession, fetchHistory } from '../api'
+import { listWarehouses, createWarehouse, deleteWarehouse, suspendWarehouse, resumeWarehouse, resizeWarehouse, fetchHistory } from '../api'
 
 // Warehouse name registry — persisted to localStorage so names survive page reloads.
 // Maps session_id -> { name, size, createdAt }
@@ -28,7 +28,7 @@ export function Warehouses() {
     setLoading(true)
     try {
       const [sessionsResp, histResp] = await Promise.all([
-        listSessions().catch(() => ({ sessions: [] })),
+        listWarehouses().catch(() => ({ sessions: [] })),
         fetchHistory().catch(() => ({ history: [] })),
       ])
       const registry = loadRegistry()
@@ -53,7 +53,7 @@ export function Warehouses() {
     setCreating(true)
     setShowSizePicker(false)
     try {
-      const session = await createSession(size)
+      const session = await createWarehouse(size)
       const registry = loadRegistry()
       const name = `wh-${_whCounter++}`
       registry[session.session_id] = { name, size, createdAt: Date.now() }
@@ -69,7 +69,7 @@ export function Warehouses() {
   const suspend = async (sid) => {
     setWarehouses(ws => ws.map(w => w.session_id === sid ? { ...w, status: 'stopping' } : w))
     try {
-      await suspendSession(sid)
+      await suspendWarehouse(sid)
       await refresh()
     } catch {
       await refresh()
@@ -79,7 +79,7 @@ export function Warehouses() {
   const resume = async (sid) => {
     setWarehouses(ws => ws.map(w => w.session_id === sid ? { ...w, status: 'resuming' } : w))
     try {
-      await resumeSession(sid)
+      await resumeWarehouse(sid)
       await refresh()
     } catch (err) {
       alert(`Failed to resume: ${err.message}`)
@@ -90,7 +90,7 @@ export function Warehouses() {
   const destroy = async (sid) => {
     setWarehouses(ws => ws.map(w => w.session_id === sid ? { ...w, status: 'stopping' } : w))
     try {
-      await deleteSession(sid)
+      await deleteWarehouse(sid)
       const registry = loadRegistry()
       delete registry[sid]
       saveRegistry(registry)
@@ -102,7 +102,7 @@ export function Warehouses() {
 
   const resize = async (sid, size) => {
     try {
-      await resizeSession(sid, size)
+      await resizeWarehouse(sid, size)
       await refresh()
     } catch (err) {
       alert(`Failed to resize: ${err.message}`)

@@ -127,7 +127,7 @@ resource "aws_instance" "gateway" {
     security_group     = aws_security_group.spark_task.id
     region             = var.region
     branch             = var.gateway_branch
-    sessions_table     = aws_dynamodb_table.sessions.name
+    warehouses_table     = aws_dynamodb_table.sessions.name
     meters_table       = aws_dynamodb_table.meters.name
   }))
 

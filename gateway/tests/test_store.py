@@ -84,7 +84,7 @@ class TestRoundTrip:
 
     def test_complex_nested(self):
         original = {
-            "session_id": "abc-123",
+            "warehouse_id": "abc-123",
             "task_ip": "10.0.0.5",
             "created_at": 1717200000.0,
             "executor_arns": ["arn:1", "arn:2"],
@@ -100,17 +100,17 @@ class TestRoundTrip:
 
 from unittest.mock import MagicMock, patch
 import store
-from store import put_session, update_session_status, delete_session, get_session, list_sessions
+from store import put_warehouse, update_warehouse_status, delete_warehouse, get_warehouse, list_warehouses
 
 
 class TestPutSession:
     def test_writes_item_to_table(self, monkeypatch):
         mock_table = MagicMock()
         monkeypatch.setattr(store, "_table", lambda: mock_table)
-        put_session("s1", {"task_arn": "arn:test", "status": "running"})
+        put_warehouse("s1", {"task_arn": "arn:test", "status": "running"})
         mock_table.put_item.assert_called_once()
         item = mock_table.put_item.call_args.kwargs["Item"]
-        assert item["session_id"] == "s1"
+        assert item["warehouse_id"] == "s1"
         assert item["task_arn"] == "arn:test"
         assert item["status"] == "running"
         assert "updated_at" in item
@@ -120,10 +120,10 @@ class TestUpdateSessionStatus:
     def test_updates_status_with_extras(self, monkeypatch):
         mock_table = MagicMock()
         monkeypatch.setattr(store, "_table", lambda: mock_table)
-        update_session_status("s1", "suspended", task_arn=None, executor_arns=[], task_ip=None)
+        update_warehouse_status("s1", "suspended", task_arn=None, executor_arns=[], task_ip=None)
         mock_table.update_item.assert_called_once()
         kwargs = mock_table.update_item.call_args.kwargs
-        assert kwargs["Key"] == {"session_id": "s1"}
+        assert kwargs["Key"] == {"warehouse_id": "s1"}
         assert ":status" in kwargs["ExpressionAttributeValues"]
 
 
@@ -131,8 +131,8 @@ class TestDeleteSession:
     def test_deletes_item(self, monkeypatch):
         mock_table = MagicMock()
         monkeypatch.setattr(store, "_table", lambda: mock_table)
-        delete_session("s1")
-        mock_table.delete_item.assert_called_once_with(Key={"session_id": "s1"})
+        delete_warehouse("s1")
+        mock_table.delete_item.assert_called_once_with(Key={"warehouse_id": "s1"})
 
 
 class TestGetSession:
@@ -141,16 +141,16 @@ class TestGetSession:
         mock_table = MagicMock()
         mock_table.get_item.return_value = {
             "Item": {
-                "session_id": "s1",
+                "warehouse_id": "s1",
                 "task_arn": "arn:test",
                 "status": "running",
                 "created_at": Decimal("1717200000"),
             }
         }
         monkeypatch.setattr(store, "_table", lambda: mock_table)
-        result = get_session("s1")
+        result = get_warehouse("s1")
         assert result is not None
-        assert result["session_id"] == "s1"
+        assert result["warehouse_id"] == "s1"
         assert result["task_arn"] == "arn:test"
         assert result["created_at"] == 1717200000
 
@@ -158,7 +158,7 @@ class TestGetSession:
         mock_table = MagicMock()
         mock_table.get_item.return_value = {}
         monkeypatch.setattr(store, "_table", lambda: mock_table)
-        result = get_session("s1")
+        result = get_warehouse("s1")
         assert result is None
 
 
@@ -167,18 +167,18 @@ class TestListSessions:
         mock_table = MagicMock()
         mock_table.scan.return_value = {
             "Items": [
-                {"session_id": "s1", "status": "running"},
-                {"session_id": "s2", "status": "suspended"},
+                {"warehouse_id": "s1", "status": "running"},
+                {"warehouse_id": "s2", "status": "suspended"},
             ]
         }
         monkeypatch.setattr(store, "_table", lambda: mock_table)
-        result = list_sessions()
+        result = list_warehouses()
         assert len(result) == 2
-        assert result[0]["session_id"] == "s1"
+        assert result[0]["warehouse_id"] == "s1"
 
     def test_returns_empty_list(self, monkeypatch):
         mock_table = MagicMock()
         mock_table.scan.return_value = {}
         monkeypatch.setattr(store, "_table", lambda: mock_table)
-        result = list_sessions()
+        result = list_warehouses()
         assert result == []

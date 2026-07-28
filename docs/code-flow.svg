@@ -33,7 +33,7 @@
   <!-- Box 2: Gateway -->
   <rect x="280" y="108" width="200" height="52" rx="8" fill="#fef2f2" stroke="#fca5a5" stroke-width="1.5" filter="url(#shadow)"/>
   <text x="380" y="130" text-anchor="middle" fill="#991b1b" font-size="13" font-weight="700">2. Gateway (EC2)</text>
-  <text x="380" y="146" text-anchor="middle" fill="#dc2626" font-size="9">Session routing · query dispatch</text>
+  <text x="380" y="146" text-anchor="middle" fill="#dc2626" font-size="9">Warehouse routing · query dispatch</text>
 
   <!-- Arrow 2→3 -->
   <line x1="380" y1="160" x2="380" y2="192" stroke="#fca5a5" stroke-width="1.5" marker-end="url(#arrRed)"/>
@@ -61,7 +61,7 @@
   <!-- Box 6: DynamoDB (left side) -->
   <rect x="30" y="276" width="160" height="48" rx="8" fill="#fef2f2" stroke="#fca5a5" stroke-width="1.5" filter="url(#shadow)"/>
   <text x="110" y="298" text-anchor="middle" fill="#991b1b" font-size="13" font-weight="700">6. DynamoDB</text>
-  <text x="110" y="314" text-anchor="middle" fill="#dc2626" font-size="9">session state + meters</text>
+  <text x="110" y="314" text-anchor="middle" fill="#dc2626" font-size="9">warehouse state + meters</text>
 
   <!-- Dotted arrow 6→4 (DynamoDB → Driver) -->
   <line x1="190" y1="300" x2="256" y2="300" stroke="#fca5a5" stroke-width="1" stroke-dasharray="5,3" marker-end="url(#arrRed)"/>

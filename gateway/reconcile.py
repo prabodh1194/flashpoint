@@ -1,4 +1,4 @@
-"""Startup reconciliation and idle session reaping."""
+"""Startup reconciliation and idle warehouse reaping."""
 import asyncio
 import time
 import logging
@@ -8,13 +8,13 @@ import store
 log = logging.getLogger(__name__)
 
 
-def reconcile(sessions: dict, cluster: str, session_ttl_s: int) -> None:
-    """Rebuild in-memory session cache from DynamoDB + live ECS state."""
+def reconcile(warehouses: dict, cluster: str, warehouse_ttl_s: int) -> None:
+    """Rebuild in-memory warehouse cache from DynamoDB + live ECS state."""
     try:
-        db_sessions = store.list_sessions()
+        db_warehouses = store.list_warehouses()
         db_arns = {
             arn
-            for s in db_sessions
+            for s in db_warehouses
             for arn in ([s.get("task_arn")] if s.get("task_arn") else [])
             + (s.get("executor_arns") or [])
         }
@@ -27,8 +27,8 @@ def reconcile(sessions: dict, cluster: str, session_ttl_s: int) -> None:
         except Exception as exc:
             log.error("Could not list ECS tasks during reconcile: %s", exc)
 
-        for s in db_sessions:
-            sid = s["session_id"]
+        for s in db_warehouses:
+            wid = s["warehouse_id"]
             task_arn = s.get("task_arn", "")
             status = s.get("status", "running")
 
@@ -36,10 +36,10 @@ def reconcile(sessions: dict, cluster: str, session_ttl_s: int) -> None:
                 continue
 
             if task_arn and task_arn in live_arns:
-                sessions[sid] = s
-                log.info("Reconciled session %s (driver live)", sid)
+                warehouses[wid] = s
+                log.info("Reconciled warehouse %s (driver live)", wid)
             else:
-                log.warning("Session %s driver gone — suspending", sid)
+                log.warning("Warehouse %s driver gone — suspending", wid)
                 executor_arns = s.get("executor_arns") or []
                 for arn in executor_arns:
                     if arn in live_arns:
@@ -47,8 +47,8 @@ def reconcile(sessions: dict, cluster: str, session_ttl_s: int) -> None:
                             ecs_tasks.ecs.stop_task(cluster=cluster, task=arn, reason="orphan-executor")
                         except Exception as exc:
                             log.error("Failed to stop orphan executor %s: %s", arn, exc)
-                store.update_session_status(
-                    sid, "suspended", task_arn=None, executor_arns=[], task_ip=None
+                store.update_warehouse_status(
+                    wid, "suspended", task_arn=None, executor_arns=[], task_ip=None
                 )
 
         for arn in live_arns:
@@ -63,28 +63,28 @@ def reconcile(sessions: dict, cluster: str, session_ttl_s: int) -> None:
         log.error("Reconcile failed: %s", exc)
 
 
-async def reap_idle_sessions(sessions: dict, spark_client, session_ttl_s: int, cluster: str):
-    """Background task: stop sessions that exceed the TTL."""
+async def reap_idle_warehouses(warehouses: dict, spark_client, warehouse_ttl_s: int, cluster: str):
+    """Background task: stop warehouses that exceed the TTL."""
     while True:
         await asyncio.sleep(60)
         now = time.time()
         expired = [
-            sid for sid, s in list(sessions.items())
-            if now - s.get("created_at", now) > session_ttl_s
+            wid for wid, s in list(warehouses.items())
+            if now - s.get("created_at", now) > warehouse_ttl_s
         ]
-        for sid in expired:
-            s = sessions.pop(sid, None)
+        for wid in expired:
+            s = warehouses.pop(wid, None)
             if s:
-                log.warning("Reaping idle session %s (TTL exceeded)", sid)
-                spark_client.drop(sid)
+                log.warning("Reaping idle warehouse %s (TTL exceeded)", wid)
+                spark_client.drop(wid)
                 for arn in ([s["task_arn"]] if s.get("task_arn") else []) + (s.get("executor_arns") or []):
                     try:
                         ecs_tasks.ecs.stop_task(cluster=cluster, task=arn)
                     except Exception as exc:
                         log.error("Failed to stop task %s: %s", arn, exc)
                 try:
-                    store.update_session_status(
-                        sid, "suspended", task_arn=None, executor_arns=[], task_ip=None
+                    store.update_warehouse_status(
+                        wid, "suspended", task_arn=None, executor_arns=[], task_ip=None
                     )
                 except Exception as exc:
-                    log.error("Failed to update reaped session %s in DynamoDB: %s", sid, exc)
+                    log.error("Failed to update reaped warehouse %s in DynamoDB: %s", wid, exc)

@@ -22,7 +22,7 @@ Only the execution layer changes.
 - Replace LMI IaC (capacity_provider.tf, driver.tf) with ECS cluster + task definition
 - Strip Lambda runtime loop from entrypoint.sh — restore clean `exec spark-submit`
 - ECS task: 4 vCPU / 16 GB, arm64, On-Demand Fargate
-- Gateway launches driver task per session via `RunTask`, returns private task IP
+- Gateway launches driver task per warehouse via `RunTask`, returns private task IP
 - Security group: inbound 15002 from VPC CIDR
 
 **AC:** `RunTask` → wait RUNNING → `spark.sql("select 1")` via `sc://TASK_IP:15002` succeeds.
@@ -33,13 +33,13 @@ Record cold start time (task scheduling → gRPC ready).
 ### #24 EC2 gateway skeleton (NEW — Ember)
 
 Minimal always-on EC2 control plane that launches Fargate tasks and returns their IPs.
-Truly minimal: single process, in-memory session→IP map, no persistence. Just enough to
+Truly minimal: single process, in-memory warehouse→IP map, no persistence. Just enough to
 drive #3/#4 end-to-end. Full hardening (DynamoDB, HA, reconnect, reaping) → Kindle #8/#10.
 
 **Scope:**
 - t4g.small (arm64) always-on
 - `RunTask(driver)`, `RunTask(executor×N)`, `describe-tasks` to resolve private IPs
-- In-memory session→task-IP map
+- In-memory warehouse→task-IP map
 - Basic driver-task health check
 
 **AC:** one API call launches a driver task and returns `sc://TASK_IP:15002`; a client query

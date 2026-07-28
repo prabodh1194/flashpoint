@@ -5,11 +5,11 @@ Read top to bottom: **1 → 2 → 3 → (4 → 5, with 6 as side note) → 7**
 ```mermaid
 flowchart TD
     CLIENTS["1. SQL Clients & BI Tools<br/>Notebooks · dashboards · ad-hoc"]
-    GW["2. Gateway (EC2 :8080)<br/>FastAPI · session routing · query dispatch"]
+    GW["2. Gateway (EC2 :8080)<br/>FastAPI · warehouse routing · query dispatch"]
     GRPC["3. Spark Connect gRPC<br/>client protocol"]
     DRIVER["4. Spark Driver (Fargate)<br/>SparkConnectServer :15002 · 4vCPU/16GB"]
     EXEC["5. Executors ×N (Fargate Spot)<br/>Spark Workers · auto-scale · 2vCPU/8GB"]
-    DDB["6. DynamoDB<br/>session state + meters"]
+    DDB["6. DynamoDB<br/>warehouse state + meters"]
     STORAGE["7. Apache Iceberg on S3<br/>Glue Catalog · ACID · time travel"]
 
     CLIENTS -->|REST| GW
@@ -17,7 +17,7 @@ flowchart TD
     GRPC --> DRIVER
     DRIVER -->|schedule tasks| EXEC
     GW -.->|CRUD| DDB
-    DDB -.->|session state| DRIVER
+    DDB -.->|warehouse state| DRIVER
     DRIVER -->|read/write| STORAGE
     EXEC -->|read/write| STORAGE
 ```
@@ -32,7 +32,7 @@ Start here and follow the request path:
 | 2 | `web/src/api.js` | REST client — see what the UI asks the gateway to do | 67 |
 | 3 | `web/src/App.jsx` | Shell: routing, views, how the UI works | 71 |
 | 4 | `web/src/views/Worksheet.jsx` | Core feature: SQL editor → run query → show results | 424 |
-| 5 | `gateway/main.py` | Heart of the system: all API routes, session lifecycle, query execution | 717 |
+| 5 | `gateway/main.py` | Heart of the system: all API routes, warehouse lifecycle, query execution | 717 |
 | 6 | `gateway/store.py` | DynamoDB helpers (called from main.py) | 88 |
 | 7 | `infra/ecs.tf` | How driver + executor tasks are defined on Fargate | 67 |
 | 8 | `driver/entrypoint.sh` | What happens when a driver container boots | 47 |
@@ -51,7 +51,7 @@ Then explore the rest at your own pace:
 | `web/src/components/Topbar.jsx` | Top bar: view title, theme toggle |
 | `web/src/views/DataExplorer.jsx` | Mock catalog tree (not wired yet) |
 | `infra/vpc.tf` | VPC, subnets, IGW |
-| `infra/dynamodb.tf` | Sessions + meters tables |
+| `infra/dynamodb.tf` | Warehouses + meters tables |
 | `infra/cloudwatch.tf` | Log groups, 1-day retention |
 | `infra/ecr.tf` | Container image registry |
 | `infra/vpc_endpoints.tf` | Optional VPC endpoints (off by default) |
@@ -65,7 +65,7 @@ Then explore the rest at your own pace:
 flashpoint/
 ├── gateway/           EC2-hosted control plane (FastAPI)
 │   ├── main.py        ← all API routes + Spark Connect client + DAG fetcher
-│   └── store.py       ← DynamoDB session persistence helpers
+│   └── store.py       ← DynamoDB warehouse persistence helpers
 │
 ├── driver/            Spark container image
 │   ├── Dockerfile     ← Spark 4.0.2, JDK 17, ARM64
@@ -82,7 +82,7 @@ flashpoint/
 ├── infra/             OpenTofu IaC (VPC, ECS, ECR, DynamoDB, gateway EC2)
 │   ├── ecs.tf          ← driver + executor task defs
 │   ├── gateway.tf      ← EC2 instance + IAM + user-data
-│   ├── dynamodb.tf     ← sessions + meters tables
+│   ├── dynamodb.tf     ← warehouses + meters tables
 │   ├── vpc.tf          ← public subnets, IGW
 │   └── gateway-init.sh ← boot script: install deps → clone → systemd service
 │
@@ -95,12 +95,12 @@ flashpoint/
 
 ```
 1. CREATE WAREHOUSE
-   UI POST /sessions  →  gateway ecs.run_task(driver)  →  wait RUNNING
+   UI POST /warehouses  →  gateway ecs.run_task(driver)  →  wait RUNNING
                        →  gateway ecs.run_task(executor×N, SPARK_MASTER_URL)
-                       →  store in DynamoDB  →  return session_id + endpoint
+                       →  store in DynamoDB  →  return warehouse_id + endpoint
 
 2. RUN QUERY
-   UI POST /sessions/{id}/query {sql}
+   UI POST /warehouses/{id}/query {sql}
      →  gateway: SparkSession.builder.remote("sc://driver-ip:15002").getOrCreate()
      →  spark.sql(sql).collect()  [gRPC to driver SparkConnectServer]
      →  driver schedules work on registered workers

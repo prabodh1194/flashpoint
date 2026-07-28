@@ -22,7 +22,7 @@
   <text x="247" y="118" text-anchor="middle" fill="#991b1b" font-size="9" font-weight="700">2</text>
   <rect x="265" y="92" width="250" height="44" rx="8" fill="#fef2f2" stroke="#fca5a5" stroke-width="1.5" filter="url(#shadow)"/>
   <text x="390" y="112" text-anchor="middle" fill="#991b1b" font-size="13" font-weight="700">Gateway (EC2)</text>
-  <text x="390" y="127" text-anchor="middle" fill="#dc2626" font-size="10">Session routing · query dispatch · HA</text>
+  <text x="390" y="127" text-anchor="middle" fill="#dc2626" font-size="10">Warehouse routing · query dispatch · HA</text>
 
   <line x1="390" y1="136" x2="390" y2="166" stroke="#fca5a5" stroke-width="1.5"/>
   <polygon points="386,164 394,164 390,170" fill="#fca5a5"/>
@@ -69,7 +69,7 @@
   <text x="32" y="274" text-anchor="middle" fill="#991b1b" font-size="9" font-weight="700">6</text>
   <rect x="48" y="248" width="48" height="44" rx="6" fill="#fef2f2" stroke="#fca5a5" stroke-width="1"/>
   <text x="72" y="266" text-anchor="middle" fill="#991b1b" font-size="7" font-weight="600">DynamoDB</text>
-  <text x="72" y="280" text-anchor="middle" fill="#dc2626" font-size="6">session</text>
+  <text x="72" y="280" text-anchor="middle" fill="#dc2626" font-size="6">warehouse</text>
   <text x="72" y="289" text-anchor="middle" fill="#dc2626" font-size="6">state</text>
   <line x1="96" y1="270" x2="124" y2="270" stroke="#fca5a5" stroke-width="0.8" stroke-dasharray="2,2"/>
 

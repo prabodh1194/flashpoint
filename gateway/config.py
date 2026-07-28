@@ -9,8 +9,8 @@ SUBNETS          = os.environ["FLASHPOINT_SUBNETS"].split(",")
 SECURITY_GROUP   = os.environ["FLASHPOINT_SECURITY_GROUP"]
 REGION           = os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
 GRPC_PORT        = int(os.environ.get("FLASHPOINT_GRPC_PORT", "15002"))
-SESSION_TTL_S    = int(os.environ.get("FLASHPOINT_SESSION_TTL_S", str(2 * 3600)))
-MAX_SESSIONS     = int(os.environ.get("FLASHPOINT_MAX_SESSIONS", "3"))
+WAREHOUSE_TTL_S    = int(os.environ.get("FLASHPOINT_WAREHOUSE_TTL_S", str(2 * 3600)))
+MAX_WAREHOUSES     = int(os.environ.get("FLASHPOINT_MAX_WAREHOUSES", "3"))
 SPARK_UI_PORT    = int(os.environ.get("FLASHPOINT_SPARK_UI_PORT", "4040"))
 
 SIZES: dict[str, int] = {"XS": 1, "S": 2, "M": 4, "L": 8, "XL": 16}

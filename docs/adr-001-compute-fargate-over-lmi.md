@@ -42,7 +42,7 @@ This is a hack. The runtime loop is not the product; Spark Connect is.
 ### 2. 100 function versions per capacity provider (hard limit, cannot be raised)
 
 Each `publish-version` call burns one slot. For a multi-tenant platform:
-- Driver per session = 1 version per session
+- Driver per warehouse = 1 version per warehouse
 - Executor pool = additional versions
 - Code deploys = more versions
 

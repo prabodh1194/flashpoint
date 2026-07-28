@@ -59,37 +59,37 @@ class TestSqlExecutionIds:
         monkeypatch.setattr(dag, "_ui_get", lambda ip, path: [
             {"id": 1}, {"id": 2}, {"id": 3},
         ])
-        session = {"task_ip": "10.0.0.5"}
-        result = main._sql_execution_ids(session)
+        s = {"task_ip": "10.0.0.5"}
+        result = main._sql_execution_ids(s)
         assert result == {1, 2, 3}
 
     def test_caches_app_id(self, monkeypatch):
         monkeypatch.setattr(dag, "_ui_get", lambda ip, path: [{"id": 1}])
-        session = {"task_ip": "10.0.0.5"}
-        main._sql_execution_ids(session)
-        assert session["app_id"] is not None
+        s = {"task_ip": "10.0.0.5"}
+        main._sql_execution_ids(s)
+        assert s["app_id"] is not None
 
     def test_uses_cached_app_id(self, monkeypatch):
-        session = {"task_ip": "10.0.0.5", "app_id": "cached-app"}
+        s = {"task_ip": "10.0.0.5", "app_id": "cached-app"}
         monkeypatch.setattr(dag, "_ui_get", lambda ip, path: [{"id": 1}])
-        main._sql_execution_ids(session)
+        main._sql_execution_ids(s)
 
     def test_returns_empty_on_error(self, monkeypatch):
         monkeypatch.setattr(dag, "_ui_get", lambda ip, path: (_ for _ in ()).throw(Exception("fail")))
-        session = {"task_ip": "10.0.0.5"}
-        result = main._sql_execution_ids(session)
+        s = {"task_ip": "10.0.0.5"}
+        result = main._sql_execution_ids(s)
         assert result == set()
 
 
 class TestFetchQueryDag:
     def test_returns_none_when_no_app_id(self, monkeypatch):
-        session = {"task_ip": "10.0.0.5"}
+        s = {"task_ip": "10.0.0.5"}
         monkeypatch.setattr(dag, "resolve_app_id", lambda ip: None)
-        result = main._fetch_query_dag(session, set())
+        result = main._fetch_query_dag(s, set())
         assert result is None
 
     def test_returns_dag_when_new_execution_found(self, monkeypatch):
-        session = {"task_ip": "10.0.0.5", "app_id": "app-1"}
+        s = {"task_ip": "10.0.0.5", "app_id": "app-1"}
         calls = []
 
         def mock_ui(ip, path):
@@ -99,14 +99,14 @@ class TestFetchQueryDag:
             return [{"id": 99, "status": "COMPLETED"}]
 
         monkeypatch.setattr(dag, "_ui_get", mock_ui)
-        result = main._fetch_query_dag(session, {98})
+        result = main._fetch_query_dag(s, {98})
         assert result is not None
         assert len(result["nodes"]) == 1
 
     def test_returns_none_on_exception(self, monkeypatch):
-        session = {"task_ip": "10.0.0.5", "app_id": "app-1"}
+        s = {"task_ip": "10.0.0.5", "app_id": "app-1"}
         monkeypatch.setattr(dag, "_ui_get", lambda ip, path: (_ for _ in ()).throw(Exception("boom")))
-        result = main._fetch_query_dag(session, set())
+        result = main._fetch_query_dag(s, set())
         assert result is None
 
 
@@ -151,47 +151,47 @@ class TestGetSpark:
 
 class TestReconcile:
     def test_reconcile_skips_suspended_sessions(self, monkeypatch, mock_ecs):
-        monkeypatch.setattr(main.store, "list_sessions", lambda: [
-            {"session_id": "s1", "task_arn": "arn:old", "status": "suspended"},
+        monkeypatch.setattr(main.store, "list_warehouses", lambda: [
+            {"warehouse_id": "s1", "task_arn": "arn:old", "status": "suspended"},
         ])
-        reconcile.reconcile(main.sessions, main.CLUSTER, main.SESSION_TTL_S)
+        reconcile.reconcile(main.warehouses, main.CLUSTER, main.WAREHOUSE_TTL_S)
         # suspended sessions are skipped — nothing to clean up
 
     def test_reconcile_rebuilds_live_sessions(self, monkeypatch, mock_ecs):
-        monkeypatch.setattr(main.store, "list_sessions", lambda: [
-            {"session_id": "s1", "task_arn": "arn:live", "status": "running",
+        monkeypatch.setattr(main.store, "list_warehouses", lambda: [
+            {"warehouse_id": "s1", "task_arn": "arn:live", "status": "running",
              "executor_arns": [], "task_ip": "10.0.0.5", "endpoint": "sc://10.0.0.5:15002"},
         ])
         mock_ecs.get_paginator.return_value.paginate.return_value = [
             {"taskArns": ["arn:live"]},
         ]
-        reconcile.reconcile(main.sessions, main.CLUSTER, main.SESSION_TTL_S)
-        assert "s1" in main.sessions
-        assert main.sessions["s1"]["task_arn"] == "arn:live"
+        reconcile.reconcile(main.warehouses, main.CLUSTER, main.WAREHOUSE_TTL_S)
+        assert "s1" in main.warehouses
+        assert main.warehouses["s1"]["task_arn"] == "arn:live"
 
     def test_reconcile_suspends_dead_driver(self, monkeypatch, mock_ecs):
-        monkeypatch.setattr(main.store, "list_sessions", lambda: [
-            {"session_id": "s1", "task_arn": "arn:dead", "status": "running",
+        monkeypatch.setattr(main.store, "list_warehouses", lambda: [
+            {"warehouse_id": "s1", "task_arn": "arn:dead", "status": "running",
              "executor_arns": [], "task_ip": "10.0.0.5"},
         ])
-        monkeypatch.setattr(main.store, "update_session_status", lambda *a, **kw: None)
+        monkeypatch.setattr(main.store, "update_warehouse_status", lambda *a, **kw: None)
         mock_ecs.get_paginator.return_value.paginate.return_value = [
             {"taskArns": []},  # dead task not in live list
         ]
-        reconcile.reconcile(main.sessions, main.CLUSTER, main.SESSION_TTL_S)
+        reconcile.reconcile(main.warehouses, main.CLUSTER, main.WAREHOUSE_TTL_S)
 
     def test_reconcile_stops_orphan_tasks(self, monkeypatch, mock_ecs):
-        monkeypatch.setattr(main.store, "list_sessions", lambda: [])
+        monkeypatch.setattr(main.store, "list_warehouses", lambda: [])
         mock_ecs.get_paginator.return_value.paginate.return_value = [
             {"taskArns": ["arn:orphan"]},
         ]
-        reconcile.reconcile(main.sessions, main.CLUSTER, main.SESSION_TTL_S)
+        reconcile.reconcile(main.warehouses, main.CLUSTER, main.WAREHOUSE_TTL_S)
         mock_ecs.stop_task.assert_called_with(
             cluster=main.CLUSTER, task="arn:orphan", reason="orphan-cleanup"
         )
 
     def test_reconcile_handles_ecs_error(self, monkeypatch, mock_ecs):
         mock_ecs.get_paginator.side_effect = Exception("ECS down")
-        monkeypatch.setattr(main.store, "list_sessions", lambda: [])
-        reconcile.reconcile(main.sessions, main.CLUSTER, main.SESSION_TTL_S)
+        monkeypatch.setattr(main.store, "list_warehouses", lambda: [])
+        reconcile.reconcile(main.warehouses, main.CLUSTER, main.WAREHOUSE_TTL_S)
         # should not raise

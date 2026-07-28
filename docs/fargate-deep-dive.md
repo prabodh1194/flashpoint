@@ -9,7 +9,7 @@
 
 Spark Connect is a **persistent gRPC server** that holds a SparkSession in memory.
 It requires:
-- Long-lived HTTP/2 connections (hours per interactive session)
+- Long-lived HTTP/2 connections (hours per interactive warehouse)
 - Stable private IP for executor-to-driver communication
 - No invocation timeout
 - Direct port exposure to VPC clients
@@ -53,20 +53,20 @@ For Spark Connect port 15002:
 | Complexity | Low | Medium |
 | Health check | TCP | gRPC health proto |
 
-**Use NLB.** Spark clients hold connections for hours during interactive sessions.
+**Use NLB.** Spark clients hold connections for hours during interactive warehouses.
 ALB's idle connection timeout will kill them.
 
-### Session affinity (sticky sessions)
+### Warehouse affinity (sticky warehouses)
 
-Each Spark Connect server holds **one SparkSession** — the session is stateful.
-NLB does NOT do sticky sessions natively for TCP. Options:
+Each Spark Connect server holds **one SparkSession** — the warehouse is stateful.
+NLB does NOT do sticky warehouses natively for TCP. Options:
 1. **Client-side routing** — gateway assigns client to a specific task IP; client always
    connects to that IP directly (bypasses NLB after initial assignment).
-2. **One driver per session** — each session gets its own Fargate task. Gateway manages
-   the mapping. Cleanest for Flashpoint (matches Snowflake warehouse-per-session model).
+2. **One driver per warehouse** — each warehouse gets its own Fargate task. Gateway manages
+   the mapping. Cleanest for Flashpoint (matches Snowflake warehouse-per-warehouse model).
 
-**Flashpoint choice: one driver task per warehouse session.** Gateway launches a driver task
-on session start, returns the task's private IP to the client, client connects directly.
+**Flashpoint choice: one driver task per warehouse warehouse.** Gateway launches a driver task
+on warehouse start, returns the task's private IP to the client, client connects directly.
 NLB is optional at that point (or used as the management plane endpoint only).
 
 ### Task discovery
@@ -78,7 +78,7 @@ aws ecs describe-tasks --cluster flashpoint --tasks TASK_ARN \
 ```
 
 Or use **AWS Cloud Map** — ECS Service Connect registers tasks automatically with
-a DNS name. But for per-session tasks (RunTask, not Service), register manually:
+a DNS name. But for per-warehouse tasks (RunTask, not Service), register manually:
 ```bash
 aws servicediscovery register-instance ...
 ```
@@ -131,10 +131,10 @@ Clean, no hacks.
 
 ---
 
-## Driver Launch Pattern (per session)
+## Driver Launch Pattern (per warehouse)
 
 ```bash
-# Gateway launches a driver task per warehouse session
+# Gateway launches a driver task per warehouse warehouse
 TASK=$(aws ecs run-task \
   --cluster flashpoint \
   --task-definition flashpoint-driver \
@@ -196,7 +196,7 @@ Fargate Spot: up to **70% cheaper** than On-Demand. AWS can interrupt with 2-min
 - With Option C hybrid shuffle (Ember #5), shuffle data on S3 Files survives executor loss
 - SIGTERM → 2-minute window → executor can flush in-flight shuffle to S3
 
-**Not safe for the driver** — session loss if interrupted. Driver = On-Demand.
+**Not safe for the driver** — warehouse loss if interrupted. Driver = On-Demand.
 
 ```hcl
 resource "aws_ecs_task_definition" "executor" {
@@ -227,11 +227,11 @@ resource "aws_ecs_service" "driver_pool" {
     weight            = 1
   }
 
-  # No NLB needed for per-session direct-IP model
+  # No NLB needed for per-warehouse direct-IP model
 }
 ```
 
-Scale with Application Auto Scaling on custom metric (ActiveSessions):
+Scale with Application Auto Scaling on custom metric (ActiveWarehouses):
 ```bash
 aws application-autoscaling register-scalable-target \
   --service-namespace ecs \
@@ -304,14 +304,14 @@ aws_security_group             (task SG: inbound 15002 + shuffle ports)
 ```
 
 NLB only needed if using a shared driver pool with client-side routing.
-For per-session RunTask pattern, no NLB needed.
+For per-warehouse RunTask pattern, no NLB needed.
 
 ---
 
 ## Key Gotchas
 
-1. **Driver is stateful** — SparkSession lives in the task. Task death = session loss.
-   Gateway must track task ARN → session mapping and detect task failure.
+1. **Driver is stateful** — SparkSession lives in the task. Task death = warehouse loss.
+   Gateway must track task ARN → warehouse mapping and detect task failure.
 
 2. **awsvpc = 1 ENI per task** — each task consumes one ENI slot. Account default:
    ~5 ENIs per subnet per AZ. Request limit increase before scaling beyond ~50 tasks.

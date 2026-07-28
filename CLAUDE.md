@@ -14,7 +14,7 @@ The GitHub Project board is the single source of truth: https://github.com/users
 | Milestone | Layer |
 |-----------|-------|
 | Ember | Storage + compute foundation (driver, executors, shuffle, benchmarks) |
-| Kindle | Session layer (manager, router, metering, warehouse sizing) |
+| Kindle | Warehouse layer (manager, router, metering, warehouse sizing) |
 | Forge | Catalog + multi-tenancy (Iceberg, Glue, IAM isolation) |
 | Beacon | UI (worksheet, query-profile DAG, warehouse manager, data explorer) |
 
@@ -23,7 +23,7 @@ The GitHub Project board is the single source of truth: https://github.com/users
 ```
 infra/     OpenTofu IaC
 driver/    Spark Connect server container + shuffle plugin
-gateway/   session manager, query router
+gateway/   warehouse manager, query router
 metering/  compute-second + cost accounting
 catalog/   Glue/Iceberg integration
 web/        Vite + React + Tailwind UI

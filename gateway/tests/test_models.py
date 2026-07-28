@@ -1,10 +1,10 @@
 import pytest
 from pydantic import ValidationError
 from models import (
-    CreateSessionRequest,
+    CreateWarehouseRequest,
     QueryRequest,
     ResizeRequest,
-    SessionResponse,
+    WarehouseResponse,
     QueryResponse,
     QueryProfile,
     DagNode,
@@ -12,17 +12,17 @@ from models import (
 )
 
 
-class TestCreateSessionRequest:
+class TestCreateWarehouseRequest:
     def test_default_size_is_xs(self):
-        req = CreateSessionRequest()
+        req = CreateWarehouseRequest()
         assert req.size == "XS"
 
     def test_custom_size(self):
-        req = CreateSessionRequest(size="L")
+        req = CreateWarehouseRequest(size="L")
         assert req.size == "L"
 
     def test_invalid_size_does_not_reject(self):
-        req = CreateSessionRequest(size="XXL")
+        req = CreateWarehouseRequest(size="XXL")
         assert req.size == "XXL"
 
 
@@ -42,20 +42,20 @@ class TestResizeRequest:
         assert req.size == "M"
 
 
-class TestSessionResponse:
+class TestWarehouseResponse:
     def test_minimal_response(self):
-        resp = SessionResponse(session_id="abc", status="running")
-        assert resp.session_id == "abc"
+        resp = WarehouseResponse(warehouse_id="abc", status="running")
+        assert resp.warehouse_id == "abc"
         assert resp.status == "running"
         assert resp.task_arn is None
         assert resp.endpoint is None
 
     def test_full_response(self):
-        resp = SessionResponse(
-            session_id="xyz", task_arn="arn:xxx", endpoint="sc://10.0.0.1:15002",
+        resp = WarehouseResponse(
+            warehouse_id="xyz", task_arn="arn:xxx", endpoint="sc://10.0.0.1:15002",
             status="running", size="M", executor_count=4, name="my-warehouse",
         )
-        assert resp.session_id == "xyz"
+        assert resp.warehouse_id == "xyz"
         assert resp.task_arn == "arn:xxx"
         assert resp.endpoint == "sc://10.0.0.1:15002"
         assert resp.size == "M"

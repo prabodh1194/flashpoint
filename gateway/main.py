@@ -2,7 +2,7 @@
 
 Sessions are persisted to DynamoDB; the in-memory dict is a cache rebuilt
 from DynamoDB + live ECS state on startup. Executors run on Fargate Spot;
-the driver runs on-demand so Spot reclamation never kills the whole session.
+the driver runs on-demand so Spot reclamation never kills the whole warehouse.
 """
 import hashlib
 import time
@@ -21,17 +21,17 @@ import ecs_tasks
 import spark_client
 import reconcile as _reconcile_mod
 from config import (
-    CLUSTER, GRPC_PORT, SESSION_TTL_S, MAX_SESSIONS, SIZES,
+    CLUSTER, GRPC_PORT, WAREHOUSE_TTL_S, MAX_WAREHOUSES, SIZES,
 )
 from models import (
-    CreateSessionRequest, SessionResponse, QueryRequest, ResizeRequest,
+    CreateWarehouseRequest, WarehouseResponse, QueryRequest, ResizeRequest,
     QueryResponse,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 
-sessions: dict[str, dict] = {}
+warehouses: dict[str, dict] = {}
 query_history: deque[dict] = deque(maxlen=500)
 
 
@@ -52,10 +52,10 @@ def _sql_execution_ids(session: dict) -> set[int]:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    log.info("Flashpoint gateway starting (cluster=%s, ttl=%ds)", CLUSTER, SESSION_TTL_S)
-    _reconcile_mod.reconcile(sessions, CLUSTER, SESSION_TTL_S)
+    log.info("Flashpoint gateway starting (cluster=%s, ttl=%ds)", CLUSTER, WAREHOUSE_TTL_S)
+    _reconcile_mod.reconcile(warehouses, CLUSTER, WAREHOUSE_TTL_S)
     reaper = asyncio.create_task(
-        _reconcile_mod.reap_idle_sessions(sessions, spark_client, SESSION_TTL_S, CLUSTER)
+        _reconcile_mod.reap_idle_warehouses(warehouses, spark_client, WAREHOUSE_TTL_S, CLUSTER)
     )
     yield
     reaper.cancel()
@@ -74,15 +74,15 @@ app.add_middleware(
 
 # --- Routes ---
 
-@app.post("/sessions", response_model=SessionResponse, status_code=201)
-def create_session(req: CreateSessionRequest = CreateSessionRequest()):
+@app.post("/warehouses", response_model=WarehouseResponse, status_code=201)
+def create_warehouse(req: CreateWarehouseRequest = CreateWarehouseRequest()):
     if req.size not in SIZES:
         raise HTTPException(status_code=400, detail=f"unknown size {req.size!r}")
-    if len(sessions) >= MAX_SESSIONS:
-        raise HTTPException(status_code=429, detail=f"session cap reached ({MAX_SESSIONS} max)")
-    session_id = str(uuid.uuid4())
+    if len(warehouses) >= MAX_WAREHOUSES:
+        raise HTTPException(status_code=429, detail=f"warehouse cap reached ({MAX_WAREHOUSES} max)")
+    warehouse_id = str(uuid.uuid4())
     executor_count = SIZES[req.size]
-    log.info("Creating session %s (size=%s, executors=%d)", session_id, req.size, executor_count)
+    log.info("Creating warehouse %s (size=%s, executors=%d)", warehouse_id, req.size, executor_count)
 
     task_arn = ecs_tasks.run_driver_task()
     log.info("Driver task launched: %s", task_arn)
@@ -106,23 +106,23 @@ def create_session(req: CreateSessionRequest = CreateSessionRequest()):
         "executor_count": executor_count,
         "created_at": time.time(),
     }
-    store.put_session(session_id, record)
-    sessions[session_id] = record
-    return SessionResponse(
-        session_id=session_id, task_arn=task_arn, endpoint=endpoint,
+    store.put_warehouse(warehouse_id, record)
+    warehouses[warehouse_id] = record
+    return WarehouseResponse(
+        warehouse_id=warehouse_id, task_arn=task_arn, endpoint=endpoint,
         status="running", size=req.size, executor_count=executor_count,
     )
 
 
-@app.get("/sessions/{session_id}", response_model=SessionResponse)
-def get_session(session_id: str):
-    s = sessions.get(session_id)
+@app.get("/warehouses/{warehouse_id}", response_model=WarehouseResponse)
+def get_warehouse(warehouse_id: str):
+    s = warehouses.get(warehouse_id)
     if not s:
-        raise HTTPException(status_code=404, detail="session not found")
+        raise HTTPException(status_code=404, detail="warehouse not found")
     task_arn = s.get("task_arn", "")
     status = "running" if (task_arn and ecs_tasks.is_running(task_arn)) else s.get("status", "stopped")
-    return SessionResponse(
-        session_id=session_id,
+    return WarehouseResponse(
+        warehouse_id=warehouse_id,
         task_arn=task_arn or None,
         endpoint=s.get("endpoint"),
         status=status,
@@ -132,20 +132,20 @@ def get_session(session_id: str):
     )
 
 
-@app.get("/sessions")
-def list_sessions_endpoint():
-    return {"sessions": list(sessions.keys()), "count": len(sessions)}
+@app.get("/warehouses")
+def list_warehouses_endpoint():
+    return {"warehouses": list(warehouses.keys()), "count": len(warehouses)}
 
 
-@app.post("/sessions/{session_id}/query", response_model=QueryResponse)
-def run_query(session_id: str, req: QueryRequest):
-    s = sessions.get(session_id)
+@app.post("/warehouses/{warehouse_id}/query", response_model=QueryResponse)
+def run_query(warehouse_id: str, req: QueryRequest):
+    s = warehouses.get(warehouse_id)
     if not s:
-        raise HTTPException(status_code=404, detail="session not found")
+        raise HTTPException(status_code=404, detail="warehouse not found")
     if not ecs_tasks.is_running(s["task_arn"]):
-        raise HTTPException(status_code=409, detail="session not running")
+        raise HTTPException(status_code=409, detail="warehouse not running")
 
-    spark = spark_client.get(s["endpoint"], session_id)
+    spark = spark_client.get(s["endpoint"], warehouse_id)
     before_ids = _sql_execution_ids(s)
     t0 = time.time()
     try:
@@ -156,7 +156,7 @@ def run_query(session_id: str, req: QueryRequest):
         query_history.append({
             "query_id": qid, "sql": req.sql, "status": "failed",
             "duration_ms": int((time.time() - t0) * 1000), "row_count": 0,
-            "session_id": session_id, "ts": time.strftime("%H:%M:%S", time.localtime()),
+            "warehouse_id": warehouse_id, "ts": time.strftime("%H:%M:%S", time.localtime()),
         })
         raise HTTPException(status_code=400, detail=str(exc))
 
@@ -168,10 +168,10 @@ def run_query(session_id: str, req: QueryRequest):
     query_history.append({
         "query_id": qid, "sql": req.sql, "status": "success",
         "duration_ms": duration_ms, "row_count": len(rows),
-        "session_id": session_id, "ts": time.strftime("%H:%M:%S", time.localtime()),
+        "warehouse_id": warehouse_id, "ts": time.strftime("%H:%M:%S", time.localtime()),
         "profile": profile,
     })
-    log.info("Query %s on session %s: %dms, %d rows\n%s", qid, session_id, duration_ms, len(rows), req.sql)
+    log.info("Query %s on warehouse %s: %dms, %d rows\n%s", qid, warehouse_id, duration_ms, len(rows), req.sql)
     return QueryResponse(
         query_id=qid,
         columns=columns,
@@ -182,47 +182,47 @@ def run_query(session_id: str, req: QueryRequest):
     )
 
 
-@app.delete("/sessions/{session_id}", status_code=204)
-def delete_session(session_id: str):
-    s = sessions.pop(session_id, None)
+@app.delete("/warehouses/{warehouse_id}", status_code=204)
+def delete_warehouse(warehouse_id: str):
+    s = warehouses.pop(warehouse_id, None)
     if not s:
-        raise HTTPException(status_code=404, detail="session not found")
-    spark_client.drop(session_id)
+        raise HTTPException(status_code=404, detail="warehouse not found")
+    spark_client.drop(warehouse_id)
     ecs_tasks.stop_tasks(s)
-    store.delete_session(session_id)
-    log.info("Deleted session %s (driver + %d executors stopped)", session_id, len(s.get("executor_arns") or []))
+    store.delete_warehouse(warehouse_id)
+    log.info("Deleted warehouse %s (driver + %d executors stopped)", warehouse_id, len(s.get("executor_arns") or []))
 
 
-@app.post("/sessions/{session_id}/suspend", status_code=200)
-def suspend_session(session_id: str):
-    s = sessions.get(session_id)
+@app.post("/warehouses/{warehouse_id}/suspend", status_code=200)
+def suspend_warehouse(warehouse_id: str):
+    s = warehouses.get(warehouse_id)
     if not s:
-        raise HTTPException(status_code=404, detail="session not found")
+        raise HTTPException(status_code=404, detail="warehouse not found")
     if s.get("status") == "suspended":
         return {"status": "suspended"}
-    spark_client.drop(session_id)
+    spark_client.drop(warehouse_id)
     ecs_tasks.stop_tasks(s)
-    sessions[session_id] = {**s, "task_arn": None, "executor_arns": [], "task_ip": None, "status": "suspended"}
-    store.update_session_status(session_id, "suspended", task_arn=None, executor_arns=[], task_ip=None)
-    log.info("Suspended session %s", session_id)
+    warehouses[warehouse_id] = {**s, "task_arn": None, "executor_arns": [], "task_ip": None, "status": "suspended"}
+    store.update_warehouse_status(warehouse_id, "suspended", task_arn=None, executor_arns=[], task_ip=None)
+    log.info("Suspended warehouse %s", warehouse_id)
     return {"status": "suspended"}
 
 
-@app.post("/sessions/{session_id}/resume", status_code=200, response_model=SessionResponse)
-def resume_session(session_id: str):
-    s = sessions.get(session_id)
+@app.post("/warehouses/{warehouse_id}/resume", status_code=200, response_model=WarehouseResponse)
+def resume_warehouse(warehouse_id: str):
+    s = warehouses.get(warehouse_id)
     if not s:
-        raise HTTPException(status_code=404, detail="session not found")
+        raise HTTPException(status_code=404, detail="warehouse not found")
     if s.get("status") == "running":
-        return SessionResponse(
-            session_id=session_id, task_arn=s.get("task_arn"),
+        return WarehouseResponse(
+            warehouse_id=warehouse_id, task_arn=s.get("task_arn"),
             endpoint=s.get("endpoint"), status="running",
             size=s.get("size", "XS"), executor_count=s.get("executor_count", 1),
         )
 
     size = s.get("size", "XS")
     executor_count = SIZES.get(size, 1)
-    log.info("Resuming session %s (size=%s)", session_id, size)
+    log.info("Resuming warehouse %s (size=%s)", warehouse_id, size)
 
     task_arn = ecs_tasks.run_driver_task()
     ecs_tasks.wait_running(task_arn)
@@ -236,22 +236,22 @@ def resume_session(session_id: str):
         "task_ip": task_ip, "endpoint": endpoint,
         "executor_count": executor_count,
     }
-    sessions[session_id] = {**s, **update, "status": "running"}
-    store.update_session_status(session_id, "running", **update)
-    log.info("Resumed session %s → driver %s", session_id, task_arn)
-    return SessionResponse(
-        session_id=session_id, task_arn=task_arn, endpoint=endpoint,
+    warehouses[warehouse_id] = {**s, **update, "status": "running"}
+    store.update_warehouse_status(warehouse_id, "running", **update)
+    log.info("Resumed warehouse %s → driver %s", warehouse_id, task_arn)
+    return WarehouseResponse(
+        warehouse_id=warehouse_id, task_arn=task_arn, endpoint=endpoint,
         status="running", size=size, executor_count=executor_count,
     )
 
 
-@app.post("/sessions/{session_id}/resize", status_code=200, response_model=SessionResponse)
-def resize_session(session_id: str, req: ResizeRequest):
-    s = sessions.get(session_id)
+@app.post("/warehouses/{warehouse_id}/resize", status_code=200, response_model=WarehouseResponse)
+def resize_warehouse(warehouse_id: str, req: ResizeRequest):
+    s = warehouses.get(warehouse_id)
     if not s:
-        raise HTTPException(status_code=404, detail="session not found")
+        raise HTTPException(status_code=404, detail="warehouse not found")
     if s.get("status") != "running":
-        raise HTTPException(status_code=409, detail="session is not running")
+        raise HTTPException(status_code=409, detail="warehouse is not running")
     if req.size not in SIZES:
         raise HTTPException(status_code=400, detail=f"unknown size {req.size!r}")
 
@@ -264,7 +264,7 @@ def resize_session(session_id: str, req: ResizeRequest):
         delta = new_count - current_count
         new_arns = ecs_tasks.run_executor_tasks(master_url, delta)
         executor_arns.extend(new_arns)
-        log.info("Scaled session %s up: +%d executors (Spot)", session_id, delta)
+        log.info("Scaled warehouse %s up: +%d executors (Spot)", warehouse_id, delta)
     elif new_count < current_count:
         delta = current_count - new_count
         to_stop = executor_arns[-delta:]
@@ -274,12 +274,12 @@ def resize_session(session_id: str, req: ResizeRequest):
                 ecs_tasks.ecs.stop_task(cluster=CLUSTER, task=arn)
             except Exception as exc:
                 log.error("Failed to stop executor %s during resize: %s", arn, exc)
-        log.info("Scaled session %s down: -%d executors", session_id, delta)
+        log.info("Scaled warehouse %s down: -%d executors", warehouse_id, delta)
 
-    sessions[session_id] = {**s, "size": req.size, "executor_count": new_count, "executor_arns": executor_arns}
-    store.update_session_status(session_id, "running", size=req.size, executor_count=new_count, executor_arns=executor_arns)
-    return SessionResponse(
-        session_id=session_id, task_arn=s["task_arn"], endpoint=s["endpoint"],
+    warehouses[warehouse_id] = {**s, "size": req.size, "executor_count": new_count, "executor_arns": executor_arns}
+    store.update_warehouse_status(warehouse_id, "running", size=req.size, executor_count=new_count, executor_arns=executor_arns)
+    return WarehouseResponse(
+        warehouse_id=warehouse_id, task_arn=s["task_arn"], endpoint=s["endpoint"],
         status="running", size=req.size, executor_count=new_count,
     )
 
@@ -301,7 +301,7 @@ def get_history_entry(query_id: str):
 def health():
     return {
         "status": "ok",
-        "sessions": len(sessions),
+        "warehouses": len(warehouses),
         "sessions_table": store._TABLE_NAME,
     }
 

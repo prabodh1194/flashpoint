@@ -2,12 +2,12 @@
 from pydantic import BaseModel, Field
 
 
-class CreateSessionRequest(BaseModel):
+class CreateWarehouseRequest(BaseModel):
     size: str = "XS"
 
 
-class SessionResponse(BaseModel):
-    session_id: str
+class WarehouseResponse(BaseModel):
+    warehouse_id: str
     task_arn: str | None = None
     endpoint: str | None = None
     status: str

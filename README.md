@@ -8,7 +8,7 @@ Spark Connect (gRPC).
 ```
 Client (SQL / DataFrame)
    │ gRPC (Spark Connect)
-Gateway            session routing, auth, HA    (EC2, stateless)
+Gateway            warehouse routing, auth, HA    (EC2, stateless)
    │
 Spark driver       ECS Fargate                  (container)
    │
@@ -16,7 +16,7 @@ Executors          ECS Fargate                  (auto-scaled)
    │
 Shuffle            local ephemeral → async flush → S3 Files
    │
-State              DynamoDB (session + warehouse metadata)
+State              DynamoDB (warehouse + warehouse metadata)
    │
 Tables             Iceberg on S3 Files, catalog in AWS Glue
 ```
@@ -31,7 +31,7 @@ Actively developing. Tracking: https://github.com/users/prabodh1194/projects/3
 | Milestone | Scope |
 |-----------|-------|
 | Ember | Driver, multi-node executors, hybrid shuffle, Snowflake benchmark |
-| Kindle | Session manager, router, metering, warehouse sizing |
+| Kindle | Warehouse manager, router, metering, warehouse sizing |
 | Forge | Iceberg, Glue catalog, IAM tenant isolation |
 | Beacon | UI: worksheet, query-profile DAG, warehouse manager, data explorer |
 
@@ -39,7 +39,7 @@ Actively developing. Tracking: https://github.com/users/prabodh1194/projects/3
 
 - ECS Fargate: serverless container compute for driver and executors.
 - S3 Files: NFS v4.1/4.2 over S3 for shuffle persistence.
-- DynamoDB: session state and warehouse configuration.
+- DynamoDB: warehouse state and warehouse configuration.
 - Apache Spark Connect: gRPC client/server protocol.
 - OpenTofu: infrastructure-as-code for all AWS resources.
 

@@ -7,7 +7,7 @@ os.environ.setdefault("FLASHPOINT_EXECUTOR_TASK_DEF", "test-executor-td")
 os.environ.setdefault("FLASHPOINT_SUBNETS", "subnet-a,subnet-b,subnet-c")
 os.environ.setdefault("FLASHPOINT_SECURITY_GROUP", "sg-test")
 os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
-os.environ.setdefault("FLASHPOINT_SESSIONS_TABLE", "test-sessions")
+os.environ.setdefault("FLASHPOINT_WAREHOUSES_TABLE", "test-sessions")
 os.environ.setdefault("FLASHPOINT_METERS_TABLE", "test-meters")
 
 import boto3
