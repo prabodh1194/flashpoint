@@ -1,10 +1,11 @@
-import json
+from unittest.mock import MagicMock
+
 import pytest
-from unittest.mock import MagicMock, patch
-import main
-import store
+
 import ecs_tasks
+import main
 import spark_client
+import store
 
 
 @pytest.fixture(autouse=True)
@@ -16,314 +17,392 @@ def reset_state(mock_store):
 
 @pytest.fixture
 def mock_create_warehouse_deps(monkeypatch, mock_ecs):
-    monkeypatch.setattr(ecs_tasks, "run_driver_task", lambda: "arn:driver-1")
-    monkeypatch.setattr(ecs_tasks, "wait_running", lambda arn: None)
-    monkeypatch.setattr(ecs_tasks, "private_ip", lambda arn: "10.0.0.5")
-    monkeypatch.setattr(ecs_tasks, "run_executor_tasks", lambda url, count: [f"arn:exec-{i}" for i in range(count)])
+    monkeypatch.setattr(ecs_tasks, 'run_driver_task', lambda: 'arn:driver-1')
+    monkeypatch.setattr(ecs_tasks, 'wait_running', lambda arn: None)
+    monkeypatch.setattr(ecs_tasks, 'private_ip', lambda arn: '10.0.0.5')
+    monkeypatch.setattr(
+        ecs_tasks, 'run_executor_tasks', lambda url, count: [f'arn:exec-{i}' for i in range(count)]
+    )
 
 
 class TestHealthz:
     def test_health_ok(self, client, mock_store):
-        resp = client.get("/healthz")
+        resp = client.get('/healthz')
         assert resp.status_code == 200
         data = resp.json()
-        assert data["status"] == "ok"
-        assert "warehouses" in data
+        assert data['status'] == 'ok'
+        assert 'warehouses' in data
 
 
 class TestCreateWarehouse:
     def test_creates_default_xs(self, client, mock_create_warehouse_deps, mock_store):
-        resp = client.post("/warehouses", json={"name": "test-wh"})
+        resp = client.post('/warehouses', json={'name': 'test-wh'})
         assert resp.status_code == 201
         data = resp.json()
-        assert data["name"] == "test-wh"
-        assert data["status"] == "running"
-        assert data["size"] == "XS"
-        assert data["executor_count"] == 1
-        assert data["endpoint"] == "sc://10.0.0.5:15002"
-        assert store.get_warehouse("test-wh") is not None
+        assert data['name'] == 'test-wh'
+        assert data['status'] == 'running'
+        assert data['size'] == 'XS'
+        assert data['executor_count'] == 1
+        assert data['endpoint'] == 'sc://10.0.0.5:15002'
+        assert store.get_warehouse('test-wh') is not None
 
     def test_creates_custom_size(self, client, mock_create_warehouse_deps, mock_store):
-        resp = client.post("/warehouses", json={"name": "test-wh", "size": "M"})
+        resp = client.post('/warehouses', json={'name': 'test-wh', 'size': 'M'})
         assert resp.status_code == 201
         data = resp.json()
-        assert data["size"] == "M"
-        assert data["executor_count"] == 4
+        assert data['size'] == 'M'
+        assert data['executor_count'] == 4
 
     def test_rejects_unknown_size(self, client, mock_store):
-        resp = client.post("/warehouses", json={"name": "bad", "size": "XXL"})
+        resp = client.post('/warehouses', json={'name': 'bad', 'size': 'XXL'})
         assert resp.status_code == 400
 
     def test_warehouse_cap(self, client, monkeypatch, mock_store):
-        monkeypatch.setattr(main, "MAX_WAREHOUSES", 1)
-        store.put_warehouse("existing", {"task_arn": "arn:1", "status": "running", "size": "XS", "executor_count": 1, "executor_arns": [], "created_at": 0})
-        resp = client.post("/warehouses", json={"name": "test-wh"})
+        monkeypatch.setattr(main, 'MAX_WAREHOUSES', 1)
+        store.put_warehouse(
+            'existing',
+            {
+                'task_arn': 'arn:1',
+                'status': 'running',
+                'size': 'XS',
+                'executor_count': 1,
+                'executor_arns': [],
+                'created_at': 0,
+            },
+        )
+        resp = client.post('/warehouses', json={'name': 'test-wh'})
         assert resp.status_code == 429
 
     def test_rejects_duplicate_name(self, client, mock_store):
-        store.put_warehouse("existing", {"task_arn": "arn:1", "status": "running", "size": "XS", "executor_count": 1, "executor_arns": [], "created_at": 0})
-        resp = client.post("/warehouses", json={"name": "existing", "size": "XS"})
+        store.put_warehouse(
+            'existing',
+            {
+                'task_arn': 'arn:1',
+                'status': 'running',
+                'size': 'XS',
+                'executor_count': 1,
+                'executor_arns': [],
+                'created_at': 0,
+            },
+        )
+        resp = client.post('/warehouses', json={'name': 'existing', 'size': 'XS'})
         assert resp.status_code == 409
 
 
 class TestListWarehouses:
     def test_empty(self, client, mock_store):
-        resp = client.get("/warehouses")
+        resp = client.get('/warehouses')
         assert resp.status_code == 200
         data = resp.json()
-        assert data["warehouses"] == []
-        assert data["count"] == 0
+        assert data['warehouses'] == []
+        assert data['count'] == 0
 
     def test_with_warehouses(self, client, mock_store):
-        store.put_warehouse("wh1", {"task_arn": "arn:1", "status": "running", "size": "XS", "executor_count": 1, "executor_arns": [], "created_at": 0})
-        store.put_warehouse("wh2", {"task_arn": "arn:2", "status": "running", "size": "S", "executor_count": 2, "executor_arns": [], "created_at": 0})
-        resp = client.get("/warehouses")
+        store.put_warehouse(
+            'wh1',
+            {
+                'task_arn': 'arn:1',
+                'status': 'running',
+                'size': 'XS',
+                'executor_count': 1,
+                'executor_arns': [],
+                'created_at': 0,
+            },
+        )
+        store.put_warehouse(
+            'wh2',
+            {
+                'task_arn': 'arn:2',
+                'status': 'running',
+                'size': 'S',
+                'executor_count': 2,
+                'executor_arns': [],
+                'created_at': 0,
+            },
+        )
+        resp = client.get('/warehouses')
         assert resp.status_code == 200
         data = resp.json()
-        assert len(data["warehouses"]) == 2
-        assert data["count"] == 2
+        assert len(data['warehouses']) == 2
+        assert data['count'] == 2
 
 
 class TestGetWarehouse:
     def test_found_running(self, client, monkeypatch, mock_store):
-        monkeypatch.setattr(ecs_tasks, "is_running", lambda arn: True)
-        store.put_warehouse("my-wh", {
-            "task_arn": "arn:1",
-            "endpoint": "sc://10.0.0.5:15002",
-            "status": "running",
-            "size": "S",
-            "executor_count": 2,
-            "executor_arns": [],
-        })
-        resp = client.get("/warehouses/my-wh")
+        monkeypatch.setattr(ecs_tasks, 'is_running', lambda arn: True)
+        store.put_warehouse(
+            'my-wh',
+            {
+                'task_arn': 'arn:1',
+                'endpoint': 'sc://10.0.0.5:15002',
+                'status': 'running',
+                'size': 'S',
+                'executor_count': 2,
+                'executor_arns': [],
+            },
+        )
+        resp = client.get('/warehouses/my-wh')
         assert resp.status_code == 200
         data = resp.json()
-        assert data["name"] == "my-wh"
-        assert data["status"] == "running"
+        assert data['name'] == 'my-wh'
+        assert data['status'] == 'running'
 
     def test_not_found(self, client, mock_store):
-        resp = client.get("/warehouses/nonexistent")
+        resp = client.get('/warehouses/nonexistent')
         assert resp.status_code == 404
 
     def test_suspended(self, client, monkeypatch, mock_store):
-        monkeypatch.setattr(ecs_tasks, "is_running", lambda arn: False)
-        store.put_warehouse("my-wh", {
-            "task_arn": "",
-            "endpoint": None,
-            "status": "suspended",
-            "size": "XS",
-            "executor_count": 1,
-            "executor_arns": [],
-        })
-        resp = client.get("/warehouses/my-wh")
+        monkeypatch.setattr(ecs_tasks, 'is_running', lambda arn: False)
+        store.put_warehouse(
+            'my-wh',
+            {
+                'task_arn': '',
+                'endpoint': None,
+                'status': 'suspended',
+                'size': 'XS',
+                'executor_count': 1,
+                'executor_arns': [],
+            },
+        )
+        resp = client.get('/warehouses/my-wh')
         assert resp.status_code == 200
-        assert resp.json()["status"] == "suspended"
+        assert resp.json()['status'] == 'suspended'
 
 
 class TestRunQuery:
     @pytest.fixture(autouse=True)
     def setup_warehouse(self, monkeypatch, mock_store):
-        monkeypatch.setattr(ecs_tasks, "is_running", lambda arn: True)
-        store.put_warehouse("my-wh", {
-            "task_arn": "arn:driver",
-            "task_ip": "10.0.0.5",
-            "endpoint": "sc://10.0.0.5:15002",
-            "status": "running",
-            "size": "XS",
-            "executor_count": 1,
-            "executor_arns": [],
-        })
+        monkeypatch.setattr(ecs_tasks, 'is_running', lambda arn: True)
+        store.put_warehouse(
+            'my-wh',
+            {
+                'task_arn': 'arn:driver',
+                'task_ip': '10.0.0.5',
+                'endpoint': 'sc://10.0.0.5:15002',
+                'status': 'running',
+                'size': 'XS',
+                'executor_count': 1,
+                'executor_arns': [],
+            },
+        )
 
     def test_runs_query(self, client, monkeypatch):
         mock_spark = MagicMock()
         mock_df = MagicMock()
-        mock_df.columns = ["id", "name"]
-        mock_df.collect.return_value = [["1", "alice"]]
+        mock_df.columns = ['id', 'name']
+        mock_df.collect.return_value = [['1', 'alice']]
         mock_spark.sql.return_value = mock_df
-        monkeypatch.setattr(spark_client, "get", lambda endpoint, name: mock_spark)
-        monkeypatch.setattr(main, "_sql_execution_ids", lambda s: set())
-        monkeypatch.setattr(main, "_fetch_query_dag", lambda s, b: None)
+        monkeypatch.setattr(spark_client, 'get', lambda endpoint, name: mock_spark)
+        monkeypatch.setattr(main, '_sql_execution_ids', lambda s: set())
+        monkeypatch.setattr(main, '_fetch_query_dag', lambda s, b: None)
 
-        resp = client.post("/warehouses/my-wh/query", json={"sql": "SELECT 1"})
+        resp = client.post('/warehouses/my-wh/query', json={'sql': 'SELECT 1'})
         assert resp.status_code == 200
         data = resp.json()
-        assert data["columns"] == ["id", "name"]
-        assert data["row_count"] == 1
-        assert len(data["query_id"]) == 16
+        assert data['columns'] == ['id', 'name']
+        assert data['row_count'] == 1
+        assert len(data['query_id']) == 16
 
     def test_not_found(self, client, mock_store):
-        resp = client.post("/warehouses/nope/query", json={"sql": "SELECT 1"})
+        resp = client.post('/warehouses/nope/query', json={'sql': 'SELECT 1'})
         assert resp.status_code == 404
 
     def test_not_running(self, client, monkeypatch, mock_store):
-        monkeypatch.setattr(ecs_tasks, "is_running", lambda arn: False)
-        store.put_warehouse("stopped-wh", {
-            "task_arn": "arn:dead",
-            "endpoint": "sc://10.0.0.5:15002",
-            "status": "suspended",
-            "size": "XS",
-            "executor_count": 1,
-            "executor_arns": [],
-        })
-        resp = client.post("/warehouses/stopped-wh/query", json={"sql": "SELECT 1"})
+        monkeypatch.setattr(ecs_tasks, 'is_running', lambda arn: False)
+        store.put_warehouse(
+            'stopped-wh',
+            {
+                'task_arn': 'arn:dead',
+                'endpoint': 'sc://10.0.0.5:15002',
+                'status': 'suspended',
+                'size': 'XS',
+                'executor_count': 1,
+                'executor_arns': [],
+            },
+        )
+        resp = client.post('/warehouses/stopped-wh/query', json={'sql': 'SELECT 1'})
         assert resp.status_code == 409
 
     def test_spark_error(self, client, monkeypatch):
         mock_spark = MagicMock()
-        mock_spark.sql.side_effect = Exception("table not found: bad_table")
-        monkeypatch.setattr(spark_client, "get", lambda endpoint, name: mock_spark)
-        monkeypatch.setattr(main, "_sql_execution_ids", lambda s: set())
+        mock_spark.sql.side_effect = Exception('table not found: bad_table')
+        monkeypatch.setattr(spark_client, 'get', lambda endpoint, name: mock_spark)
+        monkeypatch.setattr(main, '_sql_execution_ids', lambda s: set())
 
-        resp = client.post("/warehouses/my-wh/query", json={"sql": "SELECT * FROM bad_table"})
+        resp = client.post('/warehouses/my-wh/query', json={'sql': 'SELECT * FROM bad_table'})
         assert resp.status_code == 400
 
     def test_records_failed_query(self, client, monkeypatch):
         mock_spark = MagicMock()
-        mock_spark.sql.side_effect = Exception("fail")
-        monkeypatch.setattr(spark_client, "get", lambda endpoint, name: mock_spark)
-        monkeypatch.setattr(main, "_sql_execution_ids", lambda s: set())
+        mock_spark.sql.side_effect = Exception('fail')
+        monkeypatch.setattr(spark_client, 'get', lambda endpoint, name: mock_spark)
+        monkeypatch.setattr(main, '_sql_execution_ids', lambda s: set())
 
-        client.post("/warehouses/my-wh/query", json={"sql": "bad"})
+        client.post('/warehouses/my-wh/query', json={'sql': 'bad'})
         assert len(main.query_history) == 1
-        assert main.query_history[0]["status"] == "failed"
+        assert main.query_history[0]['status'] == 'failed'
 
 
 class TestDeleteWarehouse:
     def test_deletes(self, client, monkeypatch, mock_store):
-        monkeypatch.setattr(spark_client, "drop", lambda name: None)
-        monkeypatch.setattr(ecs_tasks, "stop_tasks", lambda s: None)
-        store.put_warehouse("my-wh", {
-            "task_arn": "arn:d",
-            "executor_arns": [],
-            "status": "running",
-            "size": "XS",
-            "executor_count": 1,
-        })
+        monkeypatch.setattr(spark_client, 'drop', lambda name: None)
+        monkeypatch.setattr(ecs_tasks, 'stop_tasks', lambda s: None)
+        store.put_warehouse(
+            'my-wh',
+            {
+                'task_arn': 'arn:d',
+                'executor_arns': [],
+                'status': 'running',
+                'size': 'XS',
+                'executor_count': 1,
+            },
+        )
 
-        resp = client.delete("/warehouses/my-wh")
+        resp = client.delete('/warehouses/my-wh')
         assert resp.status_code == 204
-        assert store.get_warehouse("my-wh") is None
+        assert store.get_warehouse('my-wh') is None
 
     def test_not_found(self, client, mock_store):
-        resp = client.delete("/warehouses/nonexistent")
+        resp = client.delete('/warehouses/nonexistent')
         assert resp.status_code == 404
 
 
 class TestSuspendResume:
     @pytest.fixture(autouse=True)
     def setup(self, monkeypatch, mock_store):
-        monkeypatch.setattr(spark_client, "drop", lambda name: None)
-        monkeypatch.setattr(ecs_tasks, "stop_tasks", lambda s: None)
-        store.put_warehouse("my-wh", {
-            "task_arn": "arn:d",
-            "executor_arns": ["arn:e1"],
-            "task_ip": "10.0.0.5",
-            "endpoint": "sc://10.0.0.5:15002",
-            "status": "running",
-            "size": "S",
-            "executor_count": 2,
-        })
+        monkeypatch.setattr(spark_client, 'drop', lambda name: None)
+        monkeypatch.setattr(ecs_tasks, 'stop_tasks', lambda s: None)
+        store.put_warehouse(
+            'my-wh',
+            {
+                'task_arn': 'arn:d',
+                'executor_arns': ['arn:e1'],
+                'task_ip': '10.0.0.5',
+                'endpoint': 'sc://10.0.0.5:15002',
+                'status': 'running',
+                'size': 'S',
+                'executor_count': 2,
+            },
+        )
 
     def test_suspend(self, client):
-        resp = client.post("/warehouses/my-wh/suspend")
+        resp = client.post('/warehouses/my-wh/suspend')
         assert resp.status_code == 200
-        assert resp.json()["status"] == "suspended"
-        wh = store.get_warehouse("my-wh")
+        assert resp.json()['status'] == 'suspended'
+        wh = store.get_warehouse('my-wh')
         assert wh is not None
-        assert wh["status"] == "suspended"
+        assert wh['status'] == 'suspended'
 
     def test_suspend_already_suspended(self, client, mock_store):
-        store.update_warehouse_status("my-wh", "suspended")
-        resp = client.post("/warehouses/my-wh/suspend")
+        store.update_warehouse_status('my-wh', 'suspended')
+        resp = client.post('/warehouses/my-wh/suspend')
         assert resp.status_code == 200
 
     def test_suspend_not_found(self, client, mock_store):
-        resp = client.post("/warehouses/nope/suspend")
+        resp = client.post('/warehouses/nope/suspend')
         assert resp.status_code == 404
 
     def test_resume(self, client, monkeypatch, mock_store):
-        store.update_warehouse_status("my-wh", "suspended")
-        monkeypatch.setattr(ecs_tasks, "run_driver_task", lambda: "arn:new-driver")
-        monkeypatch.setattr(ecs_tasks, "wait_running", lambda arn: None)
-        monkeypatch.setattr(ecs_tasks, "private_ip", lambda arn: "10.0.0.6")
-        monkeypatch.setattr(ecs_tasks, "run_executor_tasks", lambda url, count: [f"arn:new-exec-{i}" for i in range(count)])
+        store.update_warehouse_status('my-wh', 'suspended')
+        monkeypatch.setattr(ecs_tasks, 'run_driver_task', lambda: 'arn:new-driver')
+        monkeypatch.setattr(ecs_tasks, 'wait_running', lambda arn: None)
+        monkeypatch.setattr(ecs_tasks, 'private_ip', lambda arn: '10.0.0.6')
+        monkeypatch.setattr(
+            ecs_tasks,
+            'run_executor_tasks',
+            lambda url, count: [f'arn:new-exec-{i}' for i in range(count)],
+        )
 
-        resp = client.post("/warehouses/my-wh/resume")
+        resp = client.post('/warehouses/my-wh/resume')
         assert resp.status_code == 200
         data = resp.json()
-        assert data["status"] == "running"
-        assert data["endpoint"] == "sc://10.0.0.6:15002"
+        assert data['status'] == 'running'
+        assert data['endpoint'] == 'sc://10.0.0.6:15002'
 
     def test_resume_already_running(self, client):
-        resp = client.post("/warehouses/my-wh/resume")
+        resp = client.post('/warehouses/my-wh/resume')
         assert resp.status_code == 200
-        assert resp.json()["status"] == "running"
+        assert resp.json()['status'] == 'running'
 
 
 class TestResize:
     @pytest.fixture(autouse=True)
     def setup(self, monkeypatch, mock_store):
-        monkeypatch.setattr(ecs_tasks, "is_running", lambda arn: True)
-        store.put_warehouse("my-wh", {
-            "task_arn": "arn:d",
-            "executor_arns": ["arn:e1", "arn:e2"],
-            "task_ip": "10.0.0.5",
-            "endpoint": "sc://10.0.0.5:15002",
-            "status": "running",
-            "size": "S",
-            "executor_count": 2,
-        })
+        monkeypatch.setattr(ecs_tasks, 'is_running', lambda arn: True)
+        store.put_warehouse(
+            'my-wh',
+            {
+                'task_arn': 'arn:d',
+                'executor_arns': ['arn:e1', 'arn:e2'],
+                'task_ip': '10.0.0.5',
+                'endpoint': 'sc://10.0.0.5:15002',
+                'status': 'running',
+                'size': 'S',
+                'executor_count': 2,
+            },
+        )
 
     def test_scale_up(self, client, monkeypatch):
-        monkeypatch.setattr(ecs_tasks, "run_executor_tasks", lambda url, count: [f"arn:new-{i}" for i in range(count)])
-        resp = client.post("/warehouses/my-wh/resize", json={"size": "M"})
+        monkeypatch.setattr(
+            ecs_tasks,
+            'run_executor_tasks',
+            lambda url, count: [f'arn:new-{i}' for i in range(count)],
+        )
+        resp = client.post('/warehouses/my-wh/resize', json={'size': 'M'})
         assert resp.status_code == 200
-        wh = store.get_warehouse("my-wh")
+        wh = store.get_warehouse('my-wh')
         assert wh is not None
-        assert wh["executor_count"] == 4
-        assert wh["size"] == "M"
+        assert wh['executor_count'] == 4
+        assert wh['size'] == 'M'
 
     def test_scale_down(self, client, mock_ecs):
-        resp = client.post("/warehouses/my-wh/resize", json={"size": "XS"})
+        resp = client.post('/warehouses/my-wh/resize', json={'size': 'XS'})
         assert resp.status_code == 200
-        wh = store.get_warehouse("my-wh")
+        wh = store.get_warehouse('my-wh')
         assert wh is not None
-        assert wh["executor_count"] == 1
-        assert wh["size"] == "XS"
+        assert wh['executor_count'] == 1
+        assert wh['size'] == 'XS'
 
     def test_unknown_size(self, client):
-        resp = client.post("/warehouses/my-wh/resize", json={"size": "XXL"})
+        resp = client.post('/warehouses/my-wh/resize', json={'size': 'XXL'})
         assert resp.status_code == 400
 
     def test_not_running(self, client, mock_store):
-        store.update_warehouse_status("my-wh", "suspended")
-        resp = client.post("/warehouses/my-wh/resize", json={"size": "M"})
+        store.update_warehouse_status('my-wh', 'suspended')
+        resp = client.post('/warehouses/my-wh/resize', json={'size': 'M'})
         assert resp.status_code == 409
 
 
 class TestHistory:
     def test_empty(self, client):
-        resp = client.get("/history")
+        resp = client.get('/history')
         assert resp.status_code == 200
         data = resp.json()
-        assert data["history"] == []
-        assert data["count"] == 0
+        assert data['history'] == []
+        assert data['count'] == 0
 
     def test_with_entries(self, client):
-        main.query_history.append({
-            "query_id": "abc123", "sql": "SELECT 1", "status": "success",
-            "duration_ms": 100, "row_count": 1, "name": "my-wh", "ts": "12:00:00",
-        })
-        resp = client.get("/history")
+        main.query_history.append(
+            {
+                'query_id': 'abc123',
+                'sql': 'SELECT 1',
+                'status': 'success',
+                'duration_ms': 100,
+                'row_count': 1,
+                'name': 'my-wh',
+                'ts': '12:00:00',
+            }
+        )
+        resp = client.get('/history')
         assert resp.status_code == 200
         data = resp.json()
-        assert len(data["history"]) == 1
+        assert len(data['history']) == 1
 
     def test_history_entry_found(self, client):
-        main.query_history.append({"query_id": "abc", "sql": "SELECT 1"})
-        resp = client.get("/history/abc")
+        main.query_history.append({'query_id': 'abc', 'sql': 'SELECT 1'})
+        resp = client.get('/history/abc')
         assert resp.status_code == 200
 
     def test_history_entry_not_found(self, client):
-        resp = client.get("/history/nonexistent")
+        resp = client.get('/history/nonexistent')
         assert resp.status_code == 404

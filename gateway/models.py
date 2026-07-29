@@ -1,17 +1,18 @@
 """Pydantic API models for the Flashpoint gateway."""
+
 from pydantic import BaseModel, Field, field_validator
 
 
 class CreateWarehouseRequest(BaseModel):
     name: str
-    size: str = "XS"
+    size: str = 'XS'
 
-    @field_validator("name")
+    @field_validator('name')
     @classmethod
     def name_must_not_be_blank(cls, v: str) -> str:
         trimmed = v.strip()
         if not trimmed:
-            raise ValueError("warehouse name must not be blank")
+            raise ValueError('warehouse name must not be blank')
         return trimmed
 
 
@@ -20,7 +21,7 @@ class WarehouseResponse(BaseModel):
     task_arn: str | None = None
     endpoint: str | None = None
     status: str
-    size: str = "XS"
+    size: str = 'XS'
     executor_count: int = 1
 
 
@@ -43,11 +44,11 @@ class DagNode(BaseModel):
 
 
 class DagEdge(BaseModel):
-    from_: int = Field(alias="from")
+    from_: int = Field(alias='from')
     to: int
     is_shuffle: bool = False
 
-    model_config = {"populate_by_name": True}
+    model_config = {'populate_by_name': True}
 
 
 class QueryProfile(BaseModel):

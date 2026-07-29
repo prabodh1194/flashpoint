@@ -8,10 +8,11 @@ picks up where it left off.
 Executors run on Fargate Spot; the driver runs on-demand so Spot
 reclamation never kills the whole warehouse.
 """
+
 import asyncio
 import hashlib
-import time
 import logging
+import time
 from collections import deque
 from contextlib import asynccontextmanager
 
@@ -19,27 +20,34 @@ import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-import store
 import dag
 import ecs_tasks
-import spark_client
 import reconcile as _reconcile_mod
+import spark_client
+import store
 from config import (
-    CLUSTER, GRPC_PORT, WAREHOUSE_TTL_S, MAX_WAREHOUSES, SIZES,
+    CLUSTER,
+    GRPC_PORT,
+    MAX_WAREHOUSES,
+    SIZES,
+    WAREHOUSE_TTL_S,
 )
 from models import (
-    CreateWarehouseRequest, WarehouseResponse, QueryRequest, ResizeRequest,
+    CreateWarehouseRequest,
+    QueryRequest,
     QueryResponse,
+    ResizeRequest,
+    WarehouseResponse,
 )
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 log = logging.getLogger(__name__)
 
 query_history: deque[dict] = deque(maxlen=500)
 
 
 def _query_id(sql: str) -> str:
-    normalized = " ".join(sql.strip().lower().split())
+    normalized = ' '.join(sql.strip().lower().split())
     return hashlib.sha256(normalized.encode()).hexdigest()[:16]
 
 
@@ -53,114 +61,125 @@ def _sql_execution_ids(warehouse: dict) -> set[int]:
 
 # --- App ---
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup: reconcile orphans. Launch background reaper. No cache to rebuild."""
-    log.info("Flashpoint gateway starting (cluster=%s, ttl=%ds)", CLUSTER, WAREHOUSE_TTL_S)
+    log.info('Flashpoint gateway starting (cluster=%s, ttl=%ds)', CLUSTER, WAREHOUSE_TTL_S)
     _reconcile_mod.reconcile(CLUSTER)
     reaper = asyncio.create_task(
         _reconcile_mod.reap_idle_warehouses(spark_client, WAREHOUSE_TTL_S, CLUSTER)
     )
     yield
     reaper.cancel()
-    log.info("Flashpoint gateway shutting down")
+    log.info('Flashpoint gateway shutting down')
 
 
-app = FastAPI(title="Flashpoint Gateway", lifespan=lifespan)
+app = FastAPI(title='Flashpoint Gateway', lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=['*'],
+    allow_methods=['*'],
+    allow_headers=['*'],
 )
 
 
 # --- Routes ---
 
-@app.post("/warehouses", response_model=WarehouseResponse, status_code=201)
+
+@app.post('/warehouses', response_model=WarehouseResponse, status_code=201)
 def create_warehouse(req: CreateWarehouseRequest):
     if req.size not in SIZES:
-        raise HTTPException(status_code=400, detail=f"unknown size {req.size!r}")
+        raise HTTPException(status_code=400, detail=f'unknown size {req.size!r}')
     if store.get_warehouse(req.name) is not None:
-        raise HTTPException(status_code=409, detail=f"warehouse {req.name!r} already exists")
+        raise HTTPException(status_code=409, detail=f'warehouse {req.name!r} already exists')
     if store.count_running_warehouses() >= MAX_WAREHOUSES:
-        raise HTTPException(status_code=429, detail=f"warehouse cap reached ({MAX_WAREHOUSES} max)")
+        raise HTTPException(status_code=429, detail=f'warehouse cap reached ({MAX_WAREHOUSES} max)')
     name = req.name
     executor_count = SIZES[req.size]
-    log.info("Creating warehouse %s (size=%s, executors=%d)", name, req.size, executor_count)
+    log.info('Creating warehouse %s (size=%s, executors=%d)', name, req.size, executor_count)
 
     task_arn = ecs_tasks.run_driver_task()
-    log.info("Driver task launched: %s", task_arn)
+    log.info('Driver task launched: %s', task_arn)
 
     ecs_tasks.wait_running(task_arn)
     task_ip = ecs_tasks.private_ip(task_arn)
-    master_url = f"spark://{task_ip}:7077"
-    endpoint = f"sc://{task_ip}:{GRPC_PORT}"
-    log.info("Driver ready — master=%s endpoint=%s", master_url, endpoint)
+    master_url = f'spark://{task_ip}:7077'
+    endpoint = f'sc://{task_ip}:{GRPC_PORT}'
+    log.info('Driver ready — master=%s endpoint=%s', master_url, endpoint)
 
     executor_arns = ecs_tasks.run_executor_tasks(master_url, executor_count)
-    log.info("Launched %d executor tasks (Spot): %s", len(executor_arns), executor_arns)
+    log.info('Launched %d executor tasks (Spot): %s', len(executor_arns), executor_arns)
 
     record = {
-        "task_arn": task_arn,
-        "executor_arns": executor_arns,
-        "task_ip": task_ip,
-        "endpoint": endpoint,
-        "status": "running",
-        "size": req.size,
-        "executor_count": executor_count,
-        "created_at": time.time(),
+        'task_arn': task_arn,
+        'executor_arns': executor_arns,
+        'task_ip': task_ip,
+        'endpoint': endpoint,
+        'status': 'running',
+        'size': req.size,
+        'executor_count': executor_count,
+        'created_at': time.time(),
     }
     store.put_warehouse(name, record)
     return WarehouseResponse(
-        name=name, task_arn=task_arn, endpoint=endpoint,
-        status="running", size=req.size, executor_count=executor_count,
+        name=name,
+        task_arn=task_arn,
+        endpoint=endpoint,
+        status='running',
+        size=req.size,
+        executor_count=executor_count,
     )
 
 
-@app.get("/warehouses/{name}", response_model=WarehouseResponse)
+@app.get('/warehouses/{name}', response_model=WarehouseResponse)
 def get_warehouse(name: str):
     s = store.get_warehouse(name)
     if not s:
-        raise HTTPException(status_code=404, detail="warehouse not found")
-    task_arn = s["task_arn"]
-    status = "running" if (task_arn and ecs_tasks.is_running(task_arn)) else s["status"]
+        raise HTTPException(status_code=404, detail='warehouse not found')
+    task_arn = s['task_arn']
+    status = 'running' if (task_arn and ecs_tasks.is_running(task_arn)) else s['status']
     return WarehouseResponse(
         name=name,
         task_arn=task_arn or None,
-        endpoint=s.get("endpoint"),
+        endpoint=s.get('endpoint'),
         status=status,
-        size=s["size"],
-        executor_count=s["executor_count"],
+        size=s['size'],
+        executor_count=s['executor_count'],
     )
 
 
-@app.get("/warehouses")
+@app.get('/warehouses')
 def list_warehouses_endpoint():
     records = store.list_warehouses()
     items = []
     for s in records:
-        task_arn = s["task_arn"]
-        status = "running" if (task_arn and ecs_tasks.is_running(task_arn)) else s.get("status", "suspended")
-        items.append({
-            "name": s["name"],
-            "status": status,
-            "size": s["size"],
-            "executor_count": s["executor_count"],
-        })
-    return {"warehouses": items, "count": len(items)}
+        task_arn = s['task_arn']
+        if task_arn and ecs_tasks.is_running(task_arn):
+            status = 'running'
+        else:
+            status = s.get('status', 'suspended')
+        items.append(
+            {
+                'name': s['name'],
+                'status': status,
+                'size': s['size'],
+                'executor_count': s['executor_count'],
+            }
+        )
+    return {'warehouses': items, 'count': len(items)}
 
 
-@app.post("/warehouses/{name}/query", response_model=QueryResponse)
+@app.post('/warehouses/{name}/query', response_model=QueryResponse)
 def run_query(name: str, req: QueryRequest):
     s = store.get_warehouse(name)
     if not s:
-        raise HTTPException(status_code=404, detail="warehouse not found")
-    if s["status"] != "running" or not ecs_tasks.is_running(s["task_arn"]):
-        raise HTTPException(status_code=409, detail="warehouse not running")
+        raise HTTPException(status_code=404, detail='warehouse not found')
+    if s['status'] != 'running' or not ecs_tasks.is_running(s['task_arn']):
+        raise HTTPException(status_code=409, detail='warehouse not running')
 
-    spark = spark_client.get(s["endpoint"], name)
+    spark = spark_client.get(s['endpoint'], name)
     before_ids = _sql_execution_ids(s)
     t0 = time.time()
     try:
@@ -168,11 +187,17 @@ def run_query(name: str, req: QueryRequest):
         collected = df.collect()
     except Exception as exc:
         qid = _query_id(req.sql)
-        query_history.append({
-            "query_id": qid, "sql": req.sql, "status": "failed",
-            "duration_ms": int((time.time() - t0) * 1000), "row_count": 0,
-            "name": name, "ts": time.strftime("%H:%M:%S", time.localtime()),
-        })
+        query_history.append(
+            {
+                'query_id': qid,
+                'sql': req.sql,
+                'status': 'failed',
+                'duration_ms': int((time.time() - t0) * 1000),
+                'row_count': 0,
+                'name': name,
+                'ts': time.strftime('%H:%M:%S', time.localtime()),
+            }
+        )
         raise HTTPException(status_code=400, detail=str(exc))
 
     qid = _query_id(req.sql)
@@ -180,13 +205,26 @@ def run_query(name: str, req: QueryRequest):
     columns = df.columns
     rows = [[str(v) for v in row] for row in collected]
     profile = _fetch_query_dag(s, before_ids)
-    query_history.append({
-        "query_id": qid, "sql": req.sql, "status": "success",
-        "duration_ms": duration_ms, "row_count": len(rows),
-        "name": name, "ts": time.strftime("%H:%M:%S", time.localtime()),
-        "profile": profile,
-    })
-    log.info("Query %s on warehouse %s: %dms, %d rows\n%s", qid, name, duration_ms, len(rows), req.sql)
+    query_history.append(
+        {
+            'query_id': qid,
+            'sql': req.sql,
+            'status': 'success',
+            'duration_ms': duration_ms,
+            'row_count': len(rows),
+            'name': name,
+            'ts': time.strftime('%H:%M:%S', time.localtime()),
+            'profile': profile,
+        }
+    )
+    log.info(
+        'Query %s on warehouse %s: %dms, %d rows\n%s',
+        qid,
+        name,
+        duration_ms,
+        len(rows),
+        req.sql,
+    )
     return QueryResponse(
         query_id=qid,
         columns=columns,
@@ -197,87 +235,97 @@ def run_query(name: str, req: QueryRequest):
     )
 
 
-@app.delete("/warehouses/{name}", status_code=204)
+@app.delete('/warehouses/{name}', status_code=204)
 def delete_warehouse(name: str):
     s = store.get_warehouse(name)
     if not s:
-        raise HTTPException(status_code=404, detail="warehouse not found")
+        raise HTTPException(status_code=404, detail='warehouse not found')
     spark_client.drop(name)
     ecs_tasks.stop_tasks(s)
     store.delete_warehouse(name)
-    log.info("Deleted warehouse %s (driver + %d executors stopped)", name, len(s["executor_arns"]))
+    log.info('Deleted warehouse %s (driver + %d executors stopped)', name, len(s['executor_arns']))
 
 
-@app.post("/warehouses/{name}/suspend", status_code=200)
+@app.post('/warehouses/{name}/suspend', status_code=200)
 def suspend_warehouse(name: str):
     s = store.get_warehouse(name)
     if not s:
-        raise HTTPException(status_code=404, detail="warehouse not found")
-    if s["status"] == "suspended":
-        return {"status": "suspended"}
+        raise HTTPException(status_code=404, detail='warehouse not found')
+    if s['status'] == 'suspended':
+        return {'status': 'suspended'}
     spark_client.drop(name)
     ecs_tasks.stop_tasks(s)
-    store.update_warehouse_status(name, "suspended", task_arn=None, executor_arns=[], task_ip=None)
-    log.info("Suspended warehouse %s", name)
-    return {"status": "suspended"}
+    store.update_warehouse_status(name, 'suspended', task_arn=None, executor_arns=[], task_ip=None)
+    log.info('Suspended warehouse %s', name)
+    return {'status': 'suspended'}
 
 
-@app.post("/warehouses/{name}/resume", status_code=200, response_model=WarehouseResponse)
+@app.post('/warehouses/{name}/resume', status_code=200, response_model=WarehouseResponse)
 def resume_warehouse(name: str):
     s = store.get_warehouse(name)
     if not s:
-        raise HTTPException(status_code=404, detail="warehouse not found")
-    if s["status"] == "running":
+        raise HTTPException(status_code=404, detail='warehouse not found')
+    if s['status'] == 'running':
         return WarehouseResponse(
-            name=name, task_arn=s["task_arn"],
-            endpoint=s.get("endpoint"), status="running",
-            size=s["size"], executor_count=s["executor_count"],
+            name=name,
+            task_arn=s['task_arn'],
+            endpoint=s.get('endpoint'),
+            status='running',
+            size=s['size'],
+            executor_count=s['executor_count'],
         )
 
-    size = s["size"]
+    size = s['size']
     executor_count = SIZES[size]
-    log.info("Resuming warehouse %s (size=%s)", name, size)
+    log.info('Resuming warehouse %s (size=%s)', name, size)
 
     task_arn = ecs_tasks.run_driver_task()
     ecs_tasks.wait_running(task_arn)
     task_ip = ecs_tasks.private_ip(task_arn)
-    master_url = f"spark://{task_ip}:7077"
-    endpoint = f"sc://{task_ip}:{GRPC_PORT}"
+    master_url = f'spark://{task_ip}:7077'
+    endpoint = f'sc://{task_ip}:{GRPC_PORT}'
     executor_arns = ecs_tasks.run_executor_tasks(master_url, executor_count)
 
     store.update_warehouse_status(
-        name, "running",
-        task_arn=task_arn, executor_arns=executor_arns,
-        task_ip=task_ip, endpoint=endpoint,
+        name,
+        'running',
+        task_arn=task_arn,
+        executor_arns=executor_arns,
+        task_ip=task_ip,
+        endpoint=endpoint,
         executor_count=executor_count,
     )
-    log.info("Resumed warehouse %s → driver %s", name, task_arn)
+    log.info('Resumed warehouse %s → driver %s', name, task_arn)
     return WarehouseResponse(
-        name=name, task_arn=task_arn, endpoint=endpoint,
-        status="running", size=size, executor_count=executor_count,
+        name=name,
+        task_arn=task_arn,
+        endpoint=endpoint,
+        status='running',
+        size=size,
+        executor_count=executor_count,
     )
 
 
-@app.post("/warehouses/{name}/resize", status_code=200, response_model=WarehouseResponse)
+@app.post('/warehouses/{name}/resize', status_code=200, response_model=WarehouseResponse)
 def resize_warehouse(name: str, req: ResizeRequest):
     s = store.get_warehouse(name)
     if not s:
-        raise HTTPException(status_code=404, detail="warehouse not found")
-    if s["status"] != "running":
-        raise HTTPException(status_code=409, detail="warehouse is not running")
+        raise HTTPException(status_code=404, detail='warehouse not found')
+    if s['status'] != 'running':
+        raise HTTPException(status_code=409, detail='warehouse is not running')
     if req.size not in SIZES:
-        raise HTTPException(status_code=400, detail=f"unknown size {req.size!r}")
+        raise HTTPException(status_code=400, detail=f'unknown size {req.size!r}')
 
     new_count = SIZES[req.size]
-    current_count = s["executor_count"]
-    executor_arns: list[str] = list(s["executor_arns"])
-    master_url = f"spark://{s['task_ip']}:7077"
+    current_count = s['executor_count']
+    executor_arns: list[str] = list(s['executor_arns'])
+    master_url = f'spark://{s["task_ip"]}:7077'
 
     if new_count > current_count:
         delta = new_count - current_count
         new_arns = ecs_tasks.run_executor_tasks(master_url, delta)
         executor_arns.extend(new_arns)
-        log.info("Scaled warehouse %s up: +%d executors (Spot)", name, delta)
+        log.info('Scaled warehouse %s up: +%d executors (Spot)', name, delta)
     elif new_count < current_count:
         delta = current_count - new_count
         to_stop = executor_arns[-delta:]
@@ -286,37 +334,47 @@ def resize_warehouse(name: str, req: ResizeRequest):
             try:
                 ecs_tasks.ecs.stop_task(cluster=CLUSTER, task=arn)
             except Exception as exc:
-                log.error("Failed to stop executor %s during resize: %s", arn, exc)
-        log.info("Scaled warehouse %s down: -%d executors", name, delta)
+                log.error('Failed to stop executor %s during resize: %s', arn, exc)
+        log.info('Scaled warehouse %s down: -%d executors', name, delta)
 
-    store.update_warehouse_status(name, "running", size=req.size, executor_count=new_count, executor_arns=executor_arns)
+    store.update_warehouse_status(
+        name,
+        'running',
+        size=req.size,
+        executor_count=new_count,
+        executor_arns=executor_arns,
+    )
     return WarehouseResponse(
-        name=name, task_arn=s["task_arn"], endpoint=s["endpoint"],
-        status="running", size=req.size, executor_count=new_count,
+        name=name,
+        task_arn=s['task_arn'],
+        endpoint=s['endpoint'],
+        status='running',
+        size=req.size,
+        executor_count=new_count,
     )
 
 
-@app.get("/history")
+@app.get('/history')
 def list_history():
-    return {"history": list(query_history), "count": len(query_history)}
+    return {'history': list(query_history), 'count': len(query_history)}
 
 
-@app.get("/history/{query_id}")
+@app.get('/history/{query_id}')
 def get_history_entry(query_id: str):
-    entry = next((e for e in query_history if e["query_id"] == query_id), None)
+    entry = next((e for e in query_history if e['query_id'] == query_id), None)
     if not entry:
-        raise HTTPException(status_code=404, detail="query not found")
+        raise HTTPException(status_code=404, detail='query not found')
     return entry
 
 
-@app.get("/healthz")
+@app.get('/healthz')
 def health():
     return {
-        "status": "ok",
-        "warehouses": store.count_running_warehouses(),
-        "sessions_table": store._TABLE_NAME,
+        'status': 'ok',
+        'warehouses': store.count_running_warehouses(),
+        'sessions_table': store._TABLE_NAME,
     }
 
 
-if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8080, log_level="info")
+if __name__ == '__main__':
+    uvicorn.run('main:app', host='0.0.0.0', port=8080, log_level='info')

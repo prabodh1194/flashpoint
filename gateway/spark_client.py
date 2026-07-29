@@ -1,5 +1,7 @@
 """Spark Connect client cache — one SparkSession per name."""
+
 import logging
+
 from pyspark.sql import SparkSession
 
 log = logging.getLogger(__name__)
@@ -9,9 +11,7 @@ _cache: dict[str, SparkSession] = {}
 
 def get(endpoint: str, name: str) -> SparkSession:
     if name not in _cache:
-        _cache[name] = (
-            SparkSession.builder.remote(endpoint).getOrCreate()  # ty: ignore
-        )
+        _cache[name] = SparkSession.builder.remote(endpoint).getOrCreate()  # ty: ignore
     return _cache[name]
 
 
