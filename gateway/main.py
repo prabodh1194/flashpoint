@@ -52,6 +52,20 @@ def _sql_execution_ids(warehouse: dict) -> set[int]:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Startup + shutdown lifecycle for the FastAPI server.
+
+    Startup (before first request):
+      1. Reconcile — rebuild in-memory warehouse state from DynamoDB.
+         Running ECS tasks are restored; dead ones are cleaned up.
+      2. Reaper — launch a background task that stops idle warehouses every 60s.
+         This is the Snowflake model: you don't pay for idle compute.
+
+    Shutdown (on server stop):
+      Cancel the reaper.
+
+    The FastAPI app holds no state between these two moments — all warehouse
+    state lives in the in-memory dict (backed by DynamoDB) and the reaper task.
+    """
     log.info("Flashpoint gateway starting (cluster=%s, ttl=%ds)", CLUSTER, WAREHOUSE_TTL_S)
     _reconcile_mod.reconcile(warehouses, CLUSTER, WAREHOUSE_TTL_S)
     reaper = asyncio.create_task(
