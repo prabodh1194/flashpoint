@@ -144,5 +144,5 @@ class TestStopTasks:
         # should not raise
 
     def test_no_task_arn(self, mock_ecs):
-        ecs_tasks.stop_tasks({})
+        ecs_tasks.stop_tasks({"task_arn": None, "executor_arns": []})
         mock_ecs.stop_task.assert_not_called()

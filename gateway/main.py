@@ -119,15 +119,15 @@ def get_warehouse(warehouse_id: str):
     s = warehouses.get(warehouse_id)
     if not s:
         raise HTTPException(status_code=404, detail="warehouse not found")
-    task_arn = s.get("task_arn", "")
-    status = "running" if (task_arn and ecs_tasks.is_running(task_arn)) else s.get("status", "stopped")
+    task_arn = s["task_arn"]
+    status = "running" if (task_arn and ecs_tasks.is_running(task_arn)) else s["status"]
     return WarehouseResponse(
         warehouse_id=warehouse_id,
         task_arn=task_arn or None,
         endpoint=s.get("endpoint"),
         status=status,
-        size=s.get("size", "XS"),
-        executor_count=s.get("executor_count", 1),
+        size=s["size"],
+        executor_count=s["executor_count"],
         name=s.get("name"),
     )
 
@@ -142,7 +142,7 @@ def run_query(warehouse_id: str, req: QueryRequest):
     s = warehouses.get(warehouse_id)
     if not s:
         raise HTTPException(status_code=404, detail="warehouse not found")
-    if not ecs_tasks.is_running(s["task_arn"]):
+    if s["status"] != "running" or not ecs_tasks.is_running(s["task_arn"]):
         raise HTTPException(status_code=409, detail="warehouse not running")
 
     spark = spark_client.get(s["endpoint"], warehouse_id)
@@ -190,7 +190,7 @@ def delete_warehouse(warehouse_id: str):
     spark_client.drop(warehouse_id)
     ecs_tasks.stop_tasks(s)
     store.delete_warehouse(warehouse_id)
-    log.info("Deleted warehouse %s (driver + %d executors stopped)", warehouse_id, len(s.get("executor_arns") or []))
+    log.info("Deleted warehouse %s (driver + %d executors stopped)", warehouse_id, len(s["executor_arns"]))
 
 
 @app.post("/warehouses/{warehouse_id}/suspend", status_code=200)
@@ -198,7 +198,7 @@ def suspend_warehouse(warehouse_id: str):
     s = warehouses.get(warehouse_id)
     if not s:
         raise HTTPException(status_code=404, detail="warehouse not found")
-    if s.get("status") == "suspended":
+    if s["status"] == "suspended":
         return {"status": "suspended"}
     spark_client.drop(warehouse_id)
     ecs_tasks.stop_tasks(s)
@@ -213,15 +213,15 @@ def resume_warehouse(warehouse_id: str):
     s = warehouses.get(warehouse_id)
     if not s:
         raise HTTPException(status_code=404, detail="warehouse not found")
-    if s.get("status") == "running":
+    if s["status"] == "running":
         return WarehouseResponse(
-            warehouse_id=warehouse_id, task_arn=s.get("task_arn"),
+            warehouse_id=warehouse_id, task_arn=s["task_arn"],
             endpoint=s.get("endpoint"), status="running",
-            size=s.get("size", "XS"), executor_count=s.get("executor_count", 1),
+            size=s["size"], executor_count=s["executor_count"],
         )
 
-    size = s.get("size", "XS")
-    executor_count = SIZES.get(size, 1)
+    size = s["size"]
+    executor_count = SIZES[size]
     log.info("Resuming warehouse %s (size=%s)", warehouse_id, size)
 
     task_arn = ecs_tasks.run_driver_task()
@@ -250,14 +250,14 @@ def resize_warehouse(warehouse_id: str, req: ResizeRequest):
     s = warehouses.get(warehouse_id)
     if not s:
         raise HTTPException(status_code=404, detail="warehouse not found")
-    if s.get("status") != "running":
+    if s["status"] != "running":
         raise HTTPException(status_code=409, detail="warehouse is not running")
     if req.size not in SIZES:
         raise HTTPException(status_code=400, detail=f"unknown size {req.size!r}")
 
     new_count = SIZES[req.size]
-    current_count = s.get("executor_count", 1)
-    executor_arns: list[str] = list(s.get("executor_arns") or [])
+    current_count = s["executor_count"]
+    executor_arns: list[str] = list(s["executor_arns"])
     master_url = f"spark://{s['task_ip']}:7077"
 
     if new_count > current_count:

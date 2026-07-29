@@ -76,8 +76,8 @@ def is_running(task_arn: str) -> bool:
 
 
 def stop_tasks(warehouse_record: dict) -> None:
-    task_arn = warehouse_record.get("task_arn")
-    executor_arns = warehouse_record.get("executor_arns") or []
+    task_arn = warehouse_record["task_arn"]
+    executor_arns = warehouse_record["executor_arns"]
     for arn in ([task_arn] if task_arn else []) + executor_arns:
         try:
             ecs.stop_task(cluster=CLUSTER, task=arn)
