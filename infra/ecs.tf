@@ -137,6 +137,7 @@ resource "aws_ecs_task_definition" "driver" {
     ]
 
     environment = [
+      { name = "SPARK_ROLE",          value = "driver" },
       { name = "SPARK_DRIVER_MEMORY", value = "12g" }
     ]
 
@@ -172,14 +173,14 @@ resource "aws_ecs_task_definition" "executor" {
     name       = "spark-executor"
     image      = "${aws_ecr_repository.driver.repository_url}:20260602-1130"
     essential  = true
-    entryPoint = ["/opt/executor-entrypoint.sh"]
 
     portMappings = [
       { containerPort = 7337, protocol = "tcp" }
     ]
 
     environment = [
-      { name = "SPARK_EXECUTOR_CORES",  value = "2" },
+      { name = "SPARK_ROLE",           value = "executor" },
+      { name = "SPARK_EXECUTOR_CORES", value = "2" },
       { name = "SPARK_EXECUTOR_MEMORY", value = "6g" }
     ]
 

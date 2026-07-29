@@ -20,8 +20,7 @@ RUN echo "127.0.0.1 spark-driver" >> /etc/hosts
 ENV HOSTNAME=spark-driver
 
 COPY entrypoint.sh /opt/entrypoint.sh
-COPY executor-entrypoint.sh /opt/executor-entrypoint.sh
-RUN chmod +x /opt/entrypoint.sh /opt/executor-entrypoint.sh
+RUN chmod +x /opt/entrypoint.sh
 
 # gRPC | master RPC | master UI | driver RPC | block manager | driver UI (SQL REST API)
 EXPOSE 15002 7077 8080 7078 7337 4040
