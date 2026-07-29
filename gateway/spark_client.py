@@ -10,7 +10,7 @@ _cache: dict[str, SparkSession] = {}
 def get(endpoint: str, name: str) -> SparkSession:
     if name not in _cache:
         _cache[name] = (
-            SparkSession.builder.remote(endpoint).getOrCreate()
+            SparkSession.builder.remote(endpoint).getOrCreate()  # ty: ignore
         )
     return _cache[name]
 

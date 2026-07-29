@@ -51,28 +51,32 @@ def mock_store():
     """Replace store with an in-memory dict, simulating DynamoDB."""
     _db: dict[str, dict] = {}
 
-    def _get(name):
+    def _get(name: str) -> dict | None:
         return _db.get(name)
 
-    def _put(name, record):
-        _db[name] = {**record, "name": name}
+    def _put(name: str, item: dict) -> None:
+        _db[name] = {**item, "name": name}
 
-    def _update(name, status, **extra):
+    def _update(name: str, status: str, **extra) -> None:
         if name in _db:
             _db[name]["status"] = status
             _db[name].update(extra)
 
-    def _delete(name):
+    def _delete(name: str) -> None:
         _db.pop(name, None)
 
-    def _list():
+    def _list() -> list[dict]:
         return list(_db.values())
 
-    store.get_warehouse = _get
-    store.put_warehouse = _put
-    store.update_warehouse_status = _update
-    store.delete_warehouse = _delete
-    store.list_warehouses = _list
+    def _count_running() -> int:
+        return sum(1 for v in _db.values() if v.get("status") == "running")
+
+    store.get_warehouse = _get  # ty: ignore
+    store.put_warehouse = _put  # ty: ignore
+    store.update_warehouse_status = _update  # ty: ignore
+    store.delete_warehouse = _delete  # ty: ignore
+    store.list_warehouses = _list  # ty: ignore
+    store.count_running_warehouses = _count_running  # ty: ignore
 
     return _db
 

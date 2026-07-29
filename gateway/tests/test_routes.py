@@ -228,7 +228,9 @@ class TestSuspendResume:
         resp = client.post("/warehouses/my-wh/suspend")
         assert resp.status_code == 200
         assert resp.json()["status"] == "suspended"
-        assert store.get_warehouse("my-wh")["status"] == "suspended"
+        wh = store.get_warehouse("my-wh")
+        assert wh is not None
+        assert wh["status"] == "suspended"
 
     def test_suspend_already_suspended(self, client, mock_store):
         store.update_warehouse_status("my-wh", "suspended")
@@ -277,6 +279,7 @@ class TestResize:
         resp = client.post("/warehouses/my-wh/resize", json={"size": "M"})
         assert resp.status_code == 200
         wh = store.get_warehouse("my-wh")
+        assert wh is not None
         assert wh["executor_count"] == 4
         assert wh["size"] == "M"
 
@@ -284,6 +287,7 @@ class TestResize:
         resp = client.post("/warehouses/my-wh/resize", json={"size": "XS"})
         assert resp.status_code == 200
         wh = store.get_warehouse("my-wh")
+        assert wh is not None
         assert wh["executor_count"] == 1
         assert wh["size"] == "XS"
 

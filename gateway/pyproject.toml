@@ -32,3 +32,8 @@ pythonpath = ["."]
 source = ["."]
 omit = ["tests/*", ".venv/*"]
 
+[dependency-groups]
+dev = [
+    "ty>=0.0.64",
+]
+

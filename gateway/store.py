@@ -1,13 +1,12 @@
-"""DynamoDB-backed warehouse store — the durable replacement for the in-memory warehouses dict.
+"""DynamoDB-backed warehouse store.
 
-All writes go to DynamoDB first; the in-memory cache in main.py is rebuilt from DynamoDB on
-startup via reconcile(). Keeping the two stores consistent is the responsibility of the callers
-in main.py — every path that mutates a session (create, suspend, resume, resize, delete, reap)
-must call store.py before updating the local dict.
+The single source of truth for all warehouse state. Gateway instances
+read and write directly — there is no in-memory cache to keep in sync.
 """
 import os
 import time
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal
+from boto3.dynamodb.conditions import Attr
 
 import boto3
 
@@ -86,3 +85,17 @@ def get_warehouse(name: str) -> dict | None:
 def list_warehouses() -> list[dict]:
     resp = _table().scan()
     return [_from_ddb(item) for item in resp.get("Items", [])]
+
+
+def count_running_warehouses() -> int:
+    """Return the number of warehouses with status = 'running'.
+
+    Uses a DynamoDB scan with FilterExpression — the count only reads
+    matching items, not the full dataset. Scan is fine for the expected
+    scale (MAX_WAREHOUSES is ~3 in dev, maybe 10 in production).
+    """
+    resp = _table().scan(
+        FilterExpression=Attr("status").eq("running"),
+        Select="COUNT",
+    )
+    return resp.get("Count", 0)

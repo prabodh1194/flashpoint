@@ -8,6 +8,7 @@ picks up where it left off.
 Executors run on Fargate Spot; the driver runs on-demand so Spot
 reclamation never kills the whole warehouse.
 """
+import asyncio
 import hashlib
 import time
 import logging
@@ -83,9 +84,7 @@ def create_warehouse(req: CreateWarehouseRequest):
         raise HTTPException(status_code=400, detail=f"unknown size {req.size!r}")
     if store.get_warehouse(req.name) is not None:
         raise HTTPException(status_code=409, detail=f"warehouse {req.name!r} already exists")
-    all_wh = store.list_warehouses()
-    running = [w for w in all_wh if w.get("status") == "running"]
-    if len(running) >= MAX_WAREHOUSES:
+    if store.count_running_warehouses() >= MAX_WAREHOUSES:
         raise HTTPException(status_code=429, detail=f"warehouse cap reached ({MAX_WAREHOUSES} max)")
     name = req.name
     executor_count = SIZES[req.size]
@@ -312,10 +311,9 @@ def get_history_entry(query_id: str):
 
 @app.get("/healthz")
 def health():
-    all_wh = store.list_warehouses()
     return {
         "status": "ok",
-        "warehouses": len(all_wh),
+        "warehouses": store.count_running_warehouses(),
         "sessions_table": store._TABLE_NAME,
     }
 

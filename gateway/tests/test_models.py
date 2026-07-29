@@ -24,7 +24,7 @@ class TestCreateWarehouseRequest:
 
     def test_name_is_required(self):
         with pytest.raises(ValidationError):
-            CreateWarehouseRequest()
+            CreateWarehouseRequest()  # ty: ignore
 
     def test_name_cannot_be_empty(self):
         with pytest.raises(ValidationError):
