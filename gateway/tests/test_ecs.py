@@ -82,25 +82,18 @@ class TestIsRunning:
 
 class TestRunExecutorTasks:
     def test_launches_n_executors(self, mock_ecs):
-        call_count = 0
-        arns = [
-            'arn:exec-1',
-            'arn:exec-2',
-            'arn:exec-3',
-        ]
-
-        def side_effect(**kwargs):
-            nonlocal call_count
-            call_count += 1
-            return {
-                'tasks': [{'taskArn': arns[call_count - 1]}],
-                'failures': [],
-            }
-
-        mock_ecs.run_task.side_effect = side_effect
+        mock_ecs.run_task.return_value = {
+            'tasks': [
+                {'taskArn': 'arn:exec-1'},
+                {'taskArn': 'arn:exec-2'},
+                {'taskArn': 'arn:exec-3'},
+            ],
+            'failures': [],
+        }
         result = ecs_tasks.run_executor_tasks('spark://10.0.0.1:7077', 3)
         assert len(result) == 3
         assert result == ['arn:exec-1', 'arn:exec-2', 'arn:exec-3']
+        assert mock_ecs.run_task.call_args.kwargs['count'] == 3
 
     def test_uses_spot_capacity(self, mock_ecs):
         mock_ecs.run_task.return_value = {
@@ -124,14 +117,15 @@ class TestRunExecutorTasks:
         assert env['SPARK_MASTER_URL'] == 'spark://10.0.0.1:7077'
 
     def test_survives_partial_failures(self, mock_ecs):
-        responses = iter(
-            [
-                {'tasks': [{'taskArn': 'arn:ok-1'}], 'failures': []},
-                {'tasks': [], 'failures': [{'arn': '...', 'reason': 'capacity'}]},
-                {'tasks': [{'taskArn': 'arn:ok-2'}], 'failures': []},
-            ]
-        )
-        mock_ecs.run_task.side_effect = lambda **kw: next(responses)
+        mock_ecs.run_task.return_value = {
+            'tasks': [
+                {'taskArn': 'arn:ok-1'},
+                {'taskArn': 'arn:ok-2'},
+            ],
+            'failures': [
+                {'arn': 'arn:bad', 'reason': 'capacity'},
+            ],
+        }
         result = ecs_tasks.run_executor_tasks('spark://10.0.0.1:7077', 3)
         assert result == ['arn:ok-1', 'arn:ok-2']
 

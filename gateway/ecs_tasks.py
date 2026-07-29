@@ -42,34 +42,32 @@ def private_ip(task_arn: str) -> str:
 
 
 def run_executor_tasks(master_url: str, count: int) -> list[str]:
-    arns = []
-    for _ in range(count):
-        resp = ecs.run_task(
-            cluster=CLUSTER,
-            taskDefinition=EXECUTOR_TASK_DEF,
-            capacityProviderStrategy=[{'capacityProvider': 'FARGATE_SPOT', 'weight': 1}],
-            networkConfiguration={
-                'awsvpcConfiguration': {
-                    'subnets': SUBNETS,
-                    'securityGroups': [SECURITY_GROUP],
-                    'assignPublicIp': 'ENABLED',
+    """Launch `count` Fargate Spot executor tasks in a single RunTask call."""
+    resp = ecs.run_task(
+        count=count,
+        cluster=CLUSTER,
+        taskDefinition=EXECUTOR_TASK_DEF,
+        capacityProviderStrategy=[{'capacityProvider': 'FARGATE_SPOT', 'weight': 1}],
+        networkConfiguration={
+            'awsvpcConfiguration': {
+                'subnets': SUBNETS,
+                'securityGroups': [SECURITY_GROUP],
+                'assignPublicIp': 'ENABLED',
+            }
+        },
+        overrides={
+            'containerOverrides': [
+                {
+                    'name': 'spark-executor',
+                    'environment': [{'name': 'SPARK_MASTER_URL', 'value': master_url}],
                 }
-            },
-            overrides={
-                'containerOverrides': [
-                    {
-                        'name': 'spark-executor',
-                        'environment': [{'name': 'SPARK_MASTER_URL', 'value': master_url}],
-                    }
-                ]
-            },
-        )
-        failures = resp.get('failures', [])
-        if failures:
-            log.error('Executor RunTask failed: %s', failures)
-            continue
-        arns.append(resp['tasks'][0]['taskArn'])
-    return arns
+            ]
+        },
+    )
+    failures = resp.get('failures', [])
+    if failures:
+        log.error('Executor RunTask failures: %d/%d — %s', len(failures), count, failures)
+    return [t['taskArn'] for t in resp.get('tasks', [])]
 
 
 def is_running(task_arn: str) -> bool:
