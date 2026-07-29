@@ -86,3 +86,25 @@ def stop_tasks(warehouse_record: dict) -> None:
             ecs.stop_task(cluster=CLUSTER, task=arn)
         except Exception as exc:
             log.error('Failed to stop task %s: %s', arn, exc)
+
+
+def launch_driver_with_executors(
+    executor_count: int, grpc_port: int
+) -> tuple[str, str, str, list[str]]:
+    """Launch a Fargate driver + N Spot executors.
+
+    Returns (task_arn, ip, endpoint, executor_arns).
+    """
+    task_arn = run_driver_task()
+    log.info('Driver task launched: %s', task_arn)
+
+    wait_running(task_arn)
+    task_ip = private_ip(task_arn)
+    master_url = f'spark://{task_ip}:7077'
+    endpoint = f'sc://{task_ip}:{grpc_port}'
+    log.info('Driver ready — master=%s endpoint=%s', master_url, endpoint)
+
+    executor_arns = run_executor_tasks(master_url, executor_count)
+    log.info('Launched %d executor tasks (Spot): %s', len(executor_arns), executor_arns)
+
+    return task_arn, task_ip, endpoint, executor_arns

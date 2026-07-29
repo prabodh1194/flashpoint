@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 import dag
 import main
 import reconcile
+import routes_queries
 import spark_client
 import store
 
@@ -73,26 +74,26 @@ class TestSqlExecutionIds:
             ],
         )
         s = {'task_ip': '10.0.0.5'}
-        result = main._sql_execution_ids(s)
+        result = routes_queries._sql_execution_ids(s)
         assert result == {1, 2, 3}
 
     def test_caches_app_id(self, monkeypatch):
         monkeypatch.setattr(dag, '_ui_get', lambda ip, path: [{'id': 1}])
         s = {'task_ip': '10.0.0.5'}
-        main._sql_execution_ids(s)
+        routes_queries._sql_execution_ids(s)
         assert s['app_id'] is not None
 
     def test_uses_cached_app_id(self, monkeypatch):
         s = {'task_ip': '10.0.0.5', 'app_id': 'cached-app'}
         monkeypatch.setattr(dag, '_ui_get', lambda ip, path: [{'id': 1}])
-        main._sql_execution_ids(s)
+        routes_queries._sql_execution_ids(s)
 
     def test_returns_empty_on_error(self, monkeypatch):
         monkeypatch.setattr(
             dag, '_ui_get', lambda ip, path: (_ for _ in ()).throw(Exception('fail'))
         )
         s = {'task_ip': '10.0.0.5'}
-        result = main._sql_execution_ids(s)
+        result = routes_queries._sql_execution_ids(s)
         assert result == set()
 
 
@@ -100,7 +101,7 @@ class TestFetchQueryDag:
     def test_returns_none_when_no_app_id(self, monkeypatch):
         s = {'task_ip': '10.0.0.5'}
         monkeypatch.setattr(dag, 'resolve_app_id', lambda ip: None)
-        result = main._fetch_query_dag(s, set())
+        result = routes_queries._fetch_query_dag(s, set())
         assert result is None
 
     def test_returns_dag_when_new_execution_found(self, monkeypatch):
@@ -114,7 +115,7 @@ class TestFetchQueryDag:
             return [{'id': 99, 'status': 'COMPLETED'}]
 
         monkeypatch.setattr(dag, '_ui_get', mock_ui)
-        result = main._fetch_query_dag(s, {98})
+        result = routes_queries._fetch_query_dag(s, {98})
         assert result is not None
         assert len(result['nodes']) == 1
 
@@ -123,7 +124,7 @@ class TestFetchQueryDag:
         monkeypatch.setattr(
             dag, '_ui_get', lambda ip, path: (_ for _ in ()).throw(Exception('boom'))
         )
-        result = main._fetch_query_dag(s, set())
+        result = routes_queries._fetch_query_dag(s, set())
         assert result is None
 
 

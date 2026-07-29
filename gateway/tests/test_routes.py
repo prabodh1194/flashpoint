@@ -3,26 +3,27 @@ from unittest.mock import MagicMock
 import pytest
 
 import ecs_tasks
-import main
+import routes_queries
+import routes_warehouses
 import spark_client
+import state
 import store
 
 
 @pytest.fixture(autouse=True)
 def reset_state(mock_store):
     mock_store.clear()
-    main.query_history.clear()
+    state.query_history.clear()
     spark_client._cache.clear()
 
 
 @pytest.fixture
 def mock_create_warehouse_deps(monkeypatch, mock_ecs):
-    monkeypatch.setattr(ecs_tasks, 'run_driver_task', lambda: 'arn:driver-1')
-    monkeypatch.setattr(ecs_tasks, 'wait_running', lambda arn: None)
-    monkeypatch.setattr(ecs_tasks, 'private_ip', lambda arn: '10.0.0.5')
-    monkeypatch.setattr(
-        ecs_tasks, 'run_executor_tasks', lambda url, count: [f'arn:exec-{i}' for i in range(count)]
-    )
+    def _launch(executor_count, grpc_port):
+        arns = [f'arn:exec-{i}' for i in range(executor_count)]
+        return 'arn:driver-1', '10.0.0.5', 'sc://10.0.0.5:15002', arns
+
+    monkeypatch.setattr(ecs_tasks, 'launch_driver_with_executors', _launch)
 
 
 class TestHealthz:
@@ -58,7 +59,12 @@ class TestCreateWarehouse:
         assert resp.status_code == 400
 
     def test_warehouse_cap(self, client, monkeypatch, mock_store):
-        monkeypatch.setattr(main, 'MAX_WAREHOUSES', 1)
+        monkeypatch.setattr(routes_warehouses, 'MAX_WAREHOUSES', 1)
+        monkeypatch.setattr(
+            ecs_tasks,
+            'launch_driver_with_executors',
+            lambda executor_count, grpc_port: ('arn:x', '10.0.0.1', 'sc://10.0.0.1:15002', []),
+        )
         store.put_warehouse(
             'existing',
             {
@@ -193,8 +199,8 @@ class TestRunQuery:
         mock_df.collect.return_value = [['1', 'alice']]
         mock_spark.sql.return_value = mock_df
         monkeypatch.setattr(spark_client, 'get', lambda endpoint, name: mock_spark)
-        monkeypatch.setattr(main, '_sql_execution_ids', lambda s: set())
-        monkeypatch.setattr(main, '_fetch_query_dag', lambda s, b: None)
+        monkeypatch.setattr(routes_queries, '_sql_execution_ids', lambda s: set())
+        monkeypatch.setattr(routes_queries, '_fetch_query_dag', lambda s, b: None)
 
         resp = client.post('/warehouses/my-wh/query', json={'sql': 'SELECT 1'})
         assert resp.status_code == 200
@@ -227,7 +233,7 @@ class TestRunQuery:
         mock_spark = MagicMock()
         mock_spark.sql.side_effect = Exception('table not found: bad_table')
         monkeypatch.setattr(spark_client, 'get', lambda endpoint, name: mock_spark)
-        monkeypatch.setattr(main, '_sql_execution_ids', lambda s: set())
+        monkeypatch.setattr(routes_queries, '_sql_execution_ids', lambda s: set())
 
         resp = client.post('/warehouses/my-wh/query', json={'sql': 'SELECT * FROM bad_table'})
         assert resp.status_code == 400
@@ -236,11 +242,11 @@ class TestRunQuery:
         mock_spark = MagicMock()
         mock_spark.sql.side_effect = Exception('fail')
         monkeypatch.setattr(spark_client, 'get', lambda endpoint, name: mock_spark)
-        monkeypatch.setattr(main, '_sql_execution_ids', lambda s: set())
+        monkeypatch.setattr(routes_queries, '_sql_execution_ids', lambda s: set())
 
         client.post('/warehouses/my-wh/query', json={'sql': 'bad'})
-        assert len(main.query_history) == 1
-        assert main.query_history[0]['status'] == 'failed'
+        assert len(state.query_history) == 1
+        assert state.query_history[0]['status'] == 'failed'
 
 
 class TestDeleteWarehouse:
@@ -304,13 +310,15 @@ class TestSuspendResume:
 
     def test_resume(self, client, monkeypatch, mock_store):
         store.update_warehouse_status('my-wh', 'suspended')
-        monkeypatch.setattr(ecs_tasks, 'run_driver_task', lambda: 'arn:new-driver')
-        monkeypatch.setattr(ecs_tasks, 'wait_running', lambda arn: None)
-        monkeypatch.setattr(ecs_tasks, 'private_ip', lambda arn: '10.0.0.6')
         monkeypatch.setattr(
             ecs_tasks,
-            'run_executor_tasks',
-            lambda url, count: [f'arn:new-exec-{i}' for i in range(count)],
+            'launch_driver_with_executors',
+            lambda executor_count, grpc_port: (
+                'arn:new-driver',
+                '10.0.0.6',
+                'sc://10.0.0.6:15002',
+                [f'arn:new-exec-{i}' for i in range(executor_count)],
+            ),
         )
 
         resp = client.post('/warehouses/my-wh/resume')
@@ -382,7 +390,7 @@ class TestHistory:
         assert data['count'] == 0
 
     def test_with_entries(self, client):
-        main.query_history.append(
+        state.query_history.append(
             {
                 'query_id': 'abc123',
                 'sql': 'SELECT 1',
@@ -399,7 +407,7 @@ class TestHistory:
         assert len(data['history']) == 1
 
     def test_history_entry_found(self, client):
-        main.query_history.append({'query_id': 'abc', 'sql': 'SELECT 1'})
+        state.query_history.append({'query_id': 'abc', 'sql': 'SELECT 1'})
         resp = client.get('/history/abc')
         assert resp.status_code == 200
 

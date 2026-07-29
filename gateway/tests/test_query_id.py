@@ -1,4 +1,4 @@
-from main import _query_id
+from routes_queries import _query_id
 
 
 def test_query_id_is_16_chars():
