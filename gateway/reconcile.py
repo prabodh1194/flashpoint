@@ -1,4 +1,16 @@
-"""Startup reconciliation and idle warehouse reaping."""
+"""Startup reconciliation and idle warehouse reaping.
+
+The gateway keeps warehouse state in two places:
+  - In-memory (fast, lost on gateway restart)
+  - DynamoDB (durable, survives restarts)
+
+When the gateway boots, memory is empty but DynamoDB has old records — and
+real Fargate tasks may still be running, burning money with nobody tracking them.
+Reconcile fixes this; see reconcile() below.
+
+The reaper runs in the background every 60s, stopping warehouses that exceed
+their TTL. This is the Snowflake model: you don't pay for idle compute.
+"""
 import asyncio
 import time
 import logging
@@ -9,7 +21,17 @@ log = logging.getLogger(__name__)
 
 
 def reconcile(warehouses: dict, cluster: str, warehouse_ttl_s: int) -> None:
-    """Rebuild in-memory warehouse cache from DynamoDB + live ECS state."""
+    """Rebuild the in-memory warehouse cache from DynamoDB + live ECS state.
+
+    Runs once at gateway startup. Three outcomes per warehouse:
+
+    1. Driver alive → restore to memory (normal case after gateway restart)
+    2. Driver dead → mark "suspended" in DynamoDB, kill leftover executors
+    3. Suspended → skip (no tasks should exist)
+
+    Also cleans up orphaned ECS tasks — Fargate containers running with no
+    corresponding DynamoDB record. These are runaway-cost bugs and must be killed.
+    """
     try:
         db_warehouses = store.list_warehouses()
         db_arns = {
@@ -64,7 +86,17 @@ def reconcile(warehouses: dict, cluster: str, warehouse_ttl_s: int) -> None:
 
 
 async def reap_idle_warehouses(warehouses: dict, spark_client, warehouse_ttl_s: int, cluster: str):
-    """Background task: stop warehouses that exceed the TTL."""
+    """Background task — stops warehouses that have been idle too long.
+
+    Runs every 60s forever. For each warehouse in memory:
+      - If created_at is older than warehouse_ttl_s (default 2 hours)
+      - → drop the Spark Connect session
+      - → stop all Fargate tasks (driver + executors)
+      - → mark "suspended" in DynamoDB
+
+    This is the Snowflake warehouse model: you don't pay for idle compute.
+    The warehouse resumes on the next query (cold start).
+    """
     while True:
         await asyncio.sleep(60)
         now = time.time()
