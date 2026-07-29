@@ -30,13 +30,13 @@ export function Worksheet() {
   // Clean up session when unmounting
   useEffect(() => {
     return () => {
-      if (session) deleteWarehouse(session.session_id).catch(() => {})
+      if (session) deleteWarehouse(session.name).catch(() => {})
     }
   }, [session])
 
   const disconnect = async () => {
     if (!session) return
-    await deleteWarehouse(session.session_id).catch(() => {})
+    await deleteWarehouse(session.name).catch(() => {})
     setSession(null)
     setResults(null)
     setProfile(null)
@@ -62,7 +62,7 @@ export function Worksheet() {
         }
       }
 
-      const result = await runQuery(activeWarehouse.session_id, sql.trim())
+      const result = await runQuery(activeWarehouse.name, sql.trim())
       setStats({
         duration: result.duration_ms,
         rows: result.row_count,

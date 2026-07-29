@@ -46,14 +46,14 @@ def _from_ddb(v):
 
 # --- Commands ---
 
-def put_warehouse(warehouse_id: str, item: dict) -> None:
+def put_warehouse(name: str, item: dict) -> None:
     """Write (or overwrite) a complete session record to DynamoDB."""
-    record = {"warehouse_id": warehouse_id, "updated_at": Decimal(str(time.time()))}
+    record = {"name": name, "updated_at": Decimal(str(time.time()))}
     record.update(_to_ddb(item))
     _table().put_item(Item=record)
 
 
-def update_warehouse_status(warehouse_id: str, status: str, **extra) -> None:
+def update_warehouse_status(name: str, status: str, **extra) -> None:
     """Update status + optional extra fields without overwriting the whole record."""
     expr_parts = ["#st = :status", "updated_at = :ts"]
     names = {"#st": "status"}
@@ -63,22 +63,22 @@ def update_warehouse_status(warehouse_id: str, status: str, **extra) -> None:
         names[f"#{k}"] = k
         values[f":{k}"] = _to_ddb(v)
     _table().update_item(
-        Key={"warehouse_id": warehouse_id},
+        Key={"name": name},
         UpdateExpression="SET " + ", ".join(expr_parts),
         ExpressionAttributeNames=names,
         ExpressionAttributeValues=values,
     )
 
 
-def delete_warehouse(warehouse_id: str) -> None:
+def delete_warehouse(name: str) -> None:
     """Remove a warehouse record from DynamoDB permanently."""
-    _table().delete_item(Key={"warehouse_id": warehouse_id})
+    _table().delete_item(Key={"name": name})
 
 
 # --- Queries ---
 
-def get_warehouse(warehouse_id: str) -> dict | None:
-    resp = _table().get_item(Key={"warehouse_id": warehouse_id})
+def get_warehouse(name: str) -> dict | None:
+    resp = _table().get_item(Key={"name": name})
     item = resp.get("Item")
     return _from_ddb(item) if item else None
 

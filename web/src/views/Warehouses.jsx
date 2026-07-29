@@ -1,47 +1,33 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Zap, Play, Square, ChevronDown, Loader, RefreshCw } from 'lucide-react'
+import { Zap, Play, Square, ChevronDown, Loader, RefreshCw, Plus } from 'lucide-react'
 import { listWarehouses, createWarehouse, deleteWarehouse, suspendWarehouse, resumeWarehouse, resizeWarehouse, fetchHistory } from '../api'
 
-// Warehouse name registry — persisted to localStorage so names survive page reloads.
-// Maps session_id -> { name, size, createdAt }
-const REGISTRY_KEY = 'fp-warehouses'
 const SIZES = ['XS', 'S', 'M', 'L', 'XL']
 const EXECUTOR_COUNTS = { XS: 1, S: 2, M: 4, L: 8, XL: 16 }
 const HOURLY_RATE = { XS: 0.08, S: 0.16, M: 0.32, L: 0.64, XL: 1.28 }
-
-function loadRegistry() {
-  try { return JSON.parse(localStorage.getItem(REGISTRY_KEY) || '{}') } catch { return {} }
-}
-function saveRegistry(r) { localStorage.setItem(REGISTRY_KEY, JSON.stringify(r)) }
-
-let _whCounter = Object.keys(loadRegistry()).length + 1
 
 export function Warehouses() {
   const [warehouses, setWarehouses] = useState([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
   const [newSize, setNewSize] = useState('XS')
+  const [newName, setNewName] = useState('')
   const [showSizePicker, setShowSizePicker] = useState(false)
-  const [queryCounts, setQueryCounts] = useState({})  // session_id -> count
+  const [queryCounts, setQueryCounts] = useState({})
 
   const refresh = useCallback(async () => {
     setLoading(true)
     try {
-      const [sessionsResp, histResp] = await Promise.all([
-        listWarehouses().catch(() => ({ sessions: [] })),
+      const [whResp, histResp] = await Promise.all([
+        listWarehouses().catch(() => ({ warehouses: [] })),
         fetchHistory().catch(() => ({ history: [] })),
       ])
-      const registry = loadRegistry()
       const counts = {}
       for (const e of histResp.history) {
-        counts[e.session_id] = (counts[e.session_id] || 0) + 1
+        counts[e.name] = (counts[e.name] || 0) + 1
       }
       setQueryCounts(counts)
-      const whs = sessionsResp.sessions.map(sid => {
-        const reg = registry[sid] || { name: `wh-${sid.slice(0, 6)}`, size: 'XS', createdAt: Date.now() }
-        return { session_id: sid, ...reg, status: 'running' }
-      })
-      setWarehouses(whs)
+      setWarehouses(whResp.warehouses || [])
     } finally {
       setLoading(false)
     }
@@ -50,14 +36,13 @@ export function Warehouses() {
   useEffect(() => { refresh() }, [refresh])
 
   const createNew = async (size) => {
+    const name = newName.trim()
+    if (!name) return
     setCreating(true)
     setShowSizePicker(false)
     try {
-      const session = await createWarehouse(size)
-      const registry = loadRegistry()
-      const name = `wh-${_whCounter++}`
-      registry[session.session_id] = { name, size, createdAt: Date.now() }
-      saveRegistry(registry)
+      await createWarehouse(name, size)
+      setNewName('')
       await refresh()
     } catch (err) {
       alert(`Failed to start warehouse: ${err.message}`)
@@ -66,47 +51,23 @@ export function Warehouses() {
     }
   }
 
-  const suspend = async (sid) => {
-    setWarehouses(ws => ws.map(w => w.session_id === sid ? { ...w, status: 'stopping' } : w))
-    try {
-      await suspendWarehouse(sid)
-      await refresh()
-    } catch {
-      await refresh()
-    }
+  const suspend = async (name) => {
+    setWarehouses(ws => ws.map(w => w.name === name ? { ...w, status: 'stopping' } : w))
+    try { await suspendWarehouse(name); await refresh() } catch { await refresh() }
   }
 
-  const resume = async (sid) => {
-    setWarehouses(ws => ws.map(w => w.session_id === sid ? { ...w, status: 'resuming' } : w))
-    try {
-      await resumeWarehouse(sid)
-      await refresh()
-    } catch (err) {
-      alert(`Failed to resume: ${err.message}`)
-      await refresh()
-    }
+  const resume = async (name) => {
+    setWarehouses(ws => ws.map(w => w.name === name ? { ...w, status: 'resuming' } : w))
+    try { await resumeWarehouse(name); await refresh() } catch (err) { alert(`Failed to resume: ${err.message}`); await refresh() }
   }
 
-  const destroy = async (sid) => {
-    setWarehouses(ws => ws.map(w => w.session_id === sid ? { ...w, status: 'stopping' } : w))
-    try {
-      await deleteWarehouse(sid)
-      const registry = loadRegistry()
-      delete registry[sid]
-      saveRegistry(registry)
-      await refresh()
-    } catch {
-      await refresh()
-    }
+  const destroy = async (name) => {
+    setWarehouses(ws => ws.map(w => w.name === name ? { ...w, status: 'stopping' } : w))
+    try { await deleteWarehouse(name); await refresh() } catch { await refresh() }
   }
 
-  const resize = async (sid, size) => {
-    try {
-      await resizeWarehouse(sid, size)
-      await refresh()
-    } catch (err) {
-      alert(`Failed to resize: ${err.message}`)
-    }
+  const resize = async (name, size) => {
+    try { await resizeWarehouse(name, size); await refresh() } catch (err) { alert(`Failed to resize: ${err.message}`) }
   }
 
   return (
@@ -117,16 +78,23 @@ export function Warehouses() {
           <button style={s.refreshBtn} onClick={refresh} title="Refresh">
             <RefreshCw size={13} />
           </button>
-          <div style={{ position: 'relative' }}>
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input
+              type="text"
+              placeholder="Warehouse name"
+              value={newName}
+              onChange={e => setNewName(e.target.value)}
+              style={s.nameInput}
+            />
             <button
               style={{ ...s.createBtn, ...(creating ? s.createBtnBusy : {}) }}
               onClick={() => !creating && setShowSizePicker(p => !p)}
-              disabled={creating}
+              disabled={creating || !newName.trim()}
             >
               {creating
                 ? <Loader size={13} style={{ animation: 'spin 1s linear infinite' }} />
-                : <Zap size={13} />}
-              {creating ? 'Starting…' : 'New Warehouse'}
+                : <Plus size={13} />}
+              {creating ? 'Starting…' : 'Create'}
               {!creating && <ChevronDown size={12} />}
             </button>
             {showSizePicker && (
@@ -148,19 +116,19 @@ export function Warehouses() {
       ) : warehouses.length === 0 ? (
         <div style={s.empty}>
           <p style={s.emptyText}>No warehouses running.</p>
-          <p style={s.emptyHint}>Click "New Warehouse" to provision a Fargate Spark cluster.</p>
+          <p style={s.emptyHint}>Give it a name, pick a size, and hit Create.</p>
         </div>
       ) : (
         <div style={s.grid}>
           {warehouses.map(wh => (
             <WarehouseCard
-              key={wh.session_id}
+              key={wh.name}
               wh={wh}
-              queryCount={queryCounts[wh.session_id] || 0}
-              onSuspend={() => suspend(wh.session_id)}
-              onResume={() => resume(wh.session_id)}
-              onDestroy={() => destroy(wh.session_id)}
-              onResize={(size) => resize(wh.session_id, size)}
+              queryCount={queryCounts[wh.name] || 0}
+              onSuspend={() => suspend(wh.name)}
+              onResume={() => resume(wh.name)}
+              onDestroy={() => destroy(wh.name)}
+              onResize={(size) => resize(wh.name, size)}
             />
           ))}
         </div>
@@ -209,7 +177,7 @@ function WarehouseCard({ wh, queryCount, onSuspend, onResume, onDestroy, onResiz
 
       <div style={s.cardMeta}>
         <MetaPair label="Size" value={wh.size} mono />
-        <MetaPair label="Executors" value={isRunning ? `${EXECUTOR_COUNTS[wh.size] ?? '?'} active` : '—'} />
+        <MetaPair label="Executors" value={isRunning ? `${wh.executor_count ?? EXECUTOR_COUNTS[wh.size] ?? '?'} active` : '—'} />
         <MetaPair label="Queries run" value={String(queryCount)} mono />
         <MetaPair label="Rate" value={`$${HOURLY_RATE[wh.size]?.toFixed(2) ?? '?'}/hr`} mono />
       </div>
@@ -230,11 +198,6 @@ function WarehouseCard({ wh, queryCount, onSuspend, onResume, onDestroy, onResiz
           )}
         </div>
       )}
-
-      <div style={s.idRow}>
-        <span style={s.sessionLabel}>Session</span>
-        <span style={s.sessionId}>{wh.session_id.slice(0, 8)}…</span>
-      </div>
     </div>
   )
 }
@@ -266,18 +229,25 @@ function MetaPair({ label, value, mono }) {
 
 const s = {
   root: { flex: 1, padding: 24, overflow: 'auto' },
-  header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
+  header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 8 },
   title: { fontSize: 15, fontWeight: 500, color: 'var(--text-primary)' },
   refreshBtn: {
     width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
     background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
     cursor: 'pointer', color: 'var(--text-dim)',
   },
+  nameInput: {
+    height: 30, padding: '0 8px', width: 160,
+    background: 'var(--bg-surface)', border: '1px solid var(--border)',
+    borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)',
+    fontSize: 12, fontFamily: 'var(--font-mono)',
+    outline: 'none',
+  },
   createBtn: {
     display: 'flex', alignItems: 'center', gap: 6, height: 30, padding: '0 12px',
     background: 'var(--amber-bg)', border: '1px solid var(--amber-border)',
     borderRadius: 'var(--radius-sm)', cursor: 'pointer', color: 'var(--amber)',
-    fontSize: 12, fontFamily: 'var(--font-ui)', fontWeight: 500,
+    fontSize: 12, fontFamily: 'var(--font-ui)', fontWeight: 500, whiteSpace: 'nowrap',
   },
   createBtnBusy: { opacity: 0.7, cursor: 'not-allowed' },
   sizeMenu: {
@@ -343,9 +313,6 @@ const s = {
   metaPair: { display: 'flex', flexDirection: 'column', gap: 1 },
   metaLabel: { fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-dim)' },
   metaVal: { fontSize: 12, color: 'var(--text-primary)' },
-  idRow: { display: 'flex', alignItems: 'center', gap: 8, borderTop: '1px solid var(--border-dim)', paddingTop: 10 },
-  sessionLabel: { fontSize: 10, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em' },
-  sessionId: { fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-dim)' },
   empty: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, gap: 8, minHeight: 200 },
   emptyText: { fontSize: 13, color: 'var(--text-secondary)' },
   emptyHint: { fontSize: 12, color: 'var(--text-dim)' },

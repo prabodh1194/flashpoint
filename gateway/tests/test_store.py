@@ -84,7 +84,7 @@ class TestRoundTrip:
 
     def test_complex_nested(self):
         original = {
-            "warehouse_id": "abc-123",
+            "name": "abc-123",
             "task_ip": "10.0.0.5",
             "created_at": 1717200000.0,
             "executor_arns": ["arn:1", "arn:2"],
@@ -110,7 +110,7 @@ class TestPutSession:
         put_warehouse("s1", {"task_arn": "arn:test", "status": "running"})
         mock_table.put_item.assert_called_once()
         item = mock_table.put_item.call_args.kwargs["Item"]
-        assert item["warehouse_id"] == "s1"
+        assert item["name"] == "s1"
         assert item["task_arn"] == "arn:test"
         assert item["status"] == "running"
         assert "updated_at" in item
@@ -123,7 +123,7 @@ class TestUpdateSessionStatus:
         update_warehouse_status("s1", "suspended", task_arn=None, executor_arns=[], task_ip=None)
         mock_table.update_item.assert_called_once()
         kwargs = mock_table.update_item.call_args.kwargs
-        assert kwargs["Key"] == {"warehouse_id": "s1"}
+        assert kwargs["Key"] == {"name": "s1"}
         assert ":status" in kwargs["ExpressionAttributeValues"]
 
 
@@ -132,7 +132,7 @@ class TestDeleteSession:
         mock_table = MagicMock()
         monkeypatch.setattr(store, "_table", lambda: mock_table)
         delete_warehouse("s1")
-        mock_table.delete_item.assert_called_once_with(Key={"warehouse_id": "s1"})
+        mock_table.delete_item.assert_called_once_with(Key={"name": "s1"})
 
 
 class TestGetSession:
@@ -141,7 +141,7 @@ class TestGetSession:
         mock_table = MagicMock()
         mock_table.get_item.return_value = {
             "Item": {
-                "warehouse_id": "s1",
+                "name": "s1",
                 "task_arn": "arn:test",
                 "status": "running",
                 "created_at": Decimal("1717200000"),
@@ -150,7 +150,7 @@ class TestGetSession:
         monkeypatch.setattr(store, "_table", lambda: mock_table)
         result = get_warehouse("s1")
         assert result is not None
-        assert result["warehouse_id"] == "s1"
+        assert result["name"] == "s1"
         assert result["task_arn"] == "arn:test"
         assert result["created_at"] == 1717200000
 
@@ -167,14 +167,14 @@ class TestListSessions:
         mock_table = MagicMock()
         mock_table.scan.return_value = {
             "Items": [
-                {"warehouse_id": "s1", "status": "running"},
-                {"warehouse_id": "s2", "status": "suspended"},
+                {"name": "s1", "status": "running"},
+                {"name": "s2", "status": "suspended"},
             ]
         }
         monkeypatch.setattr(store, "_table", lambda: mock_table)
         result = list_warehouses()
         assert len(result) == 2
-        assert result[0]["warehouse_id"] == "s1"
+        assert result[0]["name"] == "s1"
 
     def test_returns_empty_list(self, monkeypatch):
         mock_table = MagicMock()

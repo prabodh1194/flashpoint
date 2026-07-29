@@ -1,19 +1,27 @@
 """Pydantic API models for the Flashpoint gateway."""
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class CreateWarehouseRequest(BaseModel):
+    name: str
     size: str = "XS"
+
+    @field_validator("name")
+    @classmethod
+    def name_must_not_be_blank(cls, v: str) -> str:
+        trimmed = v.strip()
+        if not trimmed:
+            raise ValueError("warehouse name must not be blank")
+        return trimmed
 
 
 class WarehouseResponse(BaseModel):
-    warehouse_id: str
+    name: str
     task_arn: str | None = None
     endpoint: str | None = None
     status: str
     size: str = "XS"
     executor_count: int = 1
-    name: str | None = None
 
 
 class QueryRequest(BaseModel):

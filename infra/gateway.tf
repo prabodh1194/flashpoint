@@ -87,7 +87,7 @@ resource "aws_iam_role_policy" "gateway_ecs" {
           "dynamodb:BatchWriteItem",
         ]
         Resource = [
-          aws_dynamodb_table.sessions.arn,
+          aws_dynamodb_table.warehouses.arn,
           aws_dynamodb_table.meters.arn,
         ]
       },
@@ -127,7 +127,7 @@ resource "aws_instance" "gateway" {
     security_group     = aws_security_group.spark_task.id
     region             = var.region
     branch             = var.gateway_branch
-    warehouses_table     = aws_dynamodb_table.sessions.name
+    warehouses_table     = aws_dynamodb_table.warehouses.name
     meters_table       = aws_dynamodb_table.meters.name
   }))
 

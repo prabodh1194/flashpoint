@@ -152,14 +152,14 @@ class TestGetSpark:
 class TestReconcile:
     def test_reconcile_skips_suspended_sessions(self, monkeypatch, mock_ecs):
         monkeypatch.setattr(main.store, "list_warehouses", lambda: [
-            {"warehouse_id": "s1", "task_arn": "arn:old", "status": "suspended"},
+            {"name": "s1", "task_arn": "arn:old", "status": "suspended"},
         ])
         reconcile.reconcile(main.warehouses, main.CLUSTER, main.WAREHOUSE_TTL_S)
         # suspended sessions are skipped — nothing to clean up
 
     def test_reconcile_rebuilds_live_sessions(self, monkeypatch, mock_ecs):
         monkeypatch.setattr(main.store, "list_warehouses", lambda: [
-            {"warehouse_id": "s1", "task_arn": "arn:live", "status": "running",
+            {"name": "s1", "task_arn": "arn:live", "status": "running",
              "executor_arns": [], "task_ip": "10.0.0.5", "endpoint": "sc://10.0.0.5:15002"},
         ])
         mock_ecs.get_paginator.return_value.paginate.return_value = [
@@ -171,7 +171,7 @@ class TestReconcile:
 
     def test_reconcile_suspends_dead_driver(self, monkeypatch, mock_ecs):
         monkeypatch.setattr(main.store, "list_warehouses", lambda: [
-            {"warehouse_id": "s1", "task_arn": "arn:dead", "status": "running",
+            {"name": "s1", "task_arn": "arn:dead", "status": "running",
              "executor_arns": [], "task_ip": "10.0.0.5"},
         ])
         monkeypatch.setattr(main.store, "update_warehouse_status", lambda *a, **kw: None)

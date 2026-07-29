@@ -1,10 +1,10 @@
-resource "aws_dynamodb_table" "sessions" {
-  name         = "${local.prefix}-sessions"
+resource "aws_dynamodb_table" "warehouses" {
+  name         = "${local.prefix}-warehouses"
   billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "session_id"
+  hash_key     = "name"
 
   attribute {
-    name = "session_id"
+    name = "name"
     type = "S"
   }
 

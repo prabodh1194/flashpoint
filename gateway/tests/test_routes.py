@@ -33,35 +33,40 @@ class TestHealthz:
 class TestCreateWarehouse:
     def test_creates_session_default_xs(self, client, mock_create_warehouse_deps, monkeypatch):
         monkeypatch.setattr(ecs_tasks, "run_executor_tasks", lambda url, n: [f"arn:exec-{i}" for i in range(n)])
-        monkeypatch.setattr(main.store, "put_warehouse", lambda wid, record: None)
+        monkeypatch.setattr(main.store, "put_warehouse", lambda name, record: None)
 
-        resp = client.post("/warehouses", json={})
+        resp = client.post("/warehouses", json={"name": "test-wh"})
         assert resp.status_code == 201
         data = resp.json()
-        assert "warehouse_id" in data
+        assert "name" in data
         assert data["status"] == "running"
         assert data["size"] == "XS"
         assert data["executor_count"] == 1
         assert data["endpoint"] == "sc://10.0.0.5:15002"
 
     def test_creates_session_custom_size(self, client, mock_create_warehouse_deps, monkeypatch):
-        monkeypatch.setattr(main.store, "put_warehouse", lambda wid, record: None)
+        monkeypatch.setattr(main.store, "put_warehouse", lambda name, record: None)
 
-        resp = client.post("/warehouses", json={"size": "M"})
+        resp = client.post("/warehouses", json={"name": "test-wh", "size": "M"})
         assert resp.status_code == 201
         data = resp.json()
         assert data["size"] == "M"
         assert data["executor_count"] == 4
 
     def test_rejects_unknown_size(self, client):
-        resp = client.post("/warehouses", json={"size": "XXL"})
+        resp = client.post("/warehouses", json={"name": "bad", "size": "XXL"})
         assert resp.status_code == 400
 
     def test_session_cap(self, client, monkeypatch):
         monkeypatch.setattr(main, "MAX_WAREHOUSES", 1)
         main.warehouses["existing"] = {"task_arn": "arn:existing"}
-        resp = client.post("/warehouses", json={})
+        resp = client.post("/warehouses", json={"name": "test-wh"})
         assert resp.status_code == 429
+
+    def test_rejects_duplicate_name(self, client):
+        main.warehouses["existing"] = {"task_arn": "arn:existing", "status": "running"}
+        resp = client.post("/warehouses", json={"name": "existing", "size": "XS"})
+        assert resp.status_code == 409
 
 
 class TestListSessions:
@@ -73,8 +78,8 @@ class TestListSessions:
         assert data["count"] == 0
 
     def test_with_sessions(self, client):
-        main.warehouses["s1"] = {"task_arn": "arn:1"}
-        main.warehouses["s2"] = {"task_arn": "arn:2"}
+        main.warehouses["s1"] = {"task_arn": "arn:1", "status": "running", "size": "XS", "executor_count": 1}
+        main.warehouses["s2"] = {"task_arn": "arn:2", "status": "running", "size": "S", "executor_count": 2}
         resp = client.get("/warehouses")
         assert resp.status_code == 200
         data = resp.json()
@@ -96,7 +101,7 @@ class TestGetSession:
         resp = client.get("/warehouses/s1")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["warehouse_id"] == "s1"
+        assert data["name"] == "s1"
         assert data["status"] == "running"
 
     def test_not_found(self, client):
@@ -176,9 +181,9 @@ class TestRunQuery:
 
 class TestDeleteSession:
     def test_deletes_session(self, client, monkeypatch):
-        monkeypatch.setattr(spark_client, "drop", lambda wid: None)
+        monkeypatch.setattr(spark_client, "drop", lambda name: None)
         monkeypatch.setattr(ecs_tasks, "stop_tasks", lambda s: None)
-        monkeypatch.setattr(main.store, "delete_warehouse", lambda wid: None)
+        monkeypatch.setattr(main.store, "delete_warehouse", lambda name: None)
         main.warehouses["s1"] = {"task_arn": "arn:d", "executor_arns": []}
 
         resp = client.delete("/warehouses/s1")
@@ -193,10 +198,10 @@ class TestDeleteSession:
 class TestSuspendResume:
     @pytest.fixture(autouse=True)
     def setup(self, monkeypatch):
-        monkeypatch.setattr(spark_client, "drop", lambda wid: None)
+        monkeypatch.setattr(spark_client, "drop", lambda name: None)
         monkeypatch.setattr(ecs_tasks, "stop_tasks", lambda s: None)
         monkeypatch.setattr(main.store, "update_warehouse_status", lambda *a, **kw: None)
-        monkeypatch.setattr(main.store, "put_warehouse", lambda wid, record: None)
+        monkeypatch.setattr(main.store, "put_warehouse", lambda name, record: None)
         main.warehouses["s1"] = {
             "task_arn": "arn:d",
             "executor_arns": ["arn:e1"],
@@ -258,7 +263,7 @@ class TestResize:
 
     def test_scale_up(self, client, monkeypatch):
         monkeypatch.setattr(ecs_tasks, "run_executor_tasks", lambda url, n: [f"arn:new-{i}" for i in range(n)])
-        resp = client.post("/warehouses/s1/resize", json={"size": "M"})
+        resp = client.post("/warehouses/s1/resize", json={"name": "test-wh", "size": "M"})
         assert resp.status_code == 200
         assert main.warehouses["s1"]["executor_count"] == 4
         assert main.warehouses["s1"]["size"] == "M"
@@ -270,12 +275,12 @@ class TestResize:
         assert main.warehouses["s1"]["size"] == "XS"
 
     def test_unknown_size(self, client):
-        resp = client.post("/warehouses/s1/resize", json={"size": "XXL"})
+        resp = client.post("/warehouses/s1/resize", json={"name": "bad", "size": "XXL"})
         assert resp.status_code == 400
 
     def test_session_not_running(self, client):
         main.warehouses["s1"]["status"] = "suspended"
-        resp = client.post("/warehouses/s1/resize", json={"size": "M"})
+        resp = client.post("/warehouses/s1/resize", json={"name": "test-wh", "size": "M"})
         assert resp.status_code == 409
 
 
@@ -294,7 +299,7 @@ class TestHistory:
             "status": "success",
             "duration_ms": 100,
             "row_count": 1,
-            "warehouse_id": "s1",
+            "name": "s1",
             "ts": "12:00:00",
         })
         resp = client.get("/history")

@@ -50,7 +50,7 @@ def reconcile(warehouses: dict, cluster: str, warehouse_ttl_s: int) -> None:
             log.error("Could not list ECS tasks during reconcile: %s", exc)
 
         for record in db_warehouses:
-            wid = record["warehouse_id"]
+            wid = record["name"]
             task_arn = record.get("task_arn", "")
             status = record.get("status", "running")
 

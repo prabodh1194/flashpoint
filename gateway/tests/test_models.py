@@ -14,15 +14,28 @@ from models import (
 
 class TestCreateWarehouseRequest:
     def test_default_size_is_xs(self):
-        req = CreateWarehouseRequest()
+        req = CreateWarehouseRequest(name="my-wh")
         assert req.size == "XS"
+        assert req.name == "my-wh"
 
     def test_custom_size(self):
-        req = CreateWarehouseRequest(size="L")
+        req = CreateWarehouseRequest(name="wh", size="L")
         assert req.size == "L"
 
+    def test_name_is_required(self):
+        with pytest.raises(ValidationError):
+            CreateWarehouseRequest()
+
+    def test_name_cannot_be_empty(self):
+        with pytest.raises(ValidationError):
+            CreateWarehouseRequest(name="", size="XS")
+
+    def test_name_trimmed(self):
+        req = CreateWarehouseRequest(name="  my-wh  ")
+        assert req.name == "my-wh"
+
     def test_invalid_size_does_not_reject(self):
-        req = CreateWarehouseRequest(size="XXL")
+        req = CreateWarehouseRequest(name="wh", size="XXL")
         assert req.size == "XXL"
 
 
@@ -44,23 +57,22 @@ class TestResizeRequest:
 
 class TestWarehouseResponse:
     def test_minimal_response(self):
-        resp = WarehouseResponse(warehouse_id="abc", status="running")
-        assert resp.warehouse_id == "abc"
+        resp = WarehouseResponse(name="my-wh", status="running")
+        assert resp.name == "my-wh"
         assert resp.status == "running"
         assert resp.task_arn is None
         assert resp.endpoint is None
 
     def test_full_response(self):
         resp = WarehouseResponse(
-            warehouse_id="xyz", task_arn="arn:xxx", endpoint="sc://10.0.0.1:15002",
-            status="running", size="M", executor_count=4, name="my-warehouse",
+            name="my-warehouse", task_arn="arn:xxx", endpoint="sc://10.0.0.1:15002",
+            status="running", size="M", executor_count=4,
         )
-        assert resp.warehouse_id == "xyz"
+        assert resp.name == "my-warehouse"
         assert resp.task_arn == "arn:xxx"
         assert resp.endpoint == "sc://10.0.0.1:15002"
         assert resp.size == "M"
         assert resp.executor_count == 4
-        assert resp.name == "my-warehouse"
 
 
 class TestQueryProfile:
