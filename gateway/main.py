@@ -1,8 +1,12 @@
 """Flashpoint gateway — EC2 control plane (Kindle #10/#12/#11).
 
-Sessions are persisted to DynamoDB; the in-memory dict is a cache rebuilt
-from DynamoDB + live ECS state on startup. Executors run on Fargate Spot;
-the driver runs on-demand so Spot reclamation never kills the whole warehouse.
+State lives in DynamoDB via store.py. There is no in-memory cache.
+Every read goes through store.get_warehouse(). Every write goes through
+store.put/update/delete. The gateway is stateless — restart it and it
+picks up where it left off.
+
+Executors run on Fargate Spot; the driver runs on-demand so Spot
+reclamation never kills the whole warehouse.
 """
 import hashlib
 import time
@@ -30,7 +34,6 @@ from models import (
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 
-warehouses: dict[str, dict] = {}
 query_history: deque[dict] = deque(maxlen=500)
 
 
@@ -51,24 +54,11 @@ def _sql_execution_ids(warehouse: dict) -> set[int]:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup + shutdown lifecycle for the FastAPI server.
-
-    Startup (before first request):
-      1. Reconcile — rebuild in-memory warehouse state from DynamoDB.
-         Running ECS tasks are restored; dead ones are cleaned up.
-      2. Reaper — launch a background task that stops idle warehouses every 60s.
-         This is the Snowflake model: you don't pay for idle compute.
-
-    Shutdown (on server stop):
-      Cancel the reaper.
-
-    The FastAPI app holds no state between these two moments — all warehouse
-    state lives in the in-memory dict (backed by DynamoDB) and the reaper task.
-    """
+    """Startup: reconcile orphans. Launch background reaper. No cache to rebuild."""
     log.info("Flashpoint gateway starting (cluster=%s, ttl=%ds)", CLUSTER, WAREHOUSE_TTL_S)
-    _reconcile_mod.reconcile(warehouses, CLUSTER, WAREHOUSE_TTL_S)
+    _reconcile_mod.reconcile(CLUSTER)
     reaper = asyncio.create_task(
-        _reconcile_mod.reap_idle_warehouses(warehouses, spark_client, WAREHOUSE_TTL_S, CLUSTER)
+        _reconcile_mod.reap_idle_warehouses(spark_client, WAREHOUSE_TTL_S, CLUSTER)
     )
     yield
     reaper.cancel()
@@ -91,9 +81,11 @@ app.add_middleware(
 def create_warehouse(req: CreateWarehouseRequest):
     if req.size not in SIZES:
         raise HTTPException(status_code=400, detail=f"unknown size {req.size!r}")
-    if req.name in warehouses:
+    if store.get_warehouse(req.name) is not None:
         raise HTTPException(status_code=409, detail=f"warehouse {req.name!r} already exists")
-    if len(warehouses) >= MAX_WAREHOUSES:
+    all_wh = store.list_warehouses()
+    running = [w for w in all_wh if w.get("status") == "running"]
+    if len(running) >= MAX_WAREHOUSES:
         raise HTTPException(status_code=429, detail=f"warehouse cap reached ({MAX_WAREHOUSES} max)")
     name = req.name
     executor_count = SIZES[req.size]
@@ -122,7 +114,6 @@ def create_warehouse(req: CreateWarehouseRequest):
         "created_at": time.time(),
     }
     store.put_warehouse(name, record)
-    warehouses[name] = record
     return WarehouseResponse(
         name=name, task_arn=task_arn, endpoint=endpoint,
         status="running", size=req.size, executor_count=executor_count,
@@ -131,7 +122,7 @@ def create_warehouse(req: CreateWarehouseRequest):
 
 @app.get("/warehouses/{name}", response_model=WarehouseResponse)
 def get_warehouse(name: str):
-    s = warehouses.get(name)
+    s = store.get_warehouse(name)
     if not s:
         raise HTTPException(status_code=404, detail="warehouse not found")
     task_arn = s["task_arn"]
@@ -148,12 +139,13 @@ def get_warehouse(name: str):
 
 @app.get("/warehouses")
 def list_warehouses_endpoint():
+    records = store.list_warehouses()
     items = []
-    for name, s in warehouses.items():
+    for s in records:
         task_arn = s["task_arn"]
         status = "running" if (task_arn and ecs_tasks.is_running(task_arn)) else s.get("status", "suspended")
         items.append({
-            "name": name,
+            "name": s["name"],
             "status": status,
             "size": s["size"],
             "executor_count": s["executor_count"],
@@ -163,7 +155,7 @@ def list_warehouses_endpoint():
 
 @app.post("/warehouses/{name}/query", response_model=QueryResponse)
 def run_query(name: str, req: QueryRequest):
-    s = warehouses.get(name)
+    s = store.get_warehouse(name)
     if not s:
         raise HTTPException(status_code=404, detail="warehouse not found")
     if s["status"] != "running" or not ecs_tasks.is_running(s["task_arn"]):
@@ -208,7 +200,7 @@ def run_query(name: str, req: QueryRequest):
 
 @app.delete("/warehouses/{name}", status_code=204)
 def delete_warehouse(name: str):
-    s = warehouses.pop(name, None)
+    s = store.get_warehouse(name)
     if not s:
         raise HTTPException(status_code=404, detail="warehouse not found")
     spark_client.drop(name)
@@ -219,14 +211,13 @@ def delete_warehouse(name: str):
 
 @app.post("/warehouses/{name}/suspend", status_code=200)
 def suspend_warehouse(name: str):
-    s = warehouses.get(name)
+    s = store.get_warehouse(name)
     if not s:
         raise HTTPException(status_code=404, detail="warehouse not found")
     if s["status"] == "suspended":
         return {"status": "suspended"}
     spark_client.drop(name)
     ecs_tasks.stop_tasks(s)
-    warehouses[name] = {**s, "task_arn": None, "executor_arns": [], "task_ip": None, "status": "suspended"}
     store.update_warehouse_status(name, "suspended", task_arn=None, executor_arns=[], task_ip=None)
     log.info("Suspended warehouse %s", name)
     return {"status": "suspended"}
@@ -234,7 +225,7 @@ def suspend_warehouse(name: str):
 
 @app.post("/warehouses/{name}/resume", status_code=200, response_model=WarehouseResponse)
 def resume_warehouse(name: str):
-    s = warehouses.get(name)
+    s = store.get_warehouse(name)
     if not s:
         raise HTTPException(status_code=404, detail="warehouse not found")
     if s["status"] == "running":
@@ -255,13 +246,12 @@ def resume_warehouse(name: str):
     endpoint = f"sc://{task_ip}:{GRPC_PORT}"
     executor_arns = ecs_tasks.run_executor_tasks(master_url, executor_count)
 
-    update = {
-        "task_arn": task_arn, "executor_arns": executor_arns,
-        "task_ip": task_ip, "endpoint": endpoint,
-        "executor_count": executor_count,
-    }
-    warehouses[name] = {**s, **update, "status": "running"}
-    store.update_warehouse_status(name, "running", **update)
+    store.update_warehouse_status(
+        name, "running",
+        task_arn=task_arn, executor_arns=executor_arns,
+        task_ip=task_ip, endpoint=endpoint,
+        executor_count=executor_count,
+    )
     log.info("Resumed warehouse %s → driver %s", name, task_arn)
     return WarehouseResponse(
         name=name, task_arn=task_arn, endpoint=endpoint,
@@ -271,7 +261,7 @@ def resume_warehouse(name: str):
 
 @app.post("/warehouses/{name}/resize", status_code=200, response_model=WarehouseResponse)
 def resize_warehouse(name: str, req: ResizeRequest):
-    s = warehouses.get(name)
+    s = store.get_warehouse(name)
     if not s:
         raise HTTPException(status_code=404, detail="warehouse not found")
     if s["status"] != "running":
@@ -300,7 +290,6 @@ def resize_warehouse(name: str, req: ResizeRequest):
                 log.error("Failed to stop executor %s during resize: %s", arn, exc)
         log.info("Scaled warehouse %s down: -%d executors", name, delta)
 
-    warehouses[name] = {**s, "size": req.size, "executor_count": new_count, "executor_arns": executor_arns}
     store.update_warehouse_status(name, "running", size=req.size, executor_count=new_count, executor_arns=executor_arns)
     return WarehouseResponse(
         name=name, task_arn=s["task_arn"], endpoint=s["endpoint"],
@@ -323,9 +312,10 @@ def get_history_entry(query_id: str):
 
 @app.get("/healthz")
 def health():
+    all_wh = store.list_warehouses()
     return {
         "status": "ok",
-        "warehouses": len(warehouses),
+        "warehouses": len(all_wh),
         "sessions_table": store._TABLE_NAME,
     }
 

@@ -35,7 +35,7 @@ bench/     TPC-DS/TPC-H, cold-start + cost benchmarks
 - IaC: OpenTofu.
 - Catalog: AWS Glue.
 - Spark: stock Apache Spark Connect; fork only if a needed hook is unavailable via plugin.
-- Compute: Lambda Managed Instances (EC2-backed, container, warm minimum, no scale-to-zero).
+- Compute: ECS Fargate (On-Demand for driver, Spot for executors).
 
 ## Coding standard
 
@@ -45,5 +45,19 @@ Clean Code (Robert C. Martin):
 - Comments explain *why*, not *what*.
 - SOLID at module boundaries.
 - Tests first-class; TDD where practical.
+
+### Data flow
+
+**State lives in DynamoDB, not in Python dicts.** Every read goes through
+`store.get_warehouse()`. Every write goes through `store.put/update/delete`.
+No local mirrors, no dual-write, no in-memory caches for anything that must
+survive a gateway restart or be visible to another gateway instance.
+
+The gateway is stateless. If two instances can't agree on state by reading
+DynamoDB, the design is wrong.
+
+The only acceptable in-memory state: ephemeral convenience (e.g. the 500-entry
+query history ring buffer, which is a disposable UX feature — the meters table
+is the durable source).
 
 Review every diff against these before committing.

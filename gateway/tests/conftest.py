@@ -7,7 +7,7 @@ os.environ.setdefault("FLASHPOINT_EXECUTOR_TASK_DEF", "test-executor-td")
 os.environ.setdefault("FLASHPOINT_SUBNETS", "subnet-a,subnet-b,subnet-c")
 os.environ.setdefault("FLASHPOINT_SECURITY_GROUP", "sg-test")
 os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
-os.environ.setdefault("FLASHPOINT_WAREHOUSES_TABLE", "test-sessions")
+os.environ.setdefault("FLASHPOINT_WAREHOUSES_TABLE", "test-warehouses")
 os.environ.setdefault("FLASHPOINT_METERS_TABLE", "test-meters")
 
 import boto3
@@ -19,6 +19,7 @@ _boto3_client_patch.start()
 _boto3_resource_patch.start()
 
 import main
+import store
 import ecs_tasks
 import spark_client
 
@@ -42,8 +43,38 @@ def mock_ecs(monkeypatch):
         }],
     }
     monkeypatch.setattr(ecs_tasks, "ecs", client)
-    # Also patch main for any remaining direct references
     return client
+
+
+@pytest.fixture
+def mock_store():
+    """Replace store with an in-memory dict, simulating DynamoDB."""
+    _db: dict[str, dict] = {}
+
+    def _get(name):
+        return _db.get(name)
+
+    def _put(name, record):
+        _db[name] = {**record, "name": name}
+
+    def _update(name, status, **extra):
+        if name in _db:
+            _db[name]["status"] = status
+            _db[name].update(extra)
+
+    def _delete(name):
+        _db.pop(name, None)
+
+    def _list():
+        return list(_db.values())
+
+    store.get_warehouse = _get
+    store.put_warehouse = _put
+    store.update_warehouse_status = _update
+    store.delete_warehouse = _delete
+    store.list_warehouses = _list
+
+    return _db
 
 
 @pytest.fixture

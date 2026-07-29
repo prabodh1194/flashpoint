@@ -3,6 +3,7 @@ import pytest
 from unittest.mock import MagicMock, patch
 import urllib.request
 import main
+import store
 import dag
 import reconcile
 import ecs_tasks
@@ -150,48 +151,45 @@ class TestGetSpark:
 
 
 class TestReconcile:
-    def test_reconcile_skips_suspended_sessions(self, monkeypatch, mock_ecs):
-        monkeypatch.setattr(main.store, "list_warehouses", lambda: [
+    def test_reconcile_skips_suspended(self, monkeypatch, mock_ecs):
+        monkeypatch.setattr(store, "list_warehouses", lambda: [
             {"name": "s1", "task_arn": "arn:old", "status": "suspended"},
         ])
-        reconcile.reconcile(main.warehouses, main.CLUSTER, main.WAREHOUSE_TTL_S)
-        # suspended sessions are skipped — nothing to clean up
+        reconcile.reconcile(main.CLUSTER)
 
-    def test_reconcile_rebuilds_live_sessions(self, monkeypatch, mock_ecs):
-        monkeypatch.setattr(main.store, "list_warehouses", lambda: [
+    def test_reconcile_live_driver(self, monkeypatch, mock_ecs):
+        monkeypatch.setattr(store, "list_warehouses", lambda: [
             {"name": "s1", "task_arn": "arn:live", "status": "running",
              "executor_arns": [], "task_ip": "10.0.0.5", "endpoint": "sc://10.0.0.5:15002"},
         ])
         mock_ecs.get_paginator.return_value.paginate.return_value = [
             {"taskArns": ["arn:live"]},
         ]
-        reconcile.reconcile(main.warehouses, main.CLUSTER, main.WAREHOUSE_TTL_S)
-        assert "s1" in main.warehouses
-        assert main.warehouses["s1"]["task_arn"] == "arn:live"
+        reconcile.reconcile(main.CLUSTER)
 
     def test_reconcile_suspends_dead_driver(self, monkeypatch, mock_ecs):
-        monkeypatch.setattr(main.store, "list_warehouses", lambda: [
+        monkeypatch.setattr(store, "list_warehouses", lambda: [
             {"name": "s1", "task_arn": "arn:dead", "status": "running",
              "executor_arns": [], "task_ip": "10.0.0.5"},
         ])
-        monkeypatch.setattr(main.store, "update_warehouse_status", lambda *a, **kw: None)
+        monkeypatch.setattr(store, "update_warehouse_status", lambda *a, **kw: None)
         mock_ecs.get_paginator.return_value.paginate.return_value = [
-            {"taskArns": []},  # dead task not in live list
+            {"taskArns": []},
         ]
-        reconcile.reconcile(main.warehouses, main.CLUSTER, main.WAREHOUSE_TTL_S)
+        reconcile.reconcile(main.CLUSTER)
 
     def test_reconcile_stops_orphan_tasks(self, monkeypatch, mock_ecs):
-        monkeypatch.setattr(main.store, "list_warehouses", lambda: [])
+        monkeypatch.setattr(store, "list_warehouses", lambda: [])
         mock_ecs.get_paginator.return_value.paginate.return_value = [
             {"taskArns": ["arn:orphan"]},
         ]
-        reconcile.reconcile(main.warehouses, main.CLUSTER, main.WAREHOUSE_TTL_S)
+        reconcile.reconcile(main.CLUSTER)
         mock_ecs.stop_task.assert_called_with(
             cluster=main.CLUSTER, task="arn:orphan", reason="orphan-cleanup"
         )
 
     def test_reconcile_handles_ecs_error(self, monkeypatch, mock_ecs):
         mock_ecs.get_paginator.side_effect = Exception("ECS down")
-        monkeypatch.setattr(main.store, "list_warehouses", lambda: [])
-        reconcile.reconcile(main.warehouses, main.CLUSTER, main.WAREHOUSE_TTL_S)
+        monkeypatch.setattr(store, "list_warehouses", lambda: [])
+        reconcile.reconcile(main.CLUSTER)
         # should not raise
