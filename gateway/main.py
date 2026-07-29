@@ -40,12 +40,12 @@ def _query_id(sql: str) -> str:
     return hashlib.sha256(normalized.encode()).hexdigest()[:16]
 
 
-def _fetch_query_dag(session: dict, before_ids: set[int]) -> dict | None:
-    return dag.fetch_query_dag(session, before_ids)
+def _fetch_query_dag(warehouse: dict, before_ids: set[int]) -> dict | None:
+    return dag.fetch_query_dag(warehouse, before_ids)
 
 
-def _sql_execution_ids(session: dict) -> set[int]:
-    return dag.sql_execution_ids(session)
+def _sql_execution_ids(warehouse: dict) -> set[int]:
+    return dag.sql_execution_ids(warehouse)
 
 
 # --- App ---

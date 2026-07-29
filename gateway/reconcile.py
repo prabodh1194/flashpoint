@@ -14,9 +14,9 @@ def reconcile(warehouses: dict, cluster: str, warehouse_ttl_s: int) -> None:
         db_warehouses = store.list_warehouses()
         db_arns = {
             arn
-            for s in db_warehouses
-            for arn in ([s.get("task_arn")] if s.get("task_arn") else [])
-            + (s.get("executor_arns") or [])
+            for record in db_warehouses
+            for arn in ([record.get("task_arn")] if record.get("task_arn") else [])
+            + (record.get("executor_arns") or [])
         }
 
         live_arns: set[str] = set()
@@ -27,20 +27,20 @@ def reconcile(warehouses: dict, cluster: str, warehouse_ttl_s: int) -> None:
         except Exception as exc:
             log.error("Could not list ECS tasks during reconcile: %s", exc)
 
-        for s in db_warehouses:
-            wid = s["warehouse_id"]
-            task_arn = s.get("task_arn", "")
-            status = s.get("status", "running")
+        for record in db_warehouses:
+            wid = record["warehouse_id"]
+            task_arn = record.get("task_arn", "")
+            status = record.get("status", "running")
 
             if status == "suspended":
                 continue
 
             if task_arn and task_arn in live_arns:
-                warehouses[wid] = s
+                warehouses[wid] = record
                 log.info("Reconciled warehouse %s (driver live)", wid)
             else:
                 log.warning("Warehouse %s driver gone — suspending", wid)
-                executor_arns = s.get("executor_arns") or []
+                executor_arns = record.get("executor_arns") or []
                 for arn in executor_arns:
                     if arn in live_arns:
                         try:
@@ -69,15 +69,15 @@ async def reap_idle_warehouses(warehouses: dict, spark_client, warehouse_ttl_s: 
         await asyncio.sleep(60)
         now = time.time()
         expired = [
-            wid for wid, s in list(warehouses.items())
-            if now - s.get("created_at", now) > warehouse_ttl_s
+            wid for wid, record in list(warehouses.items())
+            if now - record.get("created_at", now) > warehouse_ttl_s
         ]
         for wid in expired:
-            s = warehouses.pop(wid, None)
-            if s:
+            record = warehouses.pop(wid, None)
+            if record:
                 log.warning("Reaping idle warehouse %s (TTL exceeded)", wid)
                 spark_client.drop(wid)
-                for arn in ([s["task_arn"]] if s.get("task_arn") else []) + (s.get("executor_arns") or []):
+                for arn in ([record["task_arn"]] if record.get("task_arn") else []) + (record.get("executor_arns") or []):
                     try:
                         ecs_tasks.ecs.stop_task(cluster=cluster, task=arn)
                     except Exception as exc:

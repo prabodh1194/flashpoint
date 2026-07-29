@@ -38,9 +38,9 @@ def private_ip(task_arn: str) -> str:
     return next(d["value"] for d in details if d["name"] == "privateIPv4Address")
 
 
-def run_executor_tasks(master_url: str, n: int) -> list[str]:
+def run_executor_tasks(master_url: str, count: int) -> list[str]:
     arns = []
-    for _ in range(n):
+    for _ in range(count):
         resp = ecs.run_task(
             cluster=CLUSTER,
             taskDefinition=EXECUTOR_TASK_DEF,
@@ -75,9 +75,9 @@ def is_running(task_arn: str) -> bool:
     return bool(tasks) and tasks[0].get("lastStatus") == "RUNNING"
 
 
-def stop_tasks(s: dict) -> None:
-    task_arn = s.get("task_arn")
-    executor_arns = s.get("executor_arns") or []
+def stop_tasks(warehouse_record: dict) -> None:
+    task_arn = warehouse_record.get("task_arn")
+    executor_arns = warehouse_record.get("executor_arns") or []
     for arn in ([task_arn] if task_arn else []) + executor_arns:
         try:
             ecs.stop_task(cluster=CLUSTER, task=arn)

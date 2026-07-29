@@ -97,14 +97,14 @@ def transform_dag(detail: dict) -> dict:
     return {"nodes": nodes, "edges": edges}
 
 
-def fetch_query_dag(session: dict, before_ids: set[int]) -> dict | None:
+def fetch_query_dag(warehouse: dict, before_ids: set[int]) -> dict | None:
     """Best-effort: fetch the just-run query's execution DAG from the driver UI."""
-    driver_ip = session["task_ip"]
+    driver_ip = warehouse["task_ip"]
     try:
-        app_id = session.get("app_id") or resolve_app_id(driver_ip)
+        app_id = warehouse.get("app_id") or resolve_app_id(driver_ip)
         if not app_id:
             return None
-        session["app_id"] = app_id
+        warehouse["app_id"] = app_id
 
         deadline = time.time() + 1.5
         while time.time() < deadline:
@@ -121,14 +121,14 @@ def fetch_query_dag(session: dict, before_ids: set[int]) -> dict | None:
     return None
 
 
-def sql_execution_ids(session: dict) -> set[int]:
+def sql_execution_ids(warehouse: dict) -> set[int]:
     """Best-effort snapshot of existing SQL execution ids before a query runs."""
     try:
-        app_id = session.get("app_id") or resolve_app_id(session["task_ip"])
+        app_id = warehouse.get("app_id") or resolve_app_id(warehouse["task_ip"])
         if not app_id:
             return set()
-        session["app_id"] = app_id
-        execs = _ui_get(session["task_ip"], f"/applications/{app_id}/sql?details=false")
+        warehouse["app_id"] = app_id
+        execs = _ui_get(warehouse["task_ip"], f"/applications/{app_id}/sql?details=false")
         return {e["id"] for e in execs}
     except Exception:
         return set()
