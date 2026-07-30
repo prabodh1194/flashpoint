@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { CheckCircle, XCircle, RotateCcw, X, Hash, Clock, Rows } from 'lucide-react'
 import { fetchHistory } from '../api'
+import { OfflineBanner } from '../components/OfflineBanner'
 
-export function History() {
+export function History({ gatewayOnline }) {
   const [history, setHistory] = useState([])
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState(null)
@@ -14,8 +15,9 @@ export function History() {
       .finally(() => setLoading(false))
   }, [])
 
-  return (
+   return (
     <div style={s.root}>
+      {!gatewayOnline && <OfflineBanner message="History unavailable while gateway is asleep." />}
       <div style={s.header}>
         <h2 style={s.title}>Query History</h2>
         <span style={s.count}>{loading ? '…' : `${history.length} queries`}</span>

@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { Database, Table2, ChevronRight, ChevronDown, Hash, Type, Calendar } from 'lucide-react'
 
+import { OfflineBanner } from '../components/OfflineBanner'
+
 const CATALOG = {
   prod: {
     orders:  [
@@ -35,7 +37,7 @@ function typeIcon(type) {
   return <Type size={11} style={{ color: 'var(--green)' }} />
 }
 
-export function DataExplorer() {
+export function DataExplorer({ gatewayOnline }) {
   const [openDbs, setOpenDbs] = useState({ prod: true })
   const [openTables, setOpenTables] = useState({})
   const [selected, setSelected] = useState(null)
@@ -49,6 +51,7 @@ export function DataExplorer() {
 
   return (
     <div style={s.root}>
+      {!gatewayOnline && <OfflineBanner />}
       {/* Tree */}
       <div style={s.tree}>
         <div style={s.treeHeader}>Catalog</div>

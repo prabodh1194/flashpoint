@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { Play, Plus, ChevronDown, Clock, Rows, Database, Cpu, Hash, X, Loader, Unplug } from 'lucide-react'
 import { createWarehouse, deleteWarehouse, runQuery } from '../api'
 import { QueryDag } from '../components/QueryDag'
+import { OfflineBanner } from '../components/OfflineBanner'
 
 const PLACEHOLDER = `-- Flashpoint SQL Worksheet
 -- ⌘↵ to run  •  connects a warehouse automatically on first run
@@ -15,7 +16,7 @@ FROM (
 ) GROUP BY bucket
 ORDER BY bucket`
 
-export function Worksheet() {
+export function Worksheet({ gatewayOnline }) {
   const [sql, setSql] = useState(PLACEHOLDER)
   const [running, setRunning] = useState(false)
   const [connecting, setConnecting] = useState(false)
@@ -89,8 +90,9 @@ export function Worksheet() {
   const isConnected = !!session
   const isLoading = running || connecting
 
-  return (
+   return (
     <div style={s.root}>
+      {!gatewayOnline && <OfflineBanner />}
       {/* Tab bar */}
       <div style={s.tabBar}>
         <Tab active>Sheet 1</Tab>
@@ -136,15 +138,16 @@ export function Worksheet() {
       {/* Run bar */}
       <div style={s.runBar}>
         <button
-          style={{ ...s.runBtn, ...(isLoading ? s.runBtnRunning : {}) }}
+          style={{ ...s.runBtn, ...(isLoading ? s.runBtnRunning : {}), ...(!gatewayOnline ? s.runBtnOffline : {}) }}
           onClick={run}
-          disabled={isLoading}
+          disabled={isLoading || !gatewayOnline}
+          title={!gatewayOnline ? 'Gateway offline — run `tofu apply` to wake it' : undefined}
         >
           {isLoading
             ? <Loader size={12} style={{ animation: 'spin 1s linear infinite' }} />
             : <Play size={12} fill="currentColor" />}
-          {connecting ? 'Connecting…' : running ? 'Running…' : 'Run'}
-          {!isLoading && <span style={s.kbd}>⌘↵</span>}
+          {!gatewayOnline ? 'Offline' : connecting ? 'Connecting…' : running ? 'Running…' : 'Run'}
+          {!isLoading && gatewayOnline && <span style={s.kbd}>⌘↵</span>}
         </button>
 
         {stats && <StatBar stats={stats} />}
@@ -339,6 +342,7 @@ const s = {
     transition: 'opacity 0.12s',
   },
   runBtnRunning: { opacity: 0.6, cursor: 'not-allowed' },
+  runBtnOffline: { background: 'var(--bg-raised)', color: 'var(--text-dim)', border: '1px solid var(--border)', cursor: 'not-allowed', fontWeight: 400 },
   kbd: { fontFamily: 'var(--font-mono)', fontSize: 10, opacity: 0.5, marginLeft: 2 },
   resultsPane: { flex: '1 1 120px', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg-base)' },
   resultTabs: {

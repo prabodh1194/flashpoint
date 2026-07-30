@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Zap, Play, Square, ChevronDown, Loader, RefreshCw, Plus } from 'lucide-react'
 import { listWarehouses, createWarehouse, deleteWarehouse, suspendWarehouse, resumeWarehouse, resizeWarehouse, fetchHistory } from '../api'
+import { OfflineBanner } from '../components/OfflineBanner'
 
 const SIZES = ['XS', 'S', 'M', 'L', 'XL']
 const EXECUTOR_COUNTS = { XS: 1, S: 2, M: 4, L: 8, XL: 16 }
 const HOURLY_RATE = { XS: 0.08, S: 0.16, M: 0.32, L: 0.64, XL: 1.28 }
 
-export function Warehouses() {
+export function Warehouses({ gatewayOnline }) {
   const [warehouses, setWarehouses] = useState([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
@@ -72,6 +73,7 @@ export function Warehouses() {
 
   return (
     <div style={s.root}>
+      {!gatewayOnline && <OfflineBanner />}
       <div style={s.header}>
         <h2 style={s.title}>Warehouses</h2>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -89,7 +91,7 @@ export function Warehouses() {
             <button
               style={{ ...s.createBtn, ...(creating ? s.createBtnBusy : {}) }}
               onClick={() => !creating && setShowSizePicker(p => !p)}
-              disabled={creating || !newName.trim()}
+              disabled={creating || !newName.trim() || !gatewayOnline}
             >
               {creating
                 ? <Loader size={13} style={{ animation: 'spin 1s linear infinite' }} />

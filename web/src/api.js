@@ -1,67 +1,64 @@
-const BASE = import.meta.env.VITE_GATEWAY_URL || 'http://3.86.115.219:8080'
+const BASE = import.meta.env.VITE_GATEWAY_URL || 'http://localhost:8080'
+
+export class GatewayOfflineError extends Error {
+  constructor() {
+    super('Gateway is offline — sleeping to save cost')
+    this.name = 'GatewayOfflineError'
+  }
+}
+
+function _wrap(fn) {
+  return async (...args) => {
+    try {
+      return await fn(...args)
+    } catch (e) {
+      if (e instanceof TypeError && e.message.includes('fetch')) throw new GatewayOfflineError()
+      throw e
+    }
+  }
+}
+
+const _request = _wrap(async (method, path, body) => {
+  const opts = { method, headers: { 'Content-Type': 'application/json' } }
+  if (body) opts.body = JSON.stringify(body)
+  const r = await fetch(`${BASE}${path}`, opts)
+  if (!r.ok) throw new Error(`${method} ${path}: ${r.status} ${(await r.text()).slice(0, 200)}`)
+  if (r.status === 204) return null
+  return r.json()
+})
 
 export async function createWarehouse(name, size = 'XS') {
-  const r = await fetch(`${BASE}/warehouses`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, size }),
-  })
-  if (!r.ok) throw new Error(`createWarehouse: ${r.status} ${await r.text()}`)
-  return r.json()
+  return _request('POST', '/warehouses', { name, size })
 }
 
 export async function deleteWarehouse(name) {
-  await fetch(`${BASE}/warehouses/${name}`, { method: 'DELETE' })
+  return _request('DELETE', `/warehouses/${name}`)
 }
 
 export async function suspendWarehouse(name) {
-  const r = await fetch(`${BASE}/warehouses/${name}/suspend`, { method: 'POST' })
-  if (!r.ok) throw new Error(`suspend: ${r.status}`)
-  return r.json()
+  return _request('POST', `/warehouses/${name}/suspend`)
 }
 
 export async function resumeWarehouse(name) {
-  const r = await fetch(`${BASE}/warehouses/${name}/resume`, { method: 'POST' })
-  if (!r.ok) throw new Error(`resume: ${r.status} ${await r.text()}`)
-  return r.json()
+  return _request('POST', `/warehouses/${name}/resume`)
 }
 
 export async function resizeWarehouse(name, size) {
-  const r = await fetch(`${BASE}/warehouses/${name}/resize`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ size }),
-  })
-  if (!r.ok) throw new Error(`resize: ${r.status} ${await r.text()}`)
-  return r.json()
+  return _request('POST', `/warehouses/${name}/resize`, { size })
 }
 
 export async function runQuery(name, sql) {
-  const r = await fetch(`${BASE}/warehouses/${name}/query`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ sql }),
-  })
-  if (!r.ok) {
-    const detail = await r.json().then(j => j.detail).catch(() => r.statusText)
-    throw new Error(detail)
-  }
-  return r.json()
+  return _request('POST', `/warehouses/${name}/query`, { sql })
 }
 
 export async function listWarehouses() {
-  const r = await fetch(`${BASE}/warehouses`)
-  if (!r.ok) throw new Error(`listWarehouses: ${r.status}`)
-  return r.json()
+  return _request('GET', '/warehouses')
 }
 
 export async function fetchHistory() {
-  const r = await fetch(`${BASE}/history`)
-  if (!r.ok) throw new Error(`history: ${r.status}`)
-  return r.json()
+  return _request('GET', '/history')
 }
 
 export async function healthz() {
-  const r = await fetch(`${BASE}/healthz`)
-  return r.json()
+  return _request('GET', '/healthz')
 }
