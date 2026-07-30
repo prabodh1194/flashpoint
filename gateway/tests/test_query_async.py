@@ -1,7 +1,8 @@
 """Tests for async query execution, caching, cancel, status polling, and result fetch."""
 
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
 
 import query_runner
 import routes_queries

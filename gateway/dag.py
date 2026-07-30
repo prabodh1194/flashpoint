@@ -1,7 +1,8 @@
 """Query-profile DAG fetching and parsing (Beacon #19).
 
 Talks to the Spark driver UI REST API on port 4040 to fetch SQL execution
-plans and transform them into a compact DAG for the frontend.
+plans. After a query runs, the gateway looks up the execution by SQL text
+(unique per query on a given driver) and fetches its full execution DAG.
 """
 
 import json
@@ -16,16 +17,17 @@ log = logging.getLogger(__name__)
 
 _DURATION_UNITS_MS = {'ms': 1.0, 's': 1000.0, 'm': 60_000.0, 'min': 60_000.0, 'h': 3_600_000.0}
 
+_FETCH_TIMEOUT_S = 30.0
+_POLL_INTERVAL_S = 0.25
+
 
 def _ui_get(driver_ip: str, path: str, timeout: float = 2.0):
-    """GET http://{driver_ip}:{SPARK_UI_PORT}/api/v1{path} and parse JSON."""
     url = f'http://{driver_ip}:{SPARK_UI_PORT}/api/v1{path}'
     with urllib.request.urlopen(url, timeout=timeout) as resp:
         return json.loads(resp.read().decode())
 
 
 def resolve_app_id(driver_ip: str) -> str | None:
-    """Return the running application's id (SparkConnectServer hosts exactly one)."""
     apps = _ui_get(driver_ip, '/applications')
     if not apps:
         return None
@@ -36,7 +38,6 @@ def resolve_app_id(driver_ip: str) -> str | None:
 
 
 def metric_total(value: str) -> str:
-    """Return the human-readable total from a multiline Spark metric string."""
     lines = value.strip().splitlines()
     if not lines:
         return ''
@@ -44,7 +45,6 @@ def metric_total(value: str) -> str:
 
 
 def parse_duration_ms(value: str) -> int | None:
-    """Parse a Spark duration metric like '390 ms' into milliseconds."""
     m = re.match(r'([\d,.]+)\s*(ms|min|s|m|h)\b', metric_total(value))
     if not m:
         return None
@@ -53,13 +53,11 @@ def parse_duration_ms(value: str) -> int | None:
 
 
 def is_nonzero_size(value: str) -> bool:
-    """True if a Spark size metric like '512.0 KiB' is greater than zero."""
     m = re.match(r'([\d,.]+)', metric_total(value))
     return bool(m) and float(m.group(1).replace(',', '')) > 0
 
 
 def transform_dag(detail: dict) -> dict:
-    """Map a raw Spark SQL execution detail into the compact UI schema."""
     nodes = []
     shuffle_node_ids = set()
     for n in detail.get('nodes', []):
@@ -98,38 +96,45 @@ def transform_dag(detail: dict) -> dict:
     return {'nodes': nodes, 'edges': edges}
 
 
-def fetch_query_dag(warehouse: dict, before_ids: set[int]) -> dict | None:
-    """Best-effort: fetch the just-run query's execution DAG from the driver UI."""
-    driver_ip = warehouse['task_ip']
+def fetch_query_dag_by_qid(driver_ip: str, sql: str, app_id: str | None = None) -> dict | None:
+    """Fetch the DAG for a specific SQL query from the driver's Spark UI.
+
+    Matches by the SQL execution's description field — which IS the SQL text
+    when `spark.sparkContext.setJobDescription(sql)` is called before the query.
+    Polls up to _FETCH_TIMEOUT_S for the execution to complete.
+    """
     try:
-        app_id = warehouse.get('app_id') or resolve_app_id(driver_ip)
+        app_id = app_id or resolve_app_id(driver_ip)
         if not app_id:
             return None
-        warehouse['app_id'] = app_id
 
-        deadline = time.time() + 1.5
+        sql_normalised = ' '.join(sql.strip().split())
+
+        deadline = time.time() + _FETCH_TIMEOUT_S
         while time.time() < deadline:
             execs = _ui_get(driver_ip, f'/applications/{app_id}/sql?details=false')
-            new = [e for e in execs if e['id'] not in before_ids and e.get('status') == 'COMPLETED']
-            if new:
-                exec_id = max(e['id'] for e in new)
-                detail = _ui_get(driver_ip, f'/applications/{app_id}/sql/{exec_id}?details=true')
+            match = next(
+                (
+                    e
+                    for e in execs
+                    if ' '.join(e.get('description', '').strip().split()) == sql_normalised
+                    and e.get('status') == 'COMPLETED'
+                ),
+                None,
+            )
+            if match:
+                detail = _ui_get(
+                    driver_ip, f'/applications/{app_id}/sql/{match["id"]}?details=true'
+                )
                 if detail.get('nodes'):
                     return transform_dag(detail)
-            time.sleep(0.15)
+                return None
+
+            time.sleep(_POLL_INTERVAL_S)
+
+        log.warning('DAG fetch timed out for query: %s', sql[:80])
+
     except Exception as exc:
         log.warning('Query DAG fetch failed for driver %s: %s', driver_ip, exc)
+
     return None
-
-
-def sql_execution_ids(warehouse: dict) -> set[int]:
-    """Best-effort snapshot of existing SQL execution ids before a query runs."""
-    try:
-        app_id = warehouse.get('app_id') or resolve_app_id(warehouse['task_ip'])
-        if not app_id:
-            return set()
-        warehouse['app_id'] = app_id
-        execs = _ui_get(warehouse['task_ip'], f'/applications/{app_id}/sql?details=false')
-        return {e['id'] for e in execs}
-    except Exception:
-        return set()

@@ -200,8 +200,8 @@ class TestRunQuery:
         mock_df.collect.return_value = [['1', 'alice']]
         mock_spark.sql.return_value = mock_df
         monkeypatch.setattr(spark_client, 'get', lambda endpoint, name: mock_spark)
-        monkeypatch.setattr(routes_queries, '_sql_execution_ids', lambda s: set())
-        monkeypatch.setattr(routes_queries, '_fetch_query_dag', lambda s, b: None)
+        monkeypatch.setattr(routes_queries, '_fetch_query_dag', lambda s, sql: None)
+        monkeypatch.setattr(routes_queries, '_fetch_query_dag', lambda s, sql: None)
 
         resp = client.post('/warehouses/my-wh/query', json={'sql': 'SELECT 1'})
         assert resp.status_code == 200
@@ -234,7 +234,7 @@ class TestRunQuery:
         mock_spark = MagicMock()
         mock_spark.sql.side_effect = Exception('table not found: bad_table')
         monkeypatch.setattr(spark_client, 'get', lambda endpoint, name: mock_spark)
-        monkeypatch.setattr(routes_queries, '_sql_execution_ids', lambda s: set())
+        monkeypatch.setattr(routes_queries, '_fetch_query_dag', lambda s, sql: None)
 
         resp = client.post('/warehouses/my-wh/query', json={'sql': 'SELECT * FROM bad_table'})
         assert resp.status_code == 400
@@ -243,7 +243,7 @@ class TestRunQuery:
         mock_spark = MagicMock()
         mock_spark.sql.side_effect = Exception('fail')
         monkeypatch.setattr(spark_client, 'get', lambda endpoint, name: mock_spark)
-        monkeypatch.setattr(routes_queries, '_sql_execution_ids', lambda s: set())
+        monkeypatch.setattr(routes_queries, '_fetch_query_dag', lambda s, sql: None)
 
         client.post('/warehouses/my-wh/query', json={'sql': 'bad'})
         assert len(state.query_history) == 1

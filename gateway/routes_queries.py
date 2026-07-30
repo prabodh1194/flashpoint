@@ -40,12 +40,11 @@ def _async_query_id(sql: str, warehouse_name: str) -> str:
     return hashlib.sha256(payload.encode()).hexdigest()[:16]
 
 
-def _fetch_query_dag(warehouse: dict, before_ids: set[int]) -> dict | None:
-    return dag.fetch_query_dag(warehouse, before_ids)
-
-
-def _sql_execution_ids(warehouse: dict) -> set[int]:
-    return dag.sql_execution_ids(warehouse)
+def _fetch_query_dag(warehouse: dict, sql: str) -> dict | None:
+    result = dag.fetch_query_dag_by_qid(warehouse['task_ip'], sql, warehouse.get('app_id'))
+    if result and dag.resolve_app_id(warehouse['task_ip']):
+        warehouse['app_id'] = dag.resolve_app_id(warehouse['task_ip'])
+    return result
 
 
 # --- Sync query (unchanged) ---
@@ -60,13 +59,16 @@ def run_query(name: str, req: QueryRequest):
         raise HTTPException(status_code=409, detail='warehouse not running')
 
     spark = spark_client.get(s['endpoint'], name)
-    before_ids = _sql_execution_ids(s)
+
+    qid = _query_id(req.sql)
+    spark.sparkContext.setJobDescription(req.sql)
+    spark.addTag(qid)
+
     t0 = time.time()
     try:
         df = spark.sql(req.sql)
         collected = df.collect()
     except Exception as exc:
-        qid = _query_id(req.sql)
         state.query_history.append(
             {
                 'query_id': qid,
@@ -80,11 +82,10 @@ def run_query(name: str, req: QueryRequest):
         )
         raise HTTPException(status_code=400, detail=str(exc))
 
-    qid = _query_id(req.sql)
     duration_ms = int((time.time() - t0) * 1000)
     columns = df.columns
     rows = [[str(v) for v in row] for row in collected]
-    profile = _fetch_query_dag(s, before_ids)
+    profile = _fetch_query_dag(s, req.sql)
     state.query_history.append(
         {
             'query_id': qid,

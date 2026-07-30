@@ -1,10 +1,10 @@
+import time
 import urllib.request
 from unittest.mock import MagicMock, patch
 
 import dag
 import main
 import reconcile
-import routes_queries
 import spark_client
 import store
 
@@ -62,69 +62,58 @@ class TestResolveAppId:
         assert result == 'app-1'
 
 
-class TestSqlExecutionIds:
-    def test_returns_set_of_ids(self, monkeypatch):
-        monkeypatch.setattr(
-            dag,
-            '_ui_get',
-            lambda ip, path: [
-                {'id': 1},
-                {'id': 2},
-                {'id': 3},
-            ],
-        )
-        s = {'task_ip': '10.0.0.5'}
-        result = routes_queries._sql_execution_ids(s)
-        assert result == {1, 2, 3}
-
-    def test_caches_app_id(self, monkeypatch):
-        monkeypatch.setattr(dag, '_ui_get', lambda ip, path: [{'id': 1}])
-        s = {'task_ip': '10.0.0.5'}
-        routes_queries._sql_execution_ids(s)
-        assert s['app_id'] is not None
-
-    def test_uses_cached_app_id(self, monkeypatch):
-        s = {'task_ip': '10.0.0.5', 'app_id': 'cached-app'}
-        monkeypatch.setattr(dag, '_ui_get', lambda ip, path: [{'id': 1}])
-        routes_queries._sql_execution_ids(s)
-
-    def test_returns_empty_on_error(self, monkeypatch):
-        monkeypatch.setattr(
-            dag, '_ui_get', lambda ip, path: (_ for _ in ()).throw(Exception('fail'))
-        )
-        s = {'task_ip': '10.0.0.5'}
-        result = routes_queries._sql_execution_ids(s)
-        assert result == set()
-
-
-class TestFetchQueryDag:
-    def test_returns_none_when_no_app_id(self, monkeypatch):
-        s = {'task_ip': '10.0.0.5'}
-        monkeypatch.setattr(dag, 'resolve_app_id', lambda ip: None)
-        result = routes_queries._fetch_query_dag(s, set())
-        assert result is None
-
-    def test_returns_dag_when_new_execution_found(self, monkeypatch):
-        s = {'task_ip': '10.0.0.5', 'app_id': 'app-1'}
-        calls = []
-
+class TestFetchQueryDagByQid:
+    def test_finds_by_sql_description(self, monkeypatch):
         def mock_ui(ip, path):
-            calls.append(path)
             if '?details=true' in path:
                 return {'nodes': [{'nodeId': 1, 'nodeName': 'Scan', 'metrics': []}], 'edges': []}
-            return [{'id': 99, 'status': 'COMPLETED'}]
+            return [{'id': 42, 'status': 'COMPLETED', 'description': 'SELECT * FROM users'}]
 
         monkeypatch.setattr(dag, '_ui_get', mock_ui)
-        result = routes_queries._fetch_query_dag(s, {98})
+        result = dag.fetch_query_dag_by_qid('10.0.0.5', 'SELECT * FROM users', 'app-1')
         assert result is not None
         assert len(result['nodes']) == 1
 
+    def test_matches_normalised_whitespace(self, monkeypatch):
+        def mock_ui(ip, path):
+            if '?details=true' in path:
+                return {'nodes': [{'nodeId': 1, 'nodeName': 'Scan', 'metrics': []}], 'edges': []}
+            return [{'id': 1, 'status': 'COMPLETED', 'description': 'SELECT  *\nFROM    users'}]
+
+        monkeypatch.setattr(dag, '_ui_get', mock_ui)
+        result = dag.fetch_query_dag_by_qid('10.0.0.5', 'SELECT * FROM users', 'app-1')
+        assert result is not None
+
+    def test_skips_non_matching(self, monkeypatch):
+        monkeypatch.setattr(
+            dag,
+            '_ui_get',
+            lambda ip, path: [{'id': 1, 'status': 'COMPLETED', 'description': 'SELECT 1'}],
+        )
+        monkeypatch.setattr(time, 'sleep', lambda s: None)
+        result = dag.fetch_query_dag_by_qid('10.0.0.5', 'SELECT 2', 'app-1')
+        assert result is None
+
+    def test_returns_none_when_no_app_id(self, monkeypatch):
+        monkeypatch.setattr(dag, 'resolve_app_id', lambda ip: None)
+        result = dag.fetch_query_dag_by_qid('10.0.0.5', 'SELECT 1')
+        assert result is None
+
+    def test_returns_none_on_timeout(self, monkeypatch):
+        monkeypatch.setattr(
+            dag,
+            '_ui_get',
+            lambda ip, path: [{'id': 1, 'status': 'RUNNING', 'description': 'SELECT 1'}],
+        )
+        monkeypatch.setattr(dag, '_FETCH_TIMEOUT_S', 0.1)
+        result = dag.fetch_query_dag_by_qid('10.0.0.5', 'SELECT 1', 'app-1')
+        assert result is None
+
     def test_returns_none_on_exception(self, monkeypatch):
-        s = {'task_ip': '10.0.0.5', 'app_id': 'app-1'}
         monkeypatch.setattr(
             dag, '_ui_get', lambda ip, path: (_ for _ in ()).throw(Exception('boom'))
         )
-        result = routes_queries._fetch_query_dag(s, set())
+        result = dag.fetch_query_dag_by_qid('10.0.0.5', 'SELECT 1', 'app-1')
         assert result is None
 
 
