@@ -12,6 +12,7 @@ import boto3
 from boto3.dynamodb.conditions import Attr
 
 _TABLE_NAME = os.environ.get('FLASHPOINT_WAREHOUSES_TABLE', 'flashpoint-dev-warehouses')
+_QUERIES_TABLE_NAME = os.environ.get('FLASHPOINT_QUERIES_TABLE', 'flashpoint-dev-queries')
 _dynamodb = boto3.resource('dynamodb')
 
 
@@ -103,3 +104,43 @@ def count_running_warehouses() -> int:
         Select='COUNT',
     )
     return resp.get('Count', 0)
+
+
+# --- Query result records ---
+
+
+def _queries_table():
+    return _dynamodb.Table(_QUERIES_TABLE_NAME)
+
+
+def put_query_record(qid: str, record: dict) -> None:
+    item = {'qid': qid, 'updated_at': Decimal(str(time.time()))}
+    item.update(_to_ddb(record))
+    _queries_table().put_item(Item=item)
+
+
+def get_query_record(qid: str) -> dict | None:
+    resp = _queries_table().get_item(Key={'qid': qid})
+    item = resp.get('Item')
+    return _from_ddb(item) if item else None
+
+
+def update_query_status(qid: str, status: str, **extra) -> None:
+    expr_parts = ['#st = :status', 'updated_at = :ts']
+    names = {'#st': 'status'}
+    values = {':status': status, ':ts': Decimal(str(time.time()))}
+    for k, v in extra.items():
+        expr_parts.append(f'#{k} = :{k}')
+        names[f'#{k}'] = k
+        values[f':{k}'] = _to_ddb(v)
+    _queries_table().update_item(
+        Key={'qid': qid},
+        UpdateExpression='SET ' + ', '.join(expr_parts),
+        ExpressionAttributeNames=names,
+        ExpressionAttributeValues=values,
+    )
+
+
+def list_query_records() -> list[dict]:
+    resp = _queries_table().scan()
+    return [_from_ddb(item) for item in resp.get('Items', [])]

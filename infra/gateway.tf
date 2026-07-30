@@ -89,7 +89,13 @@ resource "aws_iam_role_policy" "gateway_ecs" {
         Resource = [
           aws_dynamodb_table.warehouses.arn,
           aws_dynamodb_table.meters.arn,
+          aws_dynamodb_table.queries.arn,
         ]
+      },
+      {
+        Effect   = 'Allow'
+        Action   = ['s3:PutObject', 's3:GetObject', 's3:DeleteObject']
+        Resource = '${aws_s3_bucket.query_results.arn}/*'
       },
       {
         # AWS Pricing API does not support resource-level permissions
@@ -129,6 +135,8 @@ resource "aws_instance" "gateway" {
     branch             = var.gateway_branch
     warehouses_table     = aws_dynamodb_table.warehouses.name
     meters_table       = aws_dynamodb_table.meters.name
+    queries_table      = aws_dynamodb_table.queries.name
+    query_results_bucket = aws_s3_bucket.query_results.bucket
   }))
 
   tags = merge(local.tags, { Name = "${local.prefix}-gateway" })

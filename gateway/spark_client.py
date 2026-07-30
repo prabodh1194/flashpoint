@@ -22,3 +22,16 @@ def drop(name: str) -> None:
             spark.stop()
         except Exception:
             pass
+
+
+def interrupt(name: str, qid: str | None = None) -> None:
+    spark = _cache.get(name)
+    if not spark:
+        return
+    try:
+        if qid:
+            spark.interruptTag(qid)
+        else:
+            spark.interruptAll()
+    except Exception:
+        pass

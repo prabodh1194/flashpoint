@@ -81,6 +81,30 @@ def mock_store():
     store.list_warehouses = _list  # ty: ignore
     store.count_running_warehouses = _count_running  # ty: ignore
 
+    # Query record store
+    _queries: dict[str, dict] = {}
+
+    def _put_query(qid: str, record: dict) -> None:
+        _queries[qid] = {**record, 'qid': qid}
+
+    def _get_query(qid: str) -> dict | None:
+        return _queries.get(qid)
+
+    def _update_query(qid: str, status: str, **extra) -> None:
+        if qid in _queries:
+            _queries[qid]['status'] = status
+            _queries[qid].update(extra)
+
+    def _list_queries() -> list[dict]:
+        return list(_queries.values())
+
+    store.put_query_record = _put_query  # ty: ignore
+    store.get_query_record = _get_query  # ty: ignore
+    store.update_query_status = _update_query  # ty: ignore
+    store.list_query_records = _list_queries  # ty: ignore
+
+    return _db, _queries
+
     return _db
 
 

@@ -47,6 +47,7 @@ app.add_middleware(
 
 app.include_router(routes_warehouses.router)
 app.include_router(routes_queries.router)
+app.include_router(routes_queries.queries_router)
 app.include_router(routes_queries.history_router)
 
 

@@ -13,4 +13,9 @@ WAREHOUSE_TTL_S = int(os.environ.get('FLASHPOINT_WAREHOUSE_TTL_S', str(2 * 3600)
 MAX_WAREHOUSES = int(os.environ.get('FLASHPOINT_MAX_WAREHOUSES', '3'))
 SPARK_UI_PORT = int(os.environ.get('FLASHPOINT_SPARK_UI_PORT', '4040'))
 
+QUERY_RESULTS_BUCKET = os.environ.get(
+    'FLASHPOINT_QUERY_RESULTS_BUCKET', 'flashpoint-dev-query-results'
+)
+QUERY_RESULT_TTL_DAYS = int(os.environ.get('FLASHPOINT_QUERY_RESULT_TTL_DAYS', '7'))
+
 SIZES: dict[str, int] = {'XS': 1, 'S': 2, 'M': 4, 'L': 8, 'XL': 16}

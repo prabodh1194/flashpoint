@@ -30,6 +30,8 @@ FLASHPOINT_SECURITY_GROUP=${security_group}
 AWS_DEFAULT_REGION=${region}
 FLASHPOINT_WAREHOUSES_TABLE=${warehouses_table}
 FLASHPOINT_METERS_TABLE=${meters_table}
+FLASHPOINT_QUERIES_TABLE=${queries_table}
+FLASHPOINT_QUERY_RESULTS_BUCKET=${query_results_bucket}
 EOF
 
 # Install and start systemd service

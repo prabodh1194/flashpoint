@@ -12,6 +12,7 @@ import store
 
 @pytest.fixture(autouse=True)
 def reset_state(mock_store):
+    mock_store, _ = mock_store
     mock_store.clear()
     state.query_history.clear()
     spark_client._cache.clear()

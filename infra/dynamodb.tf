@@ -29,3 +29,21 @@ resource "aws_dynamodb_table" "meters" {
 
   tags = local.tags
 }
+
+resource "aws_dynamodb_table" "queries" {
+  name         = "${local.prefix}-queries"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "qid"
+
+  attribute {
+    name = "qid"
+    type = "S"
+  }
+
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
+  tags = local.tags
+}
