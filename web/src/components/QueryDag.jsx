@@ -13,8 +13,7 @@ export function QueryDag({ profile }) {
   const [selected, setSelected] = useState(null)
 
   if (!model || !model.spine.length) return null
-  const { spine, totalMs, totalRows, totalShuffleBytes, hasSpill, ranked, peakParallelism } = model
-  const estWall = peakParallelism > 1 ? Math.round(totalMs / peakParallelism) : totalMs
+  const { spine, totalMs, totalRows, totalShuffleBytes, hasSpill, ranked } = model
 
   return (
     <div style={s.root}>
@@ -38,9 +37,7 @@ export function QueryDag({ profile }) {
       <aside style={s.side}>
         <div style={s.colHead}>PROFILE</div>
         <div style={s.statGrid}>
-          <Stat label="Cumulative" value={fmtMs(totalMs)} accent />
-          <Stat label="Wall clock ~" value={fmtMs(estWall)} accent />
-          <Stat label="Peak parallel" value={`×${peakParallelism}`} />
+          <Stat label="Duration" value={fmtMs(profile.duration_ms)} accent />
           <Stat label="Rows" value={totalRows != null ? fmtInt(totalRows) : '—'} />
           <Stat label="Shuffled" value={totalShuffleBytes || '—'} />
           <Stat label="Spill" value={hasSpill ? 'yes' : 'none'} danger={hasSpill} />
@@ -70,8 +67,7 @@ export function QueryDag({ profile }) {
 
 function OpCard({ row, selected, onSelect }) {
   const { node, pct, primaryMetric } = row
-  const perTask = node.median_task_ms
-  const tasks = node.task_count
+  const rowCount = node.metrics?.['number of output rows']
   return (
     <button style={{ ...s.card, ...(selected ? s.cardSel : {}) }} onClick={onSelect}>
       <div style={s.cardTop}>
@@ -89,19 +85,19 @@ function OpCard({ row, selected, onSelect }) {
           </div>
           <div style={s.cardMeta}>
             <span style={{ color: heat(pct), fontWeight: 600 }}>{pct.toFixed(1)}%</span>
-            <span style={s.metaDim}>{fmtMs(node.duration_ms)} total</span>
+            <span style={s.metaDim}>{fmtMs(node.duration_ms)}</span>
           </div>
-          {perTask && tasks && (
-            <div style={s.perTaskLine}>
-              <span style={s.metaDim}>~{fmtMs(perTask)} per task</span>
-              <span style={s.concurrency}>×{tasks}</span>
-            </div>
-          )}
         </>
       ) : (
-        <div style={s.cardMeta}>
-          <span style={s.metaDim}>{primaryMetric || 'no timing reported'}</span>
-        </div>
+        rowCount || primaryMetric ? (
+          <div style={s.cardMeta}>
+            <span style={s.metaDim}>{primaryMetric || `${rowCount} rows`}</span>
+          </div>
+        ) : null
+      )}
+
+      {rowCount && (
+        <div style={s.rowLine}><span>{rowCount} &rarr;</span></div>
       )}
 
       {selected && <NodeDetail node={node} />}
@@ -180,16 +176,14 @@ function buildModel(profile) {
   const totalRows = leafRows(exec)
   const totalShuffleBytes = maxMetric(exec, 'shuffle bytes written')
   const hasSpill = exec.some(n => n.has_spill)
-  const peakParallelism = exec.reduce((max, n) => Math.max(max, n.task_count || 1), 1)
 
-  return { spine, totalMs, totalRows, totalShuffleBytes, hasSpill, ranked, peakParallelism }
+  return { spine, totalMs, totalRows, totalShuffleBytes, hasSpill, ranked }
 }
 
 function primaryMetric(n) {
-  if (n.summary_metric) return n.summary_metric
+  if (n.summary_metric && !n.summary_metric.endsWith(' rows')) return n.summary_metric
   const m = n.metrics || {}
   if (n.is_shuffle && m['shuffle bytes written']) return `${m['shuffle bytes written']} shuffled`
-  if (m['number of output rows']) return `${m['number of output rows']} rows`
   if (m['data size']) return m['data size']
   if (m['number of partitions']) return `${m['number of partitions']} partitions`
   return null
@@ -253,8 +247,7 @@ const s = {
   barTrack: { height: 6, borderRadius: 3, background: 'var(--bg-base)', overflow: 'hidden', marginBottom: 6 },
   barFill: { display: 'block', height: '100%', borderRadius: 3, transition: 'width 0.3s' },
   cardMeta: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontFamily: 'var(--font-mono)', fontSize: 10.5 },
-  perTaskLine: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontFamily: 'var(--font-mono)', fontSize: 10, marginTop: 2, paddingTop: 3, borderTop: '1px solid var(--border-dim)' },
-  concurrency: { color: 'var(--amber)', fontWeight: 500 },
+  rowLine: { marginTop: 4, paddingTop: 3, borderTop: '1px solid var(--border-dim)', fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' },
   metaDim: { color: 'var(--text-dim)' },
 
   detail: {

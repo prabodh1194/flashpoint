@@ -57,6 +57,7 @@ class DagEdge(BaseModel):
 class QueryProfile(BaseModel):
     nodes: list[DagNode]
     edges: list[DagEdge]
+    duration_ms: int | None = None
 
 
 class QueryResponse(BaseModel):

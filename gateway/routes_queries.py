@@ -89,6 +89,8 @@ def run_query(name: str, req: QueryRequest):
     rows = [[str(v) for v in row] for row in collected]
     sid = spark_client.session_id(name)
     profile = _fetch_query_dag(s, sid) if sid else None
+    if profile:
+        profile['duration_ms'] = duration_ms
     state.query_history.append(
         {
             'query_id': qid,
