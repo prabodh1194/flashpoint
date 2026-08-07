@@ -40,10 +40,13 @@ def _async_query_id(sql: str, warehouse_name: str) -> str:
     return hashlib.sha256(payload.encode()).hexdigest()[:16]
 
 
-def _fetch_query_dag(warehouse: dict, sql: str) -> dict | None:
-    result = dag.fetch_query_dag_by_qid(warehouse['task_ip'], sql, warehouse.get('app_id'))
-    if result and dag.resolve_app_id(warehouse['task_ip']):
-        warehouse['app_id'] = dag.resolve_app_id(warehouse['task_ip'])
+def _fetch_query_dag(warehouse: dict, session_id: str) -> dict | None:
+    result = dag.fetch_query_dag_by_session(
+        warehouse['task_ip'], session_id, warehouse.get('app_id')
+    )
+    app_id = dag.resolve_app_id(warehouse['task_ip'])
+    if app_id:
+        warehouse['app_id'] = app_id
     return result
 
 
@@ -61,7 +64,6 @@ def run_query(name: str, req: QueryRequest):
     spark = spark_client.get(s['endpoint'], name)
 
     qid = _query_id(req.sql)
-    spark.sparkContext.setJobDescription(req.sql)
     spark.addTag(qid)
 
     t0 = time.time()
@@ -85,7 +87,8 @@ def run_query(name: str, req: QueryRequest):
     duration_ms = int((time.time() - t0) * 1000)
     columns = df.columns
     rows = [[str(v) for v in row] for row in collected]
-    profile = _fetch_query_dag(s, req.sql)
+    sid = spark_client.session_id(name)
+    profile = _fetch_query_dag(s, sid) if sid else None
     state.query_history.append(
         {
             'query_id': qid,

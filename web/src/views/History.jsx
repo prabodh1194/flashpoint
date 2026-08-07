@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { CheckCircle, XCircle, RotateCcw, X, Hash, Clock, Rows } from 'lucide-react'
 import { fetchHistory } from '../api'
 import { OfflineBanner } from '../components/OfflineBanner'
+import { QueryDag } from '../components/QueryDag'
 
 export function History({ gatewayOnline }) {
   const [history, setHistory] = useState([])
@@ -45,7 +46,7 @@ export function History({ gatewayOnline }) {
                 </td>
                 <td style={{ ...s.td, ...s.mono }}>{q.duration_ms}ms</td>
                 <td style={{ ...s.td, ...s.mono }}>{q.row_count.toLocaleString()}</td>
-                <td style={{ ...s.td, ...s.mono, color: 'var(--amber)' }}>dev-xs</td>
+                <td style={{ ...s.td, ...s.mono, color: 'var(--amber)' }}>{q.name}</td>
                 <td style={{ ...s.td, ...s.mono, color: 'var(--text-dim)' }}>{q.ts}</td>
                 <td style={s.td}>
                   <button style={s.rerunBtn} title="Re-run" onClick={e => e.stopPropagation()}>
@@ -107,6 +108,17 @@ function DetailPanel({ query, onClose }) {
         <div style={p.label}>SQL</div>
         <pre style={p.sqlBlock}>{query.sql}</pre>
       </div>
+
+      {query.profile && query.profile.nodes && (
+        <div style={{ flex: 1, overflow: 'hidden' }}>
+          <div style={p.section}>
+            <div style={p.label}>Profile</div>
+          </div>
+          <div style={{ flex: 1, overflow: 'auto', padding: '0 16px 16px' }}>
+            <QueryDag profile={query.profile} />
+          </div>
+        </div>
+      )}
     </div>
   )
 }

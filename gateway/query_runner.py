@@ -23,7 +23,6 @@ def run_async_query(qid: str, warehouse_name: str, sql: str) -> None:
             return
 
         spark = spark_client.get(s['endpoint'], warehouse_name)
-        spark.sparkContext.setJobDescription(sql)
         spark.addTag(qid)
         store.update_query_status(qid, QueryStatus.RUNNING)
 

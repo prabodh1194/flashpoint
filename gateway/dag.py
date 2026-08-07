@@ -96,32 +96,32 @@ def transform_dag(detail: dict) -> dict:
     return {'nodes': nodes, 'edges': edges}
 
 
-def fetch_query_dag_by_qid(driver_ip: str, sql: str, app_id: str | None = None) -> dict | None:
-    """Fetch the DAG for a specific SQL query from the driver's Spark UI.
+def fetch_query_dag_by_session(
+    driver_ip: str, session_id: str, app_id: str | None = None
+) -> dict | None:
+    """Fetch the DAG for the latest SQL query of a Spark Connect session.
 
-    Matches by the SQL execution's description field — which IS the SQL text
-    when `spark.sparkContext.setJobDescription(sql)` is called before the query.
-    Polls up to _FETCH_TIMEOUT_S for the execution to complete.
+    Spark Connect executes don't support job descriptions client-side, so the
+    SQL tab entry is matched by the session id embedded in its description,
+    picking the most recently submitted COMPLETED execution. Queries run
+    sequentially per warehouse, so "newest COMPLETED for this session" is the
+    query we just fired. Polls up to _FETCH_TIMEOUT_S for completion.
     """
     try:
         app_id = app_id or resolve_app_id(driver_ip)
         if not app_id:
             return None
 
-        sql_normalised = ' '.join(sql.strip().split())
+        needle = f'session_id: "{session_id}"'
 
         deadline = time.time() + _FETCH_TIMEOUT_S
         while time.time() < deadline:
             execs = _ui_get(driver_ip, f'/applications/{app_id}/sql?details=false')
-            match = next(
-                (
-                    e
-                    for e in execs
-                    if ' '.join(e.get('description', '').strip().split()) == sql_normalised
-                    and e.get('status') == 'COMPLETED'
-                ),
-                None,
-            )
+            match = None
+            for e in execs:
+                if needle in e.get('description', '') and e.get('status') == 'COMPLETED':
+                    if match is None or e.get('submissionTime', '') > match.get('submissionTime', ''):
+                        match = e
             if match:
                 detail = _ui_get(
                     driver_ip, f'/applications/{app_id}/sql/{match["id"]}?details=true'
@@ -132,7 +132,7 @@ def fetch_query_dag_by_qid(driver_ip: str, sql: str, app_id: str | None = None) 
 
             time.sleep(_POLL_INTERVAL_S)
 
-        log.warning('DAG fetch timed out for query: %s', sql[:80])
+        log.warning('DAG fetch timed out for session %s', session_id)
 
     except Exception as exc:
         log.warning('Query DAG fetch failed for driver %s: %s', driver_ip, exc)

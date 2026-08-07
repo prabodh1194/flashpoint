@@ -27,17 +27,17 @@ _boto3_resource_patch = patch('boto3.resource', return_value=MagicMock())
 _boto3_client_patch.start()
 _boto3_resource_patch.start()
 
-import ecs_tasks
-import store
+import ecs_tasks  # noqa: E402
+import store  # noqa: E402
 
 # Mock ECS operations
-ecs_tasks.run_driver_task = lambda: 'local-driver-arn'
-ecs_tasks.wait_running = lambda arn: None
-ecs_tasks.private_ip = lambda arn: '127.0.0.1'
-ecs_tasks.run_executor_tasks = lambda master_url, count: [f'local-exec-{i}' for i in range(count)]
-ecs_tasks.is_running = lambda arn: True
-ecs_tasks.stop_tasks = lambda record: None
-ecs_tasks.launch_driver_with_executors = lambda executor_count, grpc_port: (
+ecs_tasks.run_driver_task = lambda: 'local-driver-arn'  # ty: ignore[invalid-assignment]
+ecs_tasks.wait_running = lambda arn: None  # ty: ignore[invalid-assignment]
+ecs_tasks.private_ip = lambda arn: '127.0.0.1'  # ty: ignore[invalid-assignment]
+ecs_tasks.run_executor_tasks = lambda master_url, count: [f'local-exec-{i}' for i in range(count)]  # ty: ignore[invalid-assignment]
+ecs_tasks.is_running = lambda arn: True  # ty: ignore[invalid-assignment]
+ecs_tasks.stop_tasks = lambda record: None  # ty: ignore[invalid-assignment]
+ecs_tasks.launch_driver_with_executors = lambda executor_count, grpc_port: (  # ty: ignore[invalid-assignment]
     'local-driver-arn',
     '127.0.0.1',
     f'sc://127.0.0.1:{grpc_port}',
@@ -93,33 +93,34 @@ def _list_queries() -> list[dict]:
     return list(_queries.values())
 
 
-store.get_warehouse = _get
-store.put_warehouse = _put
-store.update_warehouse_status = _update
-store.delete_warehouse = _delete
-store.list_warehouses = _list
-store.count_running_warehouses = _count_running
-store.put_query_record = _put_query
-store.get_query_record = _get_query
-store.update_query_status = _update_query
-store.list_query_records = _list_queries
+store.get_warehouse = _get  # ty: ignore[invalid-assignment]
+store.put_warehouse = _put  # ty: ignore[invalid-assignment]
+store.update_warehouse_status = _update  # ty: ignore[invalid-assignment]
+store.delete_warehouse = _delete  # ty: ignore[invalid-assignment]
+store.list_warehouses = _list  # ty: ignore[invalid-assignment]
+store.count_running_warehouses = _count_running  # ty: ignore[invalid-assignment]
+store.put_query_record = _put_query  # ty: ignore[invalid-assignment]
+store.get_query_record = _get_query  # ty: ignore[invalid-assignment]
+store.update_query_status = _update_query  # ty: ignore[invalid-assignment]
+store.list_query_records = _list_queries  # ty: ignore[invalid-assignment]
 
 # Mock reconcile
-import reconcile as _reconcile_mod
+import reconcile as _reconcile_mod  # noqa: E402
 
-_reconcile_mod.reconcile = lambda cluster: None
+_reconcile_mod.reconcile = lambda cluster: None  # ty: ignore[invalid-assignment]
 
 
 # Boot uvicorn
-import uvicorn
-from main import app
+import uvicorn  # noqa: E402
+
+from main import app  # noqa: E402
 
 print('─' * 50)
 print('Flashpoint local dev server')
 print('─' * 50)
-print(f'  Gateway:  http://localhost:8080')
-print(f'  Health:   http://localhost:8080/healthz')
-print(f'  Docs:     http://localhost:8080/docs')
+print('  Gateway:  http://localhost:8080')
+print('  Health:   http://localhost:8080/healthz')
+print('  Docs:     http://localhost:8080/docs')
 print()
 print('All AWS calls mocked. DynamoDB is in-memory.')
 print('Warehouse CRUD works. Queries need a local')

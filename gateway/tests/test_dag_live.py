@@ -1,27 +1,27 @@
-"""Local integration test: Spark UI DAG fetch against a real Spark driver.
+"""Local integration test: Spark UI DAG fetch against a real Spark Connect server.
 
-Requires: JAVA_HOME pointing to Java 17. Run with:
+Requires: JAVA_HOME pointing to Java 17, and a local Spark Connect server on
+:15002 (e.g. the one local_dev.py wires up). Run with:
   JAVA_HOME=/opt/homebrew/opt/openjdk@17 uv run pytest tests/test_dag_live.py -v -s
 """
 
 import time
-import pytest
+
 import pyspark
+import pytest
 
 import dag
 
 
 @pytest.fixture(scope='module')
 def spark():
-    spark = (
-        pyspark.sql.SparkSession.builder.master('local[2]')  # ty: ignore
-        .appName('dag-test')
-        .config('spark.ui.port', '4040')
-        .config('spark.driver.host', 'localhost')
-        .getOrCreate()
-    )
+    spark = pyspark.sql.SparkSession.builder.remote(  # ty: ignore
+        'sc://127.0.0.1:15002'
+    ).getOrCreate()
     # Create a small test table
-    df = spark.range(0, 100).selectExpr('id', 'id * 2 AS double_col', 'id % 7 AS bucket')
+    spark.sql('DROP TABLE IF EXISTS numbers').collect()
+    spark.sql('CREATE OR REPLACE TEMP VIEW numbers AS SELECT * FROM RANGE(100)')
+    df = spark.sql('SELECT id, id * 2 AS double_col, id % 7 AS bucket FROM numbers')
     df.createOrReplaceTempView('numbers')
     time.sleep(0.5)  # Let Spark UI initialise
     yield spark
@@ -29,23 +29,22 @@ def spark():
 
 
 def test_dag_from_real_spark(spark):
-    """Run a query against a real Spark driver and fetch its DAG from the UI."""
+    """Run a query against a real Spark Connect server and fetch its DAG."""
     app_id = dag.resolve_app_id('localhost')
-    assert app_id is not None, 'Spark UI not reachable on localhost:4040'
+    if not app_id:
+        pytest.skip('Spark UI not reachable on localhost:4040')
+    session_id = spark._session_id
 
     # Run a query with an aggregate + sort — produces a multi-node DAG
     sql = "SELECT bucket, COUNT(*) AS cnt, AVG(double_col) AS avg_d FROM numbers GROUP BY bucket ORDER BY bucket"
-    spark.sparkContext.setJobDescription(sql)
-    spark.addTag('dag-live-test')
-
     df = spark.sql(sql)
     rows = df.collect()
 
     assert len(rows) == 7  # 0..6 buckets
     assert rows[0]['bucket'] == 0
 
-    # Fetch the DAG
-    result = dag.fetch_query_dag_by_qid('localhost', sql, app_id)
+    # Fetch the DAG for this session's latest completed execution
+    result = dag.fetch_query_dag_by_session('localhost', session_id, app_id)
 
     assert result is not None, f'DAG fetch returned None for SQL: {sql[:60]}'
     assert 'nodes' in result
@@ -77,27 +76,24 @@ def test_dag_from_real_spark(spark):
         print(f'    {n["name"]:40s} {dur_str:>10s}{flags}')
 
 
-def test_dag_matches_sql_not_others(spark):
-    """Verify DAG lookup by SQL text — should not match a different query."""
+def test_dag_tracks_sequential_queries(spark):
+    """Sequential queries each resolve to their own DAG via newest-completed."""
+    app_id = dag.resolve_app_id('localhost')
+    if not app_id:
+        pytest.skip('Spark UI not reachable on localhost:4040')
+    session_id = spark._session_id
+
     sql_a = 'SELECT COUNT(*) FROM numbers'
     sql_b = 'SELECT SUM(double_col) FROM numbers'
 
-    spark.sparkContext.setJobDescription(sql_a)
     spark.sql(sql_a).collect()
-    spark.sparkContext.setJobDescription(sql_b)
+    dag_a = dag.fetch_query_dag_by_session('localhost', session_id, app_id)
+
     spark.sql(sql_b).collect()
-
-    app_id = dag.resolve_app_id('localhost')
-    assert app_id is not None
-
-    # Both should be findable by their own SQL
-    dag_a = dag.fetch_query_dag_by_qid('localhost', sql_a, app_id)
-    dag_b = dag.fetch_query_dag_by_qid('localhost', sql_b, app_id)
+    dag_b = dag.fetch_query_dag_by_session('localhost', session_id, app_id)
 
     assert dag_a is not None
     assert dag_b is not None
 
-    # They should have different node counts (COUNT vs SUM produce different plans)
-    # Not a strict assertion — plans can be identical for simple queries
     print(f'\n  COUNT plan: {len(dag_a["nodes"])} nodes')
     print(f'  SUM plan:   {len(dag_b["nodes"])} nodes')

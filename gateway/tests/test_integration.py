@@ -62,58 +62,95 @@ class TestResolveAppId:
         assert result == 'app-1'
 
 
-class TestFetchQueryDagByQid:
-    def test_finds_by_sql_description(self, monkeypatch):
+class TestFetchQueryDagBySession:
+    def test_finds_by_session_in_description(self, monkeypatch):
         def mock_ui(ip, path):
             if '?details=true' in path:
                 return {'nodes': [{'nodeId': 1, 'nodeName': 'Scan', 'metrics': []}], 'edges': []}
-            return [{'id': 42, 'status': 'COMPLETED', 'description': 'SELECT * FROM users'}]
+            return [
+                {
+                    'id': 42,
+                    'status': 'COMPLETED',
+                    'description': 'Spark Connect - session_id: "abc"\nplan {...',
+                    'submissionTime': '2026-08-07T10:00:00.000GMT',
+                }
+            ]
 
         monkeypatch.setattr(dag, '_ui_get', mock_ui)
-        result = dag.fetch_query_dag_by_qid('10.0.0.5', 'SELECT * FROM users', 'app-1')
+        result = dag.fetch_query_dag_by_session('10.0.0.5', 'abc', 'app-1')
         assert result is not None
         assert len(result['nodes']) == 1
 
-    def test_matches_normalised_whitespace(self, monkeypatch):
+    def test_picks_newest_for_session(self, monkeypatch):
         def mock_ui(ip, path):
-            if '?details=true' in path:
-                return {'nodes': [{'nodeId': 1, 'nodeName': 'Scan', 'metrics': []}], 'edges': []}
-            return [{'id': 1, 'status': 'COMPLETED', 'description': 'SELECT  *\nFROM    users'}]
+            if 'sql/2?details=true' in path:
+                return {'nodes': [{'nodeId': 2, 'nodeName': 'Scan-2', 'metrics': []}], 'edges': []}
+            if 'sql/1?details=true' in path:
+                return {'nodes': [{'nodeId': 1, 'nodeName': 'Scan-1', 'metrics': []}], 'edges': []}
+            return [
+                {
+                    'id': 1,
+                    'status': 'COMPLETED',
+                    'description': 'Spark Connect - session_id: "abc"',
+                    'submissionTime': '2026-08-07T10:00:00.000GMT',
+                },
+                {
+                    'id': 2,
+                    'status': 'COMPLETED',
+                    'description': 'Spark Connect - session_id: "abc"',
+                    'submissionTime': '2026-08-07T10:05:00.000GMT',
+                },
+            ]
 
         monkeypatch.setattr(dag, '_ui_get', mock_ui)
-        result = dag.fetch_query_dag_by_qid('10.0.0.5', 'SELECT * FROM users', 'app-1')
+        result = dag.fetch_query_dag_by_session('10.0.0.5', 'abc', 'app-1')
         assert result is not None
+        assert result['nodes'][0]['id'] == 2
 
     def test_skips_non_matching(self, monkeypatch):
         monkeypatch.setattr(
             dag,
             '_ui_get',
-            lambda ip, path: [{'id': 1, 'status': 'COMPLETED', 'description': 'SELECT 1'}],
+            lambda ip, path: [
+                {
+                    'id': 1,
+                    'status': 'COMPLETED',
+                    'description': 'Spark Connect - session_id: "other"',
+                    'submissionTime': '2026-08-07T10:00:00.000GMT',
+                }
+            ],
         )
         monkeypatch.setattr(time, 'sleep', lambda s: None)
-        result = dag.fetch_query_dag_by_qid('10.0.0.5', 'SELECT 2', 'app-1')
+        result = dag.fetch_query_dag_by_session('10.0.0.5', 'abc', 'app-1')
         assert result is None
 
     def test_returns_none_when_no_app_id(self, monkeypatch):
         monkeypatch.setattr(dag, 'resolve_app_id', lambda ip: None)
-        result = dag.fetch_query_dag_by_qid('10.0.0.5', 'SELECT 1')
+        result = dag.fetch_query_dag_by_session('10.0.0.5', 'abc')
         assert result is None
 
     def test_returns_none_on_timeout(self, monkeypatch):
         monkeypatch.setattr(
             dag,
             '_ui_get',
-            lambda ip, path: [{'id': 1, 'status': 'RUNNING', 'description': 'SELECT 1'}],
+            lambda ip, path: [
+                {
+                    'id': 1,
+                    'status': 'RUNNING',
+                    'description': 'Spark Connect - session_id: "abc"',
+                    'submissionTime': '2026-08-07T10:00:00.000GMT',
+                }
+            ],
         )
         monkeypatch.setattr(dag, '_FETCH_TIMEOUT_S', 0.1)
-        result = dag.fetch_query_dag_by_qid('10.0.0.5', 'SELECT 1', 'app-1')
+        result = dag.fetch_query_dag_by_session('10.0.0.5', 'abc', 'app-1')
         assert result is None
 
     def test_returns_none_on_exception(self, monkeypatch):
         monkeypatch.setattr(
             dag, '_ui_get', lambda ip, path: (_ for _ in ()).throw(Exception('boom'))
         )
-        result = dag.fetch_query_dag_by_qid('10.0.0.5', 'SELECT 1', 'app-1')
+        result = dag.fetch_query_dag_by_session('10.0.0.5', 'abc', 'app-1')
         assert result is None
 
 

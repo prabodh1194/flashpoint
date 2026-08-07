@@ -24,6 +24,13 @@ def drop(name: str) -> None:
             pass
 
 
+def session_id(name: str) -> str | None:
+    spark = _cache.get(name)
+    if not spark:
+        return None
+    return getattr(spark, '_session_id', None)
+
+
 def interrupt(name: str, qid: str | None = None) -> None:
     spark = _cache.get(name)
     if not spark:
