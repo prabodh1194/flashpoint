@@ -174,6 +174,7 @@ function buildModel(profile) {
 }
 
 function primaryMetric(n) {
+  if (n.summary_metric) return n.summary_metric
   const m = n.metrics || {}
   if (n.is_shuffle && m['shuffle bytes written']) return `${m['shuffle bytes written']} shuffled`
   if (m['number of output rows']) return `${m['number of output rows']} rows`

@@ -70,12 +70,31 @@ def transform_dag(detail: dict) -> dict:
 
         has_spill = 'spill size' in metrics and is_nonzero_size(metrics['spill size'])
 
+        # Try every time-related metric Spark reports — WholeStageCodegen uses
+        # 'duration', Scan has 'scan time', Exchange has 'shuffle write time' and
+        # 'fetch wait time', aggregate has 'time in aggregation build'
         duration_ms = None
-        for key in ('duration', 'sort time', 'time in aggregation build'):
+        for key in (
+            'duration', 'scan time', 'shuffle write time',
+            'fetch wait time', 'sort time', 'time in aggregation build',
+            'time to broadcast',
+        ):
             if key in metrics:
                 duration_ms = parse_duration_ms(metrics[key])
                 if duration_ms is not None:
                     break
+
+        # Friendly labels for the UI when no duration is available (codegen
+        # operators like Filter / Project / Range)
+        summary_metric = None
+        if 'number of output rows' in metrics:
+            summary_metric = metric_total(metrics['number of output rows']) + ' rows'
+        elif name.startswith('WholeStageCodegen') and duration_ms is not None:
+            pass  # duration bar is sufficient
+        elif 'scan time' in metrics:
+            pass  # duration_ms already set above
+        elif 'shuffle bytes written' in metrics:
+            summary_metric = metric_total(metrics['shuffle bytes written']) + ' shuffled'
 
         nodes.append(
             {
@@ -86,6 +105,7 @@ def transform_dag(detail: dict) -> dict:
                 'is_shuffle': is_shuffle,
                 'has_skew': False,
                 'has_spill': has_spill,
+                **({'summary_metric': summary_metric} if summary_metric else {}),
             }
         )
 

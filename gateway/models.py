@@ -37,6 +37,7 @@ class DagNode(BaseModel):
     id: int
     name: str
     duration_ms: int | None = None
+    summary_metric: str | None = None
     metrics: dict[str, str] = {}
     is_shuffle: bool = False
     has_skew: bool = False
