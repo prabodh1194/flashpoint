@@ -14,6 +14,7 @@ export function QueryDag({ profile }) {
 
   if (!model || !model.spine.length) return null
   const { spine, totalMs, totalRows, totalShuffleBytes, hasSpill, ranked, peakParallelism } = model
+  const selRow = selected != null ? spine.find(r => r.node.id === selected) : null
 
   return (
     <div style={s.root}>
@@ -43,6 +44,8 @@ export function QueryDag({ profile }) {
           <Stat label="Spill" value={hasSpill ? 'yes' : 'none'} danger={hasSpill} />
           <Stat label="Peak parallel" value={`×${peakParallelism}`} />
         </div>
+
+        {selRow && <SelectedNode row={selRow} />}
 
         <div style={s.sideHead}>Most expensive nodes</div>
         <div style={s.rankList}>
@@ -126,22 +129,57 @@ function OpCard({ row, selected, onSelect }) {
           ))}
         </div>
       )}
-
-      {selected && <NodeDetail node={node} />}
     </button>
   )
 }
 
-function NodeDetail({ node }) {
+// Sidebar panel for the selected node: full operator name, every column
+// treatment and metric value — untruncated (cards stay compact, this is the
+// "read it all" view).
+function SelectedNode({ row }) {
+  const { node, pct } = row
   const entries = Object.entries(node.metrics).filter(([, v]) => v && v !== '0' && v !== '0.0 B')
   return (
-    <div style={s.detail}>
-      {entries.slice(0, 12).map(([k, v]) => (
-        <div key={k} style={s.detailRow}>
-          <span style={s.detailK}>{k}</span>
-          <span style={s.detailV}>{v}</span>
+    <div style={s.sel}>
+      <div style={s.sideHead}>Selected node</div>
+      <div style={s.selCard}>
+        <div style={s.selTop}>
+          <span style={s.selName}>{node.name}</span>
+          <span style={s.selPct}>{pct != null ? `${pct.toFixed(1)}%` : ''}</span>
         </div>
-      ))}
+        {pct != null && (
+          <div style={s.selMeta}>{fmtMs(node.duration_ms)}</div>
+        )}
+
+        {node.treatments?.length > 0 && (
+          <div style={s.treat}>
+            {node.treatments.map((tr, i) => (
+              <div key={i} style={i > 0 ? s.treatGroup : undefined}>
+                {node.treatments.length > 1 && (
+                  <div style={s.treatOp}>{tr.operator}</div>
+                )}
+                {tr.entries.map(([k, v], j) => (
+                  <div key={j} style={s.treatRow}>
+                    <span style={s.treatK}>{k}</span>
+                    <span style={s.selTreatV}>{v}</span>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {entries.length > 0 && (
+          <div style={s.detail}>
+            {entries.slice(0, 12).map(([k, v]) => (
+              <div key={k} style={s.detailRow}>
+                <span style={s.detailK}>{k}</span>
+                <span style={s.detailV}>{v}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -312,6 +350,13 @@ const s = {
   statValue: { fontSize: 14, fontWeight: 600, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' },
 
   sideHead: { fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-dim)', fontWeight: 600, padding: '4px 16px 8px' },
+  sel: { padding: '0 16px 16px', borderBottom: '1px solid var(--border-dim)', marginBottom: 14 },
+  selCard: { background: 'var(--bg-base)', border: '1px solid var(--amber)', borderRadius: 8, padding: '10px 12px' },
+  selTop: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 4 },
+  selName: { fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', wordBreak: 'break-word', lineHeight: 1.35 },
+  selPct: { fontSize: 10.5, fontFamily: 'var(--font-mono)', color: 'var(--amber)', flexShrink: 0 },
+  selMeta: { fontSize: 10.5, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', marginBottom: 4 },
+  selTreatV: { color: 'var(--text-mono)', textAlign: 'right', whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: 1.4 },
   rankList: { display: 'flex', flexDirection: 'column', gap: 2, padding: '0 10px' },
   noData: { fontSize: 11, color: 'var(--text-dim)', padding: '6px 6px', fontStyle: 'italic' },
   rankRow: {
