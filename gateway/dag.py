@@ -52,6 +52,27 @@ def parse_duration_ms(value: str) -> int | None:
     return int(num * _DURATION_UNITS_MS.get(m.group(2), 1.0))
 
 
+_TASK_TIME_RE = re.compile(
+    r'([\d,.]+)\s*(ms|min|s|m|h)\b\s*\(\s*([\d,.]+)\s*ms\s*,\s*([\d,.]+)\s*ms\s*,\s*([\d,.]+)\s*ms'
+)
+
+
+def parse_task_breakdown(value: str) -> dict | None:
+    """Extract total, median, and estimated task count from Spark's
+    'total (min, med, max (stageId: taskId))\\nN ms (...)' format."""
+    stripped = value.strip().replace('\n', ' ')
+    m = _TASK_TIME_RE.search(stripped)
+    if not m:
+        return None
+    total_s = float(m.group(1).replace(',', ''))
+    total_ms = int(total_s * _DURATION_UNITS_MS.get(m.group(2), 1.0))
+    med_ms = float(m.group(4).replace(',', ''))
+    task_count = None
+    if med_ms > 0 and total_ms > 0:
+        task_count = max(1, round(total_ms / med_ms))
+    return {'total_ms': total_ms, 'median_task_ms': int(med_ms), 'task_count': task_count}
+
+
 def is_nonzero_size(value: str) -> bool:
     m = re.match(r'([\d,.]+)', metric_total(value))
     return bool(m) and float(m.group(1).replace(',', '')) > 0
@@ -74,13 +95,21 @@ def transform_dag(detail: dict) -> dict:
         # 'duration', Scan has 'scan time', Exchange has 'shuffle write time' and
         # 'fetch wait time', aggregate has 'time in aggregation build'
         duration_ms = None
+        median_task_ms = None
+        task_count = None
         for key in (
             'duration', 'scan time', 'shuffle write time',
             'fetch wait time', 'sort time', 'time in aggregation build',
             'time to broadcast',
         ):
             if key in metrics:
-                duration_ms = parse_duration_ms(metrics[key])
+                breakdown = parse_task_breakdown(metrics[key])
+                if breakdown:
+                    duration_ms = breakdown['total_ms']
+                    median_task_ms = breakdown['median_task_ms']
+                    task_count = breakdown['task_count']
+                else:
+                    duration_ms = parse_duration_ms(metrics[key])
                 if duration_ms is not None:
                     break
 
@@ -101,6 +130,8 @@ def transform_dag(detail: dict) -> dict:
                 'id': n['nodeId'],
                 'name': name,
                 'duration_ms': duration_ms,
+                'median_task_ms': median_task_ms,
+                'task_count': task_count,
                 'metrics': {k: metric_total(v) for k, v in metrics.items()},
                 'is_shuffle': is_shuffle,
                 'has_skew': False,

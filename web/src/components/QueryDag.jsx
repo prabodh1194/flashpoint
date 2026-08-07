@@ -13,7 +13,8 @@ export function QueryDag({ profile }) {
   const [selected, setSelected] = useState(null)
 
   if (!model || !model.spine.length) return null
-  const { spine, totalMs, totalRows, totalShuffleBytes, hasSpill, ranked } = model
+  const { spine, totalMs, totalRows, totalShuffleBytes, hasSpill, ranked, peakParallelism } = model
+  const estWall = peakParallelism > 1 ? Math.round(totalMs / peakParallelism) : totalMs
 
   return (
     <div style={s.root}>
@@ -37,7 +38,9 @@ export function QueryDag({ profile }) {
       <aside style={s.side}>
         <div style={s.colHead}>PROFILE</div>
         <div style={s.statGrid}>
-          <Stat label="Total time" value={fmtMs(totalMs)} accent />
+          <Stat label="Cumulative" value={fmtMs(totalMs)} accent />
+          <Stat label="Wall clock ~" value={fmtMs(estWall)} accent />
+          <Stat label="Peak parallel" value={`×${peakParallelism}`} />
           <Stat label="Rows" value={totalRows != null ? fmtInt(totalRows) : '—'} />
           <Stat label="Shuffled" value={totalShuffleBytes || '—'} />
           <Stat label="Spill" value={hasSpill ? 'yes' : 'none'} danger={hasSpill} />
@@ -67,6 +70,8 @@ export function QueryDag({ profile }) {
 
 function OpCard({ row, selected, onSelect }) {
   const { node, pct, primaryMetric } = row
+  const perTask = node.median_task_ms
+  const tasks = node.task_count
   return (
     <button style={{ ...s.card, ...(selected ? s.cardSel : {}) }} onClick={onSelect}>
       <div style={s.cardTop}>
@@ -84,8 +89,14 @@ function OpCard({ row, selected, onSelect }) {
           </div>
           <div style={s.cardMeta}>
             <span style={{ color: heat(pct), fontWeight: 600 }}>{pct.toFixed(1)}%</span>
-            <span style={s.metaDim}>{fmtMs(node.duration_ms)}</span>
+            <span style={s.metaDim}>{fmtMs(node.duration_ms)} total</span>
           </div>
+          {perTask && tasks && (
+            <div style={s.perTaskLine}>
+              <span style={s.metaDim}>~{fmtMs(perTask)} per task</span>
+              <span style={s.concurrency}>×{tasks}</span>
+            </div>
+          )}
         </>
       ) : (
         <div style={s.cardMeta}>
@@ -169,8 +180,9 @@ function buildModel(profile) {
   const totalRows = leafRows(exec)
   const totalShuffleBytes = maxMetric(exec, 'shuffle bytes written')
   const hasSpill = exec.some(n => n.has_spill)
+  const peakParallelism = exec.reduce((max, n) => Math.max(max, n.task_count || 1), 1)
 
-  return { spine, totalMs, totalRows, totalShuffleBytes, hasSpill, ranked }
+  return { spine, totalMs, totalRows, totalShuffleBytes, hasSpill, ranked, peakParallelism }
 }
 
 function primaryMetric(n) {
@@ -241,6 +253,8 @@ const s = {
   barTrack: { height: 6, borderRadius: 3, background: 'var(--bg-base)', overflow: 'hidden', marginBottom: 6 },
   barFill: { display: 'block', height: '100%', borderRadius: 3, transition: 'width 0.3s' },
   cardMeta: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontFamily: 'var(--font-mono)', fontSize: 10.5 },
+  perTaskLine: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontFamily: 'var(--font-mono)', fontSize: 10, marginTop: 2, paddingTop: 3, borderTop: '1px solid var(--border-dim)' },
+  concurrency: { color: 'var(--amber)', fontWeight: 500 },
   metaDim: { color: 'var(--text-dim)' },
 
   detail: {
