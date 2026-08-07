@@ -2,9 +2,8 @@ import { useState, useEffect } from 'react'
 import { CheckCircle, XCircle, RotateCcw, X, Hash, Clock, Rows } from 'lucide-react'
 import { fetchHistory } from '../api'
 import { OfflineBanner } from '../components/OfflineBanner'
-import { QueryDag } from '../components/QueryDag'
 
-export function History({ gatewayOnline }) {
+export function History({ gatewayOnline, onOpenProfile }) {
   const [history, setHistory] = useState([])
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState(null)
@@ -110,12 +109,12 @@ function DetailPanel({ query, onClose }) {
       </div>
 
       {query.profile && query.profile.nodes && (
-        <div style={{ flex: 1, overflow: 'hidden' }}>
-          <div style={p.section}>
+        <div style={p.section}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={p.label}>Profile</div>
-          </div>
-          <div style={{ flex: 1, overflow: 'auto', padding: '0 16px 16px' }}>
-            <QueryDag profile={query.profile} />
+            <button style={p.openProfileBtn} onClick={() => onOpenProfile(query.query_id)}>
+              Open full profile
+            </button>
           </div>
         </div>
       )}
@@ -312,5 +311,15 @@ const p = {
     whiteSpace: 'pre-wrap',
     wordBreak: 'break-word',
     lineHeight: '1.6em',
+  },
+  openProfileBtn: {
+    background: 'none',
+    border: '1px solid var(--amber-border)',
+    borderRadius: 'var(--radius-sm)',
+    padding: '3px 10px',
+    cursor: 'pointer',
+    color: 'var(--amber)',
+    fontSize: 11,
+    fontFamily: 'inherit',
   },
 }

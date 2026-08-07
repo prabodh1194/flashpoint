@@ -59,6 +59,10 @@ export async function fetchHistory() {
   return _request('GET', '/history')
 }
 
+export async function fetchQueryById(queryId) {
+  return _request('GET', `/history/${queryId}`)
+}
+
 export async function healthz() {
   return _request('GET', '/healthz')
 }

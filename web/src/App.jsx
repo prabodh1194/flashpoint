@@ -4,6 +4,7 @@ import { Topbar } from './components/Topbar'
 import { Worksheet } from './views/Worksheet'
 import { Warehouses } from './views/Warehouses'
 import { History } from './views/History'
+import { QueryProfile } from './views/QueryProfile'
 import { DataExplorer } from './views/DataExplorer'
 import { healthz } from './api'
 
@@ -14,6 +15,7 @@ export default function App() {
   const [view, setView] = useState('worksheet')
   const [navOpen, setNavOpen] = useState(false)
   const [gatewayOnline, setGatewayOnline] = useState(false)
+  const [profileQid, setProfileQid] = useState(null)
 
   const checkGateway = useCallback(async () => {
     try {
@@ -52,10 +54,16 @@ export default function App() {
           onThemeToggle={toggleTheme}
         />
         <div style={styles.content}>
-          {view === 'worksheet'  && <Worksheet gatewayOnline={gatewayOnline} />}
-          {view === 'warehouses' && <Warehouses gatewayOnline={gatewayOnline} />}
-          {view === 'history'    && <History gatewayOnline={gatewayOnline} />}
-          {view === 'explorer'   && <DataExplorer gatewayOnline={gatewayOnline} />}
+          {profileQid ? (
+            <QueryProfile queryId={profileQid} onBack={() => setProfileQid(null)} />
+          ) : (
+            <>
+              {view === 'worksheet'  && <Worksheet gatewayOnline={gatewayOnline} />}
+              {view === 'warehouses' && <Warehouses gatewayOnline={gatewayOnline} />}
+              {view === 'history'    && <History gatewayOnline={gatewayOnline} onOpenProfile={setProfileQid} />}
+              {view === 'explorer'   && <DataExplorer gatewayOnline={gatewayOnline} />}
+            </>
+          )}
         </div>
       </div>
     </div>
