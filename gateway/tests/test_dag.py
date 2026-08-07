@@ -329,20 +329,21 @@ Input [1]: [customer_id#2]
 Condition : isnotnull(customer_id#2)
 """
 
+# Mirrors the Spark UI API's node array: execution order (data source first),
+# with each WholeStageCodegen cluster sitting immediately after its members.
 NODES = [
-    {'nodeId': 0, 'nodeName': 'AdaptiveSparkPlan'},
-    {'nodeId': 1, 'nodeName': 'WholeStageCodegen (3)'},
-    {'nodeId': 2, 'nodeName': 'HashAggregate'},
-    {'nodeId': 3, 'nodeName': 'BroadcastHashJoin'},
-    {'nodeId': 4, 'nodeName': 'Filter'},
-    {'nodeId': 5, 'nodeName': 'ColumnarToRow'},
-    {'nodeId': 6, 'nodeName': 'Scan parquet'},
-    {'nodeId': 7, 'nodeName': 'WholeStageCodegen (2)'},
-    {'nodeId': 8, 'nodeName': 'BroadcastExchange'},
-    {'nodeId': 9, 'nodeName': 'WholeStageCodegen (1)'},
-    {'nodeId': 10, 'nodeName': 'Filter'},
-    {'nodeId': 11, 'nodeName': 'ColumnarToRow'},
     {'nodeId': 12, 'nodeName': 'Scan parquet'},
+    {'nodeId': 11, 'nodeName': 'ColumnarToRow'},
+    {'nodeId': 10, 'nodeName': 'Filter'},
+    {'nodeId': 9, 'nodeName': 'WholeStageCodegen (1)'},
+    {'nodeId': 8, 'nodeName': 'BroadcastExchange'},
+    {'nodeId': 6, 'nodeName': 'Scan parquet'},
+    {'nodeId': 5, 'nodeName': 'ColumnarToRow'},
+    {'nodeId': 4, 'nodeName': 'Filter'},
+    {'nodeId': 3, 'nodeName': 'BroadcastHashJoin'},
+    {'nodeId': 2, 'nodeName': 'HashAggregate'},
+    {'nodeId': 7, 'nodeName': 'WholeStageCodegen (2)'},
+    {'nodeId': 0, 'nodeName': 'AdaptiveSparkPlan'},
 ]
 
 
@@ -364,15 +365,21 @@ class TestColumnTreatments:
 
     def test_join_treatment_kept(self):
         t = parse_column_treatments(PLAN, NODES)
-        node = next(tr for tr in t[7] if tr['operator'] == 'BroadcastHashJoin')
+        node = next(tr for tr in t[3] if tr['operator'] == 'BroadcastHashJoin')
         entries = dict(node['entries'])
         assert entries['Left keys [1]'] == '[customer_id]'
         assert entries['Join type'] == 'Inner'
 
-    def test_codegen_blocks_collected_into_cluster(self):
+    def test_codegen_blocks_map_to_member_nodes(self):
         t = parse_column_treatments(PLAN, NODES)
-        ops = [tr['operator'] for tr in t[7]]  # WholeStageCodegen (2)
-        assert ops == ['Filter', 'BroadcastHashJoin', 'HashAggregate']
+        assert t[2][0]['operator'] == 'HashAggregate'  # own node, not the cluster
+        agg_keys = [e[0] for e in t[2][0]['entries']]
+        assert 'Keys [1]' in agg_keys
+        assert 'Functions [1]' in agg_keys
+        assert t[3][0]['operator'] == 'BroadcastHashJoin'
+        assert t[4][0]['operator'] == 'Filter'
+        assert 7 not in t  # WholeStageCodegen (2) holds nothing anymore
+        assert t[10][0]['operator'] == 'Filter'  # build side (codegen id 1)
 
     def test_scan_inside_codegen_gets_own_node(self):
         t = parse_column_treatments(PLAN, NODES)
@@ -381,10 +388,10 @@ class TestColumnTreatments:
 
     def test_initial_plan_blocks_excluded(self):
         t = parse_column_treatments(PLAN, NODES)
-        ops = {tr['operator'] for node in t.values() for tr in node}
-        assert 'HashAggregate' in ops  # final plan's (via cluster)
-        # Initial plan's own Filter (13) must not attach to a Filter node
-        assert len([tr for tr in t.get(4, []) if tr['operator'] == 'Filter']) == 0
+        all_ops = [tr['operator'] for node in t.values() for tr in node]
+        assert 'HashAggregate' in all_ops  # final plan's, on its member node
+        assert all_ops.count('Filter') == 2  # final plan's only (blocks 1 and 9)
+        assert all_ops.count('BroadcastHashJoin') == 1  # final plan's only (block 2)
 
     def test_query_stage_blocks_skipped(self):
         t = parse_column_treatments(PLAN, NODES)
@@ -421,9 +428,10 @@ Condition : isnotnull(id#0L)
         }
         result = transform_dag(detail)
         by_id = {n['id']: n for n in result['nodes']}
-        ops = [tr['operator'] for tr in by_id[7]['treatments']]
-        assert 'BroadcastHashJoin' in ops
-        assert by_id[7]['treatments'][0]['operator'] == 'Filter'
+        agg = by_id[2]['treatments'][0]
+        assert agg['operator'] == 'HashAggregate'
+        assert 'Keys [1]' in [e[0] for e in agg['entries']]
+        assert by_id[3]['treatments'][0]['operator'] == 'BroadcastHashJoin'
 
 
 # ── Duration unit parsing edge cases ───────────────────────────

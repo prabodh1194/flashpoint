@@ -84,6 +84,9 @@ _BLOCK_RE = re.compile(r'^\((\d+)\)\s+([^\n]+)\n(.*?)(?=^\(\d+\)\s|\Z)', re.MULT
 _CODEGEN_ID_RE = re.compile(r'codegen id\s*:\s*(\d+)')
 _STAGE_NAME_RE = re.compile(r'(QueryStage|^Reused|^InputAdapter)')
 _TRAIL_SPACE_RE = re.compile(r'\s+')
+# Operators Spark never puts inside a codegen stage — their nodes must not be
+# mistaken for stage members when splitting the cluster's member run.
+_MEMBER_SKIP_RE = re.compile(r'(Scan|Exchange|ShuffleRead|InputAdapter|AdaptiveSparkPlan)')
 
 
 def _block_entries(body: str) -> list[list[str]]:
@@ -150,9 +153,13 @@ def parse_column_treatments(plan_description: str, nodes: list[dict]) -> dict[in
     """Attach each operator's column treatment (Output/Keys/Condition/...) to
     the graph node it belongs to, keyed by nodeId.
 
-    Blocks tagged '[codegen id : N]' belong to the WholeStageCodegen (N)
-    cluster node; untagged blocks map to plain nodes by operator name,
-    in plan order. Query-stage and Initial-Plan blocks have no node."""
+    Blocks tagged '[codegen id : N]' belong to the operators inside the
+    WholeStageCodegen (N) stage: each block lands on its own member node (the
+    contiguous run of plain nodes just before the cluster in execution order,
+    minus operators Spark never codegen's), so a HashAggregate node shows its
+    own Keys/Functions instead of burying them on the cluster. Untagged blocks
+    map to plain nodes by operator name, in plan order. Query-stage and
+    Initial-Plan blocks have no node."""
     if not plan_description:
         return {}
     blocks = _parse_blocks(plan_description)
@@ -160,53 +167,86 @@ def parse_column_treatments(plan_description: str, nodes: list[dict]) -> dict[in
         return {}
     final_numbers = _final_plan_numbers(plan_description)
 
+    # The node array is in execution order: data source first, final operator
+    # last, with each WholeStageCodegen cluster immediately after its members.
     clusters: dict[int, int] = {}
-    plain_nodes: list[int] = []
-    for n in sorted(nodes, key=lambda n: n['nodeId']):
+    for i, n in enumerate(nodes):
         m = re.match(r'^WholeStageCodegen\s*\((\d+)\)', n.get('nodeName', ''))
         if m:
-            clusters[int(m.group(1))] = n['nodeId']
-        else:
-            plain_nodes.append(n['nodeId'])
+            clusters[int(m.group(1))] = i
+    cluster_indexes = sorted(clusters.values())
 
-    claimed_plain: set[int] = set()
+    claimed: set[int] = set()
     treatments: dict[int, list[dict]] = {}
 
-    def attach_plain(node_id: int, block: dict) -> bool:
-        if node_id in claimed_plain:
-            return False
-        claimed_plain.add(node_id)
+    def attach(node_id: int, block: dict) -> None:
         treatments.setdefault(node_id, []).append(
             {'operator': block['name'], 'entries': block['entries']}
         )
-        return True
+
+    def member_node_id(codegen_id: int, name: str) -> int | None:
+        """First unclaimed member of the stage whose name matches, in execution order."""
+        pos = clusters.get(codegen_id)
+        if pos is None:
+            return None
+        start = 0
+        for other in cluster_indexes:
+            if other < pos:
+                start = other + 1
+        for idx in range(start, pos):
+            node = nodes[idx]
+            nid = node['nodeId']
+            if nid in claimed or _MEMBER_SKIP_RE.search(node.get('nodeName', '')):
+                continue
+            if _TRAIL_SPACE_RE.sub(' ', node.get('nodeName', '')) == name.split(' ')[0]:
+                return nid
+        return None
 
     def match_plain(name: str) -> int | None:
         """First unclaimed plain node whose name matches, in plan order."""
         for nid in plain_nodes:
-            if nid in claimed_plain:
+            if nid in claimed:
                 continue
             node = next((n for n in nodes if n['nodeId'] == nid), None)
             if node and _TRAIL_SPACE_RE.sub(' ', node.get('nodeName', '')) == name:
                 return nid
         return None
 
+    plain_nodes = [
+        n['nodeId']
+        for n in sorted(nodes, key=lambda n: n['nodeId'])
+        if not re.match(r'^WholeStageCodegen\s*\((\d+)\)', n.get('nodeName', ''))
+    ]
+
+    # Codegen blocks first, so member nodes are claimed before plain matching
+    # gets a chance to steal them.
     for num in sorted(blocks):
         block = blocks[num]
         if num not in final_numbers or not block['entries']:
             continue
         if _STAGE_NAME_RE.search(block['name']):
             continue
-        if block['codegen_id'] is not None:
-            node_id = clusters.get(block['codegen_id'])
-            if node_id is not None:
-                treatments.setdefault(node_id, []).append(
-                    {'operator': block['name'], 'entries': block['entries']}
-                )
+        if block['codegen_id'] is None:
+            continue
+        node_id = member_node_id(block['codegen_id'], block['name'])
+        if node_id is None:
+            pos = clusters.get(block['codegen_id'])
+            if pos is not None:  # unrecognized operator → keep it on the cluster
+                attach(nodes[pos]['nodeId'], block)
+            continue
+        claimed.add(node_id)
+        attach(node_id, block)
+
+    for num in sorted(blocks):
+        block = blocks[num]
+        if num not in final_numbers or not block['entries']:
+            continue
+        if _STAGE_NAME_RE.search(block['name']) or block['codegen_id'] is not None:
             continue
         node_id = match_plain(block['name'])
         if node_id is not None:
-            attach_plain(node_id, block)
+            claimed.add(node_id)
+            attach(node_id, block)
 
     return treatments
 
