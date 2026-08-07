@@ -33,6 +33,11 @@ class ResizeRequest(BaseModel):
     size: str
 
 
+class ColumnTreatment(BaseModel):
+    operator: str
+    entries: list[list[str]]
+
+
 class DagNode(BaseModel):
     id: int
     name: str
@@ -40,6 +45,7 @@ class DagNode(BaseModel):
     median_task_ms: int | None = None
     task_count: int | None = None
     summary_metric: str | None = None
+    treatments: list[ColumnTreatment] | None = None
     metrics: dict[str, str] = {}
     is_shuffle: bool = False
     has_skew: bool = False

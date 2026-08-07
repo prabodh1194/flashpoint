@@ -3,6 +3,7 @@ import pytest
 from dag import (
     is_nonzero_size,
     metric_total,
+    parse_column_treatments,
     parse_duration_ms,
     transform_dag,
 )
@@ -243,6 +244,186 @@ class TestTransformDag:
         metrics = result['nodes'][0]['metrics']
         assert 'number of output rows' in metrics
         assert 'scan time' in metrics
+
+
+# ── parse_column_treatments ────────────────────────────────────
+
+PLAN = """== Physical Plan ==
+AdaptiveSparkPlan (5)
++- == Final Plan ==
+   ResultQueryStage (4)
+      +- * HashAggregate (3)
+         +- * BroadcastHashJoin Inner BuildRight (2)
+            :- * Filter (1)
+            :  +- Scan parquet  (6)
+            +- BroadcastQueryStage (7)
+               +- BroadcastExchange (8)
+                  +- * Filter (9)
+                     +- Scan parquet  (10)
++- == Initial Plan ==
+   HashAggregate (11)
+   +- BroadcastHashJoin (12)
+      +- Filter (13)
+         +- Scan parquet  (6)
+
+(1) Filter [codegen id : 2]
+Input [1]: [customer_id#2]
+Condition : isnotnull(customer_id#2)
+
+(2) BroadcastHashJoin [codegen id : 2]
+Left keys [1]: [customer_id#2]
+Right keys [1]: [customer_id#6]
+Join type: Inner
+Join condition: None
+
+(3) HashAggregate [codegen id : 2]
+Input [1]: [region#3]
+Keys [1]: [region#3]
+Functions [1]: [count(1)]
+
+(4) ResultQueryStage
+Output [2]: [region#3, count(1)#4L]
+Arguments: 2
+
+(5) AdaptiveSparkPlan
+Output [2]: [region#3, count(1)#4L]
+Arguments: isFinalPlan=true
+
+(6) Scan parquet 
+Output [1]: [customer_id#2]
+Batched: true
+Location: InMemoryFileIndex [file:/tmp/spark-data/orders]
+PushedFilters: [IsNotNull(customer_id)]
+ReadSchema: struct<customer_id:int>
+
+(7) BroadcastQueryStage
+Output [2]: [customer_id#6, region#9]
+Arguments: 0
+
+(8) BroadcastExchange
+Input [2]: [customer_id#6, region#9]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false)
+
+(9) Filter [codegen id : 1]
+Input [2]: [customer_id#6, region#9]
+Condition : isnotnull(customer_id#6)
+
+(10) Scan parquet 
+Output [2]: [customer_id#6, region#9]
+Batched: true
+Location: InMemoryFileIndex [file:/tmp/spark-data/customers]
+ReadSchema: struct<customer_id:int,region:string>
+
+(11) HashAggregate
+Input [1]: [region#3]
+Keys [1]: [region#3]
+Functions [1]: [count(1)]
+
+(12) BroadcastHashJoin
+Left keys [1]: [customer_id#2]
+Right keys [1]: [customer_id#6]
+Join type: Inner
+
+(13) Filter
+Input [1]: [customer_id#2]
+Condition : isnotnull(customer_id#2)
+"""
+
+NODES = [
+    {'nodeId': 0, 'nodeName': 'AdaptiveSparkPlan'},
+    {'nodeId': 1, 'nodeName': 'WholeStageCodegen (3)'},
+    {'nodeId': 2, 'nodeName': 'HashAggregate'},
+    {'nodeId': 3, 'nodeName': 'BroadcastHashJoin'},
+    {'nodeId': 4, 'nodeName': 'Filter'},
+    {'nodeId': 5, 'nodeName': 'ColumnarToRow'},
+    {'nodeId': 6, 'nodeName': 'Scan parquet'},
+    {'nodeId': 7, 'nodeName': 'WholeStageCodegen (2)'},
+    {'nodeId': 8, 'nodeName': 'BroadcastExchange'},
+    {'nodeId': 9, 'nodeName': 'WholeStageCodegen (1)'},
+    {'nodeId': 10, 'nodeName': 'Filter'},
+    {'nodeId': 11, 'nodeName': 'ColumnarToRow'},
+    {'nodeId': 12, 'nodeName': 'Scan parquet'},
+]
+
+
+class TestColumnTreatments:
+    def test_scan_block_maps_to_scan_node(self):
+        t = parse_column_treatments(PLAN, NODES)
+        node = t[12][0]
+        assert node['operator'] == 'Scan parquet'
+        keys = [e[0] for e in node['entries']]
+        assert 'Output [2]' in keys
+        assert 'ReadSchema' in keys
+        assert 'Batched' not in keys  # noise line skipped
+
+    def test_attribute_ids_stripped(self):
+        t = parse_column_treatments(PLAN, NODES)
+        node = t[12][0]
+        output = next(e[1] for e in node['entries'] if e[0] == 'Output [2]')
+        assert output == '[customer_id, region]'
+
+    def test_join_treatment_kept(self):
+        t = parse_column_treatments(PLAN, NODES)
+        node = next(tr for tr in t[7] if tr['operator'] == 'BroadcastHashJoin')
+        entries = dict(node['entries'])
+        assert entries['Left keys [1]'] == '[customer_id]'
+        assert entries['Join type'] == 'Inner'
+
+    def test_codegen_blocks_collected_into_cluster(self):
+        t = parse_column_treatments(PLAN, NODES)
+        ops = [tr['operator'] for tr in t[7]]  # WholeStageCodegen (2)
+        assert ops == ['Filter', 'BroadcastHashJoin', 'HashAggregate']
+
+    def test_scan_inside_codegen_gets_own_node(self):
+        t = parse_column_treatments(PLAN, NODES)
+        assert 6 in t
+        assert t[6][0]['operator'] == 'Scan parquet'
+
+    def test_initial_plan_blocks_excluded(self):
+        t = parse_column_treatments(PLAN, NODES)
+        ops = {tr['operator'] for node in t.values() for tr in node}
+        assert 'HashAggregate' in ops  # final plan's (via cluster)
+        # Initial plan's own Filter (13) must not attach to a Filter node
+        assert len([tr for tr in t.get(4, []) if tr['operator'] == 'Filter']) == 0
+
+    def test_query_stage_blocks_skipped(self):
+        t = parse_column_treatments(PLAN, NODES)
+        ops = {tr['operator'] for node in t.values() for tr in node}
+        assert 'ResultQueryStage' not in ops
+        assert 'BroadcastQueryStage' not in ops
+
+    def test_empty_plan_returns_empty(self):
+        assert parse_column_treatments('', NODES) == {}
+
+    def test_plan_without_final_section(self):
+        plan = """== Physical Plan ==
+Filter (2)
++- Scan parquet  (1)
+
+(1) Scan parquet
+Output [1]: [id#0L]
+Batched: true
+
+(2) Filter
+Input [1]: [id#0L]
+Condition : isnotnull(id#0L)
+"""
+        nodes = [{'nodeId': 0, 'nodeName': 'Filter'}, {'nodeId': 1, 'nodeName': 'Scan parquet'}]
+        t = parse_column_treatments(plan, nodes)
+        assert t[0][0]['operator'] == 'Filter'
+        assert t[1][0]['operator'] == 'Scan parquet'
+
+    def test_treatments_flow_through_transform_dag(self):
+        detail = {
+            'nodes': NODES,
+            'edges': [],
+            'planDescription': PLAN,
+        }
+        result = transform_dag(detail)
+        by_id = {n['id']: n for n in result['nodes']}
+        ops = [tr['operator'] for tr in by_id[7]['treatments']]
+        assert 'BroadcastHashJoin' in ops
+        assert by_id[7]['treatments'][0]['operator'] == 'Filter'
 
 
 # ── Duration unit parsing edge cases ───────────────────────────

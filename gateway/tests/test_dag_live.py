@@ -36,7 +36,7 @@ def test_dag_from_real_spark(spark):
     session_id = spark._session_id
 
     # Run a query with an aggregate + sort — produces a multi-node DAG
-    sql = "SELECT bucket, COUNT(*) AS cnt, AVG(double_col) AS avg_d FROM numbers GROUP BY bucket ORDER BY bucket"
+    sql = 'SELECT bucket, COUNT(*) AS cnt, AVG(double_col) AS avg_d FROM numbers GROUP BY bucket ORDER BY bucket'
     df = spark.sql(sql)
     rows = df.collect()
 
@@ -53,7 +53,9 @@ def test_dag_from_real_spark(spark):
 
     # At minimum: Range, HashAggregate, Sort (no Scan — range() is in-memory)
     node_names = {n['name'] for n in result['nodes']}
-    assert any('Range' in name or 'Scan' in name for name in node_names), f'No data source node in {node_names}'
+    assert any('Range' in name or 'Scan' in name for name in node_names), (
+        f'No data source node in {node_names}'
+    )
     assert any('Sort' in name for name in node_names), f'No Sort node in {node_names}'
 
     # Some nodes should have duration_ms

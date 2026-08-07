@@ -109,6 +109,24 @@ function OpCard({ row, selected, onSelect }) {
         <div style={s.rowLine}><span>{rowCount} &rarr;</span></div>
       )}
 
+      {node.treatments?.length > 0 && (
+        <div style={s.treat}>
+          {node.treatments.map((tr, i) => (
+            <div key={i} style={i > 0 ? s.treatGroup : undefined}>
+              {node.treatments.length > 1 && (
+                <div style={s.treatOp}>{tr.operator}</div>
+              )}
+              {tr.entries.map(([k, v], j) => (
+                <div key={j} style={s.treatRow}>
+                  <span style={s.treatK}>{k}</span>
+                  <span style={s.treatV}>{v}</span>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+
       {selected && <NodeDetail node={node} />}
     </button>
   )
@@ -260,6 +278,12 @@ const s = {
   perTaskLine: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontFamily: 'var(--font-mono)', fontSize: 10, marginTop: 2, paddingTop: 3, borderTop: '1px solid var(--border-dim)' },
   concurrency: { color: 'var(--amber)', fontWeight: 500 },
   rowLine: { marginTop: 4, paddingTop: 3, borderTop: '1px solid var(--border-dim)', fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' },
+  treat: { marginTop: 6, paddingTop: 5, borderTop: '1px solid var(--border-dim)', display: 'flex', flexDirection: 'column', gap: 3 },
+  treatGroup: { marginTop: 4, paddingTop: 3, borderTop: '1px dashed var(--border-dim)' },
+  treatOp: { fontSize: 9, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--amber)', fontWeight: 600, marginBottom: 2 },
+  treatRow: { display: 'flex', justifyContent: 'space-between', gap: 10, fontFamily: 'var(--font-mono)', fontSize: 10, lineHeight: 1.4 },
+  treatK: { color: 'var(--text-dim)', flexShrink: 0 },
+  treatV: { color: 'var(--text-mono)', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
   metaDim: { color: 'var(--text-dim)' },
 
   detail: {

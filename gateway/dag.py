@@ -78,9 +78,143 @@ def is_nonzero_size(value: str) -> bool:
     return bool(m) and float(m.group(1).replace(',', '')) > 0
 
 
+# ---- column treatments (Snowflake-style) ----
+
+_BLOCK_RE = re.compile(r'^\((\d+)\)\s+([^\n]+)\n(.*?)(?=^\(\d+\)\s|\Z)', re.MULTILINE | re.DOTALL)
+_CODEGEN_ID_RE = re.compile(r'codegen id\s*:\s*(\d+)')
+_STAGE_NAME_RE = re.compile(r'(QueryStage|^Reused|^InputAdapter)')
+_TRAIL_SPACE_RE = re.compile(r'\s+')
+
+
+def _block_entries(body: str) -> list[list[str]]:
+    """Key/value lines from a plan block, e.g. 'Output [1]: [customer_id#2]'."""
+    entries = []
+    for line in body.strip().splitlines():
+        line = line.strip()
+        if not line or line.startswith('Batched:'):
+            continue
+        key, _, value = line.partition(':')
+        key = key.strip()
+        value = value.strip()
+        if not key:
+            continue
+        # strip Spark attribute ids (#2L) — noise for the user
+        value = re.sub(r'#\d+[A-Z]?', '', value)
+        entries.append([key, value])
+    return entries
+
+
+def _parse_blocks(plan_description: str) -> dict[int, dict]:
+    """Parse '(<n>) Operator ...' blocks into {number: {...}}."""
+    blocks = {}
+    for num_s, header, body in _BLOCK_RE.findall(plan_description):
+        codegen = _CODEGEN_ID_RE.search(header)
+        name = header.split('[', 1)[0].strip()
+        blocks[int(num_s)] = {
+            'name': name,
+            'codegen_id': int(codegen.group(1)) if codegen else None,
+            'entries': _block_entries(body),
+        }
+    return blocks
+
+
+def _final_plan_numbers(plan_description: str) -> set[int]:
+    """Block numbers that belong to the executed (Final) plan, from the tree.
+
+    AQE plans print both a Final and an Initial Plan; only the Final one is
+    graphed, so the Initial Plan's blocks must be excluded."""
+    numbers = set()
+    in_tree = False
+    section = None
+    for line in plan_description.splitlines():
+        if line.startswith('== Physical Plan =='):
+            in_tree = True
+            continue
+        if not in_tree:
+            continue
+        m = re.search(r'==\s*([A-Za-z ]+?)\s*==', line)  # '== Final Plan ==' etc.
+        if m:
+            section = m.group(1).strip()
+            continue
+        if re.match(r'^\(\d+\)\s', line):
+            break  # block listing starts — tree is done
+        if section == 'Initial Plan':
+            continue
+        m = re.search(r'\((\d+)\)', line)
+        if m:
+            numbers.add(int(m.group(1)))
+    return numbers
+
+
+def parse_column_treatments(plan_description: str, nodes: list[dict]) -> dict[int, list[dict]]:
+    """Attach each operator's column treatment (Output/Keys/Condition/...) to
+    the graph node it belongs to, keyed by nodeId.
+
+    Blocks tagged '[codegen id : N]' belong to the WholeStageCodegen (N)
+    cluster node; untagged blocks map to plain nodes by operator name,
+    in plan order. Query-stage and Initial-Plan blocks have no node."""
+    if not plan_description:
+        return {}
+    blocks = _parse_blocks(plan_description)
+    if not blocks:
+        return {}
+    final_numbers = _final_plan_numbers(plan_description)
+
+    clusters: dict[int, int] = {}
+    plain_nodes: list[int] = []
+    for n in sorted(nodes, key=lambda n: n['nodeId']):
+        m = re.match(r'^WholeStageCodegen\s*\((\d+)\)', n.get('nodeName', ''))
+        if m:
+            clusters[int(m.group(1))] = n['nodeId']
+        else:
+            plain_nodes.append(n['nodeId'])
+
+    claimed_plain: set[int] = set()
+    treatments: dict[int, list[dict]] = {}
+
+    def attach_plain(node_id: int, block: dict) -> bool:
+        if node_id in claimed_plain:
+            return False
+        claimed_plain.add(node_id)
+        treatments.setdefault(node_id, []).append(
+            {'operator': block['name'], 'entries': block['entries']}
+        )
+        return True
+
+    def match_plain(name: str) -> int | None:
+        """First unclaimed plain node whose name matches, in plan order."""
+        for nid in plain_nodes:
+            if nid in claimed_plain:
+                continue
+            node = next((n for n in nodes if n['nodeId'] == nid), None)
+            if node and _TRAIL_SPACE_RE.sub(' ', node.get('nodeName', '')) == name:
+                return nid
+        return None
+
+    for num in sorted(blocks):
+        block = blocks[num]
+        if num not in final_numbers or not block['entries']:
+            continue
+        if _STAGE_NAME_RE.search(block['name']):
+            continue
+        if block['codegen_id'] is not None:
+            node_id = clusters.get(block['codegen_id'])
+            if node_id is not None:
+                treatments.setdefault(node_id, []).append(
+                    {'operator': block['name'], 'entries': block['entries']}
+                )
+            continue
+        node_id = match_plain(block['name'])
+        if node_id is not None:
+            attach_plain(node_id, block)
+
+    return treatments
+
+
 def transform_dag(detail: dict) -> dict:
     nodes = []
     shuffle_node_ids = set()
+    treatments = parse_column_treatments(detail.get('planDescription', ''), detail.get('nodes', []))
     for n in detail.get('nodes', []):
         metrics = {m['name']: m['value'] for m in n.get('metrics', [])}
         name = n.get('nodeName', '')
@@ -98,8 +232,12 @@ def transform_dag(detail: dict) -> dict:
         median_task_ms = None
         task_count = None
         for key in (
-            'duration', 'scan time', 'shuffle write time',
-            'fetch wait time', 'sort time', 'time in aggregation build',
+            'duration',
+            'scan time',
+            'shuffle write time',
+            'fetch wait time',
+            'sort time',
+            'time in aggregation build',
             'time to broadcast',
         ):
             if key in metrics:
@@ -137,6 +275,11 @@ def transform_dag(detail: dict) -> dict:
                 'has_skew': False,
                 'has_spill': has_spill,
                 **({'summary_metric': summary_metric} if summary_metric else {}),
+                **(
+                    {'treatments': treatments.get(n['nodeId'], [])}
+                    if treatments.get(n['nodeId'])
+                    else {}
+                ),
             }
         )
 
@@ -171,7 +314,9 @@ def fetch_query_dag_by_session(
             match = None
             for e in execs:
                 if needle in e.get('description', '') and e.get('status') == 'COMPLETED':
-                    if match is None or e.get('submissionTime', '') > match.get('submissionTime', ''):
+                    if match is None or e.get('submissionTime', '') > match.get(
+                        'submissionTime', ''
+                    ):
                         match = e
             if match:
                 detail = _ui_get(
