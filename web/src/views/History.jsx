@@ -35,7 +35,7 @@ export function History({ gatewayOnline, onOpenProfile }) {
           <tbody>
             {history.map((q, i) => (
               <tr
-                key={q.query_id}
+                key={`${q.query_id}-${i}`}
                 style={{ ...(i % 2 === 0 ? {} : s.altRow), ...(selected?.query_id === q.query_id ? s.selectedRow : {}), cursor: 'pointer' }}
                 onClick={() => setSelected(q)}
               >
@@ -57,13 +57,13 @@ export function History({ gatewayOnline, onOpenProfile }) {
           </tbody>
         </table>
 
-        {selected && <DetailPanel query={selected} onClose={() => setSelected(null)} />}
+        {selected && <DetailPanel query={selected} onClose={() => setSelected(null)} onOpenProfile={onOpenProfile} />}
       </div>
     </div>
   )
 }
 
-function DetailPanel({ query, onClose }) {
+function DetailPanel({ query, onClose, onOpenProfile }) {
   return (
     <div style={p.panel}>
       <div style={p.header}>
@@ -134,8 +134,7 @@ const s = {
     display: 'flex',
     flexDirection: 'column',
     overflow: 'hidden',
-    padding: 24,
-    paddingBottom: 0,
+    padding: '24px 24px 0 24px',
   },
   header: {
     display: 'flex',
