@@ -23,10 +23,10 @@ The GitHub Project board is the single source of truth: https://github.com/users
 ```
 infra/     OpenTofu IaC
 driver/    Spark Connect server container + shuffle plugin
-gateway/   warehouse manager, query router
+gateway/   warehouse manager, query router, profile DAG parsing (dag.py)
 metering/  compute-second + cost accounting
 catalog/   Glue/Iceberg integration
-web/        Vite + React + Tailwind UI
+web/       Vite + React UI (no Tailwind — inline styles + CSS vars)
 bench/     TPC-DS/TPC-H, cold-start + cost benchmarks
 ```
 
@@ -36,6 +36,11 @@ bench/     TPC-DS/TPC-H, cold-start + cost benchmarks
 - Catalog: AWS Glue.
 - Spark: stock Apache Spark Connect; fork only if a needed hook is unavailable via plugin.
 - Compute: ECS Fargate (On-Demand for driver, Spot for executors).
+- Routing: zero-dep hash router in `web/src/router.js` (`#/worksheets`, `#/warehouses`,
+  `#/history`, `#/history/:queryId`, `#/explorer`). No react-router.
+- Profile UI: every view has a URL; deep links are reload-safe.
+- Profile cards: trivial details live on the card itself (scan → table + path, filter →
+  WHERE predicate, join → type + qualified keys), not hidden behind a click.
 
 ## Coding standard
 
@@ -59,5 +64,13 @@ DynamoDB, the design is wrong.
 The only acceptable in-memory state: ephemeral convenience (e.g. the 500-entry
 query history ring buffer, which is a disposable UX feature — the meters table
 is the durable source).
+
+### Query profile pipeline
+
+`gateway/dag.py` pulls the Spark UI's execution detail, parses metrics and the
+plan text into `{nodes, edges}`: per-node duration/task breakdown, column
+treatments, scan location, filter conditions. The UI (`web/src/components/QueryDag.jsx`)
+renders it as a result-at-top tree — joins fan out side-by-side, and
+WholeStageCodegen wrappers become slim stage chips.
 
 Review every diff against these before committing.
