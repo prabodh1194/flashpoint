@@ -78,6 +78,10 @@ export function Worksheet({ gatewayOnline }) {
       setResultTab('results')
     } catch (err) {
       setError(err.message)
+      // A failed run must not leave a stale profile/results from a previous
+      // query on screen — the current query's profile is simply unknown.
+      setProfile(null)
+      setResults(null)
       // If session is gone, clear it so next run reconnects
       if (err.message?.includes('session not found') || err.message?.includes('session not running')) {
         setSession(null)
