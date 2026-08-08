@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quickstart — Flashpoint local e2e demo</title>
+<meta name="description" content="Run the full Flashpoint stack on a laptop: local Spark Connect server, seeded demo data (1M customers × 10M orders), gateway, and a query with a 21-node profile.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-base: #0d0e10; --bg-surface: #13151a; --bg-raised: #1c1f27; --bg-overlay: #242834;
+    --border: #2a2f3d; --border-dim: #1e2230;
+    --text-primary: #e8eaf0; --text-secondary: #8b93a8; --text-dim: #4e5568; --text-mono: #c8cfe0;
+    --amber: #f59e0b; --amber-glow: #fbbf24;
+    --amber-bg: rgba(245,158,11,0.08); --amber-border: rgba(245,158,11,0.2);
+    --green: #22c55e; --green-bg: rgba(34,197,94,0.08); --green-border: rgba(34,197,94,0.25);
+    --red: #ef4444;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg-base); color: var(--text-primary); font-family: 'IBM Plex Sans', sans-serif; font-size: 15px; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 820px; margin: 0 auto; padding: 0 24px; }
+  nav { display: flex; align-items: center; gap: 24px; padding: 16px 24px; border-bottom: 1px solid var(--border-dim); position: sticky; top: 0; background: var(--bg-base); z-index: 10; }
+  nav .logo { font-weight: 600; letter-spacing: 0.5px; color: var(--text-primary); text-decoration: none; }
+  nav .logo span { color: var(--amber); }
+  nav a { color: var(--text-secondary); text-decoration: none; font-size: 13px; }
+  nav a:hover { color: var(--amber); }
+  header { padding: 56px 0 32px; }
+  header .kicker { color: var(--amber); font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 12px; }
+  header h1 { font-size: 34px; font-weight: 600; letter-spacing: -0.3px; margin-bottom: 12px; }
+  header p { color: var(--text-secondary); max-width: 640px; }
+  .outcome { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 24px 0; }
+  .outcome .card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+  .outcome .card b { display: block; font-size: 20px; color: var(--amber-glow); font-family: 'IBM Plex Mono', monospace; font-weight: 600; }
+  .outcome .card span { color: var(--text-secondary); font-size: 12.5px; }
+  .step { padding: 36px 0; border-top: 1px solid var(--border-dim); }
+  .step .num { color: var(--amber); font-family: 'IBM Plex Mono', monospace; font-size: 13px; }
+  .step h2 { font-size: 20px; font-weight: 600; margin: 4px 0 10px; }
+  .step > p { color: var(--text-secondary); margin-bottom: 14px; }
+  pre { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; line-height: 1.7; color: var(--text-mono); margin-bottom: 14px; }
+  pre .c { color: var(--text-dim); }
+  code { font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; background: var(--bg-raised); border: 1px solid var(--border-dim); border-radius: 4px; padding: 1px 6px; color: var(--amber-glow); }
+  .stuck { background: var(--amber-bg); border: 1px solid var(--amber-border); border-radius: 10px; padding: 16px 18px; margin-top: 16px; }
+  .stuck .head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .stuck .head b { font-size: 13.5px; color: var(--amber-glow); }
+  .stuck p { color: var(--text-secondary); font-size: 13px; margin-bottom: 10px; }
+  .stuck a.ds { display: inline-block; background: var(--amber); color: #0d0e10; font-weight: 600; font-size: 12.5px; text-decoration: none; padding: 7px 14px; border-radius: 6px; }
+  .stuck a.ds:hover { background: var(--amber-glow); }
+  .stuck pre { background: var(--bg-base); border-color: var(--amber-border); font-size: 12px; margin: 10px 0 0; white-space: pre-wrap; word-break: break-word; }
+  .note { border: 1px solid var(--green-border); background: var(--green-bg); border-radius: 8px; padding: 12px 16px; font-size: 13.5px; color: var(--text-secondary); margin: 14px 0; }
+  .note b { color: var(--green); }
+  ul.tight { padding-left: 20px; color: var(--text-secondary); font-size: 14px; }
+  ul.tight li { margin-bottom: 6px; }
+  footer { padding: 40px 0 64px; color: var(--text-dim); font-size: 13px; }
+  footer a { color: var(--text-secondary); text-decoration: none; }
+  footer a:hover { color: var(--amber); }
+</style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="index.html">FLASHPOINT<span>_</span></a>
+  <a href="quickstart.html">quickstart</a>
+  <a href="https://github.com/prabodh1194/flashpoint">github</a>
+</nav>
+
+<header class="wrap">
+  <div class="kicker">local e2e · ~10 minutes · laptop only</div>
+  <h1>Quickstart: run the whole demo on your laptop</h1>
+  <p>Boot a local Spark Connect server, seed demo data (1M customers × 10M orders), start the
+     gateway, and run the join/group-by query — ending with a real query profile of 21 nodes, the
+     same scenario that powers the blog-post screenshots. All AWS calls are mocked; nothing leaves
+     your machine.</p>
+  <div class="outcome">
+    <div class="card"><b>21</b><span>nodes in the query profile</span></div>
+    <div class="card"><b>10M</b><span>orders + 1M customers seeded</span></div>
+    <div class="card"><b>2–3s</b><span>join query on the demo cluster</span></div>
+    <div class="card"><b>0 AWS</b><span>everything mocked locally</span></div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <section class="step" id="step-0">
+    <div class="num">step 0</div>
+    <h2>Prerequisites</h2>
+    <ul class="tight">
+      <li><code>git</code></li>
+      <li>Python 3.11+ and <code>uv</code> — <a href="https://docs.astral.sh/uv/#installation" style="color:var(--amber)">install uv</a></li>
+      <li>JDK 17 or 21 — Spark 4.2 does <b>not</b> run on newer JDKs (Java 24+ fails)</li>
+      <li>~8 GB free disk for the demo data, ~4 GB RAM free for the JVM</li>
+    </ul>
+    <pre><span class="c"># check what you have</span>
+git --version
+python3 --version
+uv --version
+java -version</pre>
+    <div class="stuck">
+      <div class="head"><b>Stuck?</b></div>
+      <p>JDK problems are the #1 failure here — Homebrew installs Java 26 by default, and Spark
+         dies on it with a <code>jdk.internal.ref.Cleaner</code> error.</p>
+      <a class="ds" href="https://chat.deepseek.com/" target="_blank">Open DeepSeek chat</a>
+      <pre>macOS: I installed JDK via `brew install openjdk` and it's version 26. I need JDK 17 for Apache Spark 4.2. What's the exact Homebrew command to install openjdk@17, and how do I point Spark at it (JAVA_HOME + PATH)?</pre>
+    </div>
+  </section>
+
+  <section class="step" id="step-1">
+    <div class="num">step 1</div>
+    <h2>Clone the repo</h2>
+    <pre>git clone https://github.com/prabodh1194/flashpoint.git
+cd flashpoint</pre>
+    <div class="stuck">
+      <div class="head"><b>Stuck?</b></div>
+      <p>If you can't clone, check SSH keys or use the web UI's <code>Download ZIP</code> instead.</p>
+      <a class="ds" href="https://chat.deepseek.com/" target="_blank">Open DeepSeek chat</a>
+      <pre>`git clone https://github.com/prabodh1194/flashpoint.git` fails with a permission/network error on macOS. The repo is public. What should I check (SSH keys, proxy, git config)?</pre>
+    </div>
+  </section>
+
+  <section class="step" id="step-2">
+    <div class="num">step 2</div>
+    <h2>Recommended: one-shot script</h2>
+    <p>A single script does everything — boots Spark Connect, seeds data, starts the gateway,
+       creates a warehouse and runs the query. Run it from the repo root:</p>
+    <pre>python3 scripts/e2e_demo.py</pre>
+    <p>Expected end of output (durations will vary):</p>
+    <pre>── step 5/5 ── running the join/group-by query
+query id:   faae3bb101fa8e1e
+columns:    ['region', 'cnt']
+rows:       5 — [['central', '2000000'], ['west', '2000000'], ['north', '2000000']]
+duration:   2211 ms (api round-trip 2253 ms)
+profile:    21 nodes, 17 with column treatments
+plan tree root: AdaptiveSparkPlan
+
+done.</pre>
+    <p>Flags: <code>--keep</code> leaves the servers running (for the UI step below),
+       <code>--reseed</code> regenerates the demo data, <code>--skip-seed</code> assumes data exists.
+       Press <code>Ctrl-C</code> to tear everything down.</p>
+    <div class="stuck">
+      <div class="head"><b>Stuck?</b></div>
+      <p>Everything goes to <code>/tmp/flashpoint-demo/*.log</code> — check those first. Common
+         failures: a stale server already on port 15002/8080 (kill it with
+         <code>lsof -nP -iTCP:15002 -sTCP:LISTEN</code>), or the JDK issue from step 0.</p>
+      <a class="ds" href="https://chat.deepseek.com/" target="_blank">Open DeepSeek chat</a>
+      <pre>I ran `python3 scripts/e2e_demo.py` from the flashpoint repo root. It fails at booting the Spark Connect server: [paste the last 15 lines of /tmp/flashpoint-demo/spark-connect.log here]. I'm on macOS with Homebrew JDK [your java -version]. What's wrong?</pre>
+    </div>
+  </section>
+
+  <section class="step" id="step-3">
+    <div class="num">step 3</div>
+    <h2>Manual path (same steps, by hand)</h2>
+    <p>Useful when you want each component in its own terminal. First, install gateway deps:</p>
+    <pre>uv sync --directory gateway</pre>
+    <p>Terminal A — boot the Spark Connect server (JDK 17/21 required):</p>
+    <pre>export JAVA_HOME=$(/usr/libexec/java_home -v 21)   <span class="c"># or 17</span>
+cd gateway/.venv/lib/python3.*/site-packages/pyspark
+bin/spark-class org.apache.spark.deploy.SparkSubmit \
+  --master local[*] \
+  --conf spark.ui.port=4040 \
+  --class org.apache.spark.sql.connect.service.SparkConnectServer \
+  spark-internal</pre>
+    <p>Wait for <code>Spark session available at sc://localhost:15002</code> in the log. Terminal B —
+       seed the demo data (this uses the server, then exits):</p>
+    <pre>cd flashpoint
+gateway/.venv/bin/python -c "
+from pyspark.sql import SparkSession
+s = SparkSession.builder.remote('sc://localhost:15002').getOrCreate()
+s.range(1000000).selectExpr(
+    'CAST(id AS INT) AS customer_id', \"CONCAT('user_', id) AS name\",
+    'CASE WHEN id % 5 = 0 THEN \'north\' WHEN id % 5 = 1 THEN \'south\' WHEN id % 5 = 2 THEN \'east\' '
+    'WHEN id % 5 = 3 THEN \'west\' ELSE \'central\' END AS region', 'CAST(id % 3 AS INT) AS tier',
+).write.mode('overwrite').parquet('/tmp/spark-data/customers')
+s.range(10000000).selectExpr(
+    'id', 'CAST(id % 1000000 AS INT) AS customer_id', 'CAST(id % 5000 AS INT) AS product_id',
+    'CAST(id AS DECIMAL(10,2)) AS amount',
+    \"CAST(date_add(CAST('2024-01-01' AS DATE), CAST(id % 365 AS INT)) AS STRING) AS order_date\",
+).write.mode('overwrite').parquet('/tmp/spark-data/orders')
+print('seeded')"</pre>
+    <p>Terminal C — boot the gateway (AWS mocked, in-memory DynamoDB):</p>
+    <pre>cd gateway
+.venv/bin/python local_dev.py</pre>
+    <div class="note"><b>Why register views through the gateway?</b> Spark Connect sessions are
+      isolated: a view registered from your seeding client is invisible to the gateway's session.
+      The gateway must register the views itself — that's the next step.</div>
+    <p>Terminal D — create a warehouse, register the parquet data as views <i>through the gateway</i>,
+       and run the query:</p>
+    <pre>curl -s -X POST localhost:8080/warehouses -H 'Content-Type: application/json' \
+  -d '{"name":"demo","size":"S"}'
+
+curl -s -X POST localhost:8080/warehouses/demo/query -H 'Content-Type: application/json' \
+  -d '{"sql":"CREATE OR REPLACE TEMPORARY VIEW customers USING parquet OPTIONS (path '\''/tmp/spark-data/customers'\'')"}'
+curl -s -X POST localhost:8080/warehouses/demo/query -H 'Content-Type: application/json' \
+  -d '{"sql":"CREATE OR REPLACE TEMPORARY VIEW orders USING parquet OPTIONS (path '\''/tmp/spark-data/orders'\'')"}'
+
+curl -s -X POST localhost:8080/warehouses/demo/query -H 'Content-Type: application/json' \
+  -d '{"sql":"SELECT c.region, count(*) AS cnt FROM orders o JOIN customers c ON o.customer_id = c.customer_id GROUP BY c.region ORDER BY cnt DESC"}' \
+  | python3 -m json.tool</pre>
+    <div class="stuck">
+      <div class="head"><b>Stuck?</b></div>
+      <p>Include the full error from the gateway log (<code>gateway.log</code> when run via the
+         script) or the JSON <code>detail</code> field from the curl response.</p>
+      <a class="ds" href="https://chat.deepseek.com/" target="_blank">Open DeepSeek chat</a>
+      <pre>Flashpoint manual quickstart: `curl -X POST localhost:8080/warehouses/demo/query` returns 400 with: [paste the JSON `detail` error]. I followed the quickstart steps, Spark Connect is on :15002, gateway on :8080. What does this error mean and how do I fix it?</pre>
+    </div>
+  </section>
+
+  <section class="step" id="step-4">
+    <div class="num">step 4</div>
+    <h2>Open the UI and view the profile</h2>
+    <p>With the gateway running (from the script's <code>--keep</code> or terminal C), start the web UI:</p>
+    <pre>cd web
+npm install
+npm run dev</pre>
+    <p>Open <code>http://localhost:5173</code>. Run a query in the worksheet (or re-run it from
+       History), then click the query id to open its profile — the result-at-top operator tree with
+       codegen chips. Every profile has a URL like <code>#/history/&lt;query_id&gt;</code> that
+       survives reload.</p>
+    <div class="stuck">
+      <div class="head"><b>Stuck?</b></div>
+      <p>If the UI can't reach the gateway, check the API base URL in
+         <code>web/src/</code> — it should point at <code>http://localhost:8080</code>.</p>
+      <a class="ds" href="https://chat.deepseek.com/" target="_blank">Open DeepSeek chat</a>
+      <pre>Flashpoint UI: `npm run dev` works and the page loads at localhost:5173, but the worksheet shows a connection error / offline banner while the gateway is definitely on localhost:8080 (curl /healthz works). What should I check in web/src for the API base URL?</pre>
+    </div>
+  </section>
+
+  <section class="step" id="step-5">
+    <div class="num">step 5</div>
+    <h2>Teardown</h2>
+    <pre><span class="c"># if you used the script: Ctrl-C in its terminal is enough</span>
+# by hand: stop each process, then free the ports
+lsof -nP -iTCP:15002 -sTCP:LISTEN | awk 'NR==2{print $2}' | xargs kill
+lsof -nP -iTCP:8080  -sTCP:LISTEN | awk 'NR==2{print $2}' | xargs kill</pre>
+    <div class="stuck">
+      <div class="head"><b>Stuck?</b></div>
+      <p>Leftover processes make the next run "reuse" a stale server — when in doubt, kill ports
+         15002 and 8080, then re-run the script fresh.</p>
+      <a class="ds" href="https://chat.deepseek.com/" target="_blank">Open DeepSeek chat</a>
+      <pre>On macOS, my next run of the flashpoint demo script says "port 15002 already in use — reusing" but queries fail with TABLE_OR_VIEW_NOT_FOUND. How do I reliably kill the previous Spark Connect server and all its children on macOS?</pre>
+    </div>
+  </section>
+
+  <section class="step" id="next">
+    <div class="num">next</div>
+    <h2>What now?</h2>
+    <ul class="tight">
+      <li>Open the gateway's interactive docs: <code>http://localhost:8080/docs</code> — warehouse CRUD, sync + async queries.</li>
+      <li>Watch the Spark UI live at <code>http://localhost:4040</code> while a query runs.</li>
+      <li>Read the query profile pipeline: <code>gateway/dag.py</code> (Spark UI REST → <code>{nodes, edges}</code>).</li>
+      <li>Deep-dives: <code>docs/</code> — architecture ADRs, warehouse sizing, fargate notes.</li>
+    </ul>
+  </section>
+
+</div>
+
+<footer class="wrap">
+  <p>Flashpoint · MIT · <a href="index.html">home</a> ·
+     <a href="https://github.com/prabodh1194/flashpoint">github.com/prabodh1194/flashpoint</a></p>
+</footer>
+</body>
+</html>

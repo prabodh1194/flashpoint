@@ -43,6 +43,19 @@ Actively developing. Tracking: https://github.com/users/prabodh1194/projects/3
 - Apache Spark Connect: gRPC client/server protocol.
 - OpenTofu: infrastructure-as-code for all AWS resources.
 
+## Try it locally
+
+Everything runs on a laptop — AWS mocked. `scripts/e2e_demo.py` boots a local Spark Connect
+server, seeds demo data (1M customers × 10M orders), starts the gateway, and runs the
+join/group-by query with a 21-node query profile:
+
+```
+python3 scripts/e2e_demo.py
+```
+
+Step-by-step manual instructions (including troubleshooting per step):
+[docs/quickstart.html](docs/quickstart.html). Landing page: <https://prabodh1194.github.io/flashpoint/>.
+
 ## Related work
 
 - DataFlint — Spark UI plugin; partly commercial; no serverless layer.

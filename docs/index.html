@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flashpoint — serverless multi-node Apache Spark with a Snowflake-equivalent UI</title>
+<meta name="description" content="Flashpoint: serverless multi-node Apache Spark on AWS with a Snowflake-equivalent UI. Spark Connect (gRPC) client protocol, ECS Fargate compute, DynamoDB state.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-base: #0d0e10; --bg-surface: #13151a; --bg-raised: #1c1f27; --bg-overlay: #242834;
+    --border: #2a2f3d; --border-dim: #1e2230;
+    --text-primary: #e8eaf0; --text-secondary: #8b93a8; --text-dim: #4e5568; --text-mono: #c8cfe0;
+    --amber: #f59e0b; --amber-glow: #fbbf24; --amber-dim: #78450a;
+    --amber-bg: rgba(245,158,11,0.08); --amber-border: rgba(245,158,11,0.2);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg-base); color: var(--text-primary); font-family: 'IBM Plex Sans', sans-serif; font-size: 15px; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 0 24px; }
+  nav { display: flex; align-items: center; gap: 24px; padding: 16px 24px; border-bottom: 1px solid var(--border-dim); position: sticky; top: 0; background: var(--bg-base); z-index: 10; }
+  nav .logo { font-weight: 600; letter-spacing: 0.5px; color: var(--text-primary); text-decoration: none; }
+  nav .logo span { color: var(--amber); }
+  nav a.nav-link { color: var(--text-secondary); text-decoration: none; font-size: 13px; }
+  nav a.nav-link:hover { color: var(--amber); }
+  nav .spacer { flex: 1; }
+  header { padding: 72px 0 48px; }
+  header .kicker { color: var(--amber); font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 16px; }
+  header h1 { font-size: 44px; font-weight: 600; line-height: 1.15; letter-spacing: -0.5px; margin-bottom: 16px; }
+  header p { color: var(--text-secondary); font-size: 17px; max-width: 620px; }
+  .cta { display: flex; gap: 12px; margin-top: 28px; }
+  .btn { display: inline-block; padding: 10px 18px; border-radius: 8px; font-size: 14px; font-weight: 500; text-decoration: none; border: 1px solid var(--border); color: var(--text-primary); background: var(--bg-raised); }
+  .btn:hover { border-color: var(--amber-border); color: var(--amber-glow); }
+  .btn.primary { background: var(--amber-bg); border-color: var(--amber-border); color: var(--amber-glow); }
+  .btn.primary:hover { background: rgba(245,158,11,0.14); }
+  section { padding: 40px 0; border-top: 1px solid var(--border-dim); }
+  h2 { font-size: 22px; font-weight: 600; margin-bottom: 20px; }
+  h2 .mono { color: var(--amber); font-family: 'IBM Plex Mono', monospace; font-size: 14px; margin-right: 10px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+  .card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 10px; padding: 20px; }
+  .card h3 { font-size: 15px; margin-bottom: 8px; }
+  .card h3 span { color: var(--amber); font-family: 'IBM Plex Mono', monospace; font-size: 12px; margin-right: 8px; }
+  .card p { color: var(--text-secondary); font-size: 13.5px; }
+  .card .tag { display: inline-block; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--text-mono); background: var(--bg-overlay); border: 1px solid var(--border); border-radius: 4px; padding: 2px 8px; margin: 10px 4px 0 0; }
+  figure { margin: 24px 0; }
+  figure img { width: 100%; border: 1px solid var(--border); border-radius: 10px; display: block; }
+  figure figcaption { color: var(--text-dim); font-size: 13px; margin-top: 10px; font-family: 'IBM Plex Mono', monospace; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border-dim); }
+  th { color: var(--text-dim); font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
+  td.mono { font-family: 'IBM Plex Mono', monospace; font-size: 13px; }
+  td.mono em { color: var(--amber); font-style: normal; }
+  footer { padding: 40px 0 64px; color: var(--text-dim); font-size: 13px; border-top: 1px solid var(--border-dim); }
+  footer a { color: var(--text-secondary); text-decoration: none; }
+  footer a:hover { color: var(--amber); }
+</style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="index.html">FLASHPOINT<span>_</span></a>
+  <a class="nav-link" href="quickstart.html">quickstart</a>
+  <a class="nav-link" href="https://github.com/prabodh1194/flashpoint">github</a>
+  <span class="spacer"></span>
+  <a class="nav-link" href="#architecture">architecture</a>
+  <a class="nav-link" href="#monitoring">monitoring</a>
+  <a class="nav-link" href="#roadmap">roadmap</a>
+</nav>
+
+<header class="wrap">
+  <div class="kicker">serverless · spark connect · aws</div>
+  <h1>Serverless multi-node Apache Spark,<br>with a Snowflake-equivalent UI.</h1>
+  <p>Flashpoint is a warehouse-shaped control plane for Apache Spark. Warehouses are clusters of ECS
+     Fargate tasks — an on-demand driver plus spot executors — exposed to SQL clients over the
+     Spark Connect gRPC protocol, with query profiles rendered the way Snowflake taught us to expect.</p>
+  <div class="cta">
+    <a class="btn primary" href="quickstart.html">Run it on your laptop →</a>
+    <a class="btn" href="https://github.com/prabodh1194/flashpoint">GitHub</a>
+  </div>
+</header>
+
+<section id="how-it-works">
+  <div class="wrap">
+    <h2><span class="mono">01</span>what it is</h2>
+    <div class="grid">
+      <div class="card">
+        <h3><span>↗</span>Spark Connect</h3>
+        <p>Stock Apache Spark Connect as the client protocol. No fork — plugin hooks only. gRPC from
+           any language to a SQL engine.</p>
+        <span class="tag">gRPC</span><span class="tag">stock spark</span>
+      </div>
+      <div class="card">
+        <h3><span>▦</span>Warehouses</h3>
+        <p>A warehouse is a cluster of ECS Fargate tasks: one on-demand driver, n spot executors.
+           T-shirt sizing maps to vCPU / memory / node count.</p>
+        <span class="tag">on-demand driver</span><span class="tag">spot executors</span>
+      </div>
+      <div class="card">
+        <h3><span>◫</span>Gateway</h3>
+        <p>A stateless control plane — all state in DynamoDB, never in-memory. Creates, suspends and
+           resumes warehouses, routes queries, meters usage.</p>
+        <span class="tag">fastapi</span><span class="tag">dynamodb</span>
+      </div>
+      <div class="card">
+        <h3><span>◔</span>Query profiles</h3>
+        <p>Every query renders as an operator tree: per-node duration, % of execution time, column
+           treatments — parsed from the stock Spark UI REST API.</p>
+        <span class="tag">spark ui api</span><span class="tag">dag</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="architecture">
+  <div class="wrap">
+    <h2><span class="mono">02</span>architecture</h2>
+    <figure>
+      <img src="flashpoint-hld.svg" alt="Flashpoint high-level architecture diagram">
+      <figcaption>high-level design — client → gateway → driver (Fargate, on-demand) + executors (Fargate, spot); state in DynamoDB; tables on Iceberg with a Glue catalog.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section id="monitoring">
+  <div class="wrap">
+    <h2><span class="mono">03</span>the monitoring story</h2>
+    <p>Snowflake's killer feature is the query profile: every operator shows what it did, how long it
+       took, and how it treated your columns. Flashpoint grew the same UI from the stock Spark UI —
+       no fork, no agent. Every node is a card: operator name, % of execution time (color-heated),
+       duration, rows in/out. Codegen stages render as slim chips; every profile has a reload-safe URL.</p>
+    <figure>
+      <img src="profile-tree.png" alt="A flashpoint query profile — result-at-top operator tree with join fanning out side-by-side">
+      <figcaption>a real profile: result-at-top tree, join fans its inputs out side-by-side, WholeStageCodegen stages as slim chips.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section id="roadmap">
+  <div class="wrap">
+    <h2><span class="mono">04</span>roadmap</h2>
+    <table>
+      <tr><th>milestone</th><th>layer</th><th>scope</th></tr>
+      <tr><td class="mono">Ember</td><td>storage + compute</td><td>driver, executors, shuffle, benchmarks</td></tr>
+      <tr><td class="mono">Kindle</td><td>warehouse</td><td>manager, router, metering, sizing</td></tr>
+      <tr><td class="mono">Forge</td><td>catalog</td><td>Iceberg, Glue, IAM isolation</td></tr>
+      <tr><td class="mono">Beacon</td><td>ui</td><td>worksheet, profile DAG, warehouse manager, data explorer</td></tr>
+    </table>
+    <p style="margin-top:16px;color:var(--text-dim);font-size:13.5px">Status, issues and milestones are tracked on the
+      <a href="https://github.com/users/prabodh1194/projects/3" style="color:var(--amber)">GitHub project board</a>.
+      Architecture decisions live in <span style="font-family:'IBM Plex Mono',monospace;font-size:12px">docs/adr-*.md</span>.</p>
+  </div>
+</section>
+
+<footer class="wrap">
+  <p>Flashpoint · MIT licensed ·
+    <a href="quickstart.html">quickstart</a> ·
+    <a href="https://github.com/prabodh1194/flashpoint">github.com/prabodh1194/flashpoint</a></p>
+</footer>
+</body>
+</html>
