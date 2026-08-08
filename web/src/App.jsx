@@ -7,15 +7,33 @@ import { History } from './views/History'
 import { QueryProfile } from './views/QueryProfile'
 import { DataExplorer } from './views/DataExplorer'
 import { healthz } from './api'
+import { navigate, useHashRoute } from './router'
+
+const VALID_VIEWS = ['worksheet', 'warehouses', 'history', 'explorer']
+
+// #/worksheets | #/warehouses | #/history | #/history/:queryId | #/explorer
+export function parseRoute(path) {
+  const segs = path.split('/').filter(Boolean)
+  const view = segs[0] || 'worksheet'
+  if (!VALID_VIEWS.includes(view)) return { view: 'worksheet' }
+  if (view === 'history' && segs[1]) return { view: 'history', queryId: segs[1] }
+  return { view }
+}
 
 export default function App() {
+  const route = useHashRoute()
+  const { view, queryId } = parseRoute(route)
+
   const [theme, setTheme] = useState(() =>
     localStorage.getItem('fp-theme') || 'dark'
   )
-  const [view, setView] = useState('worksheet')
   const [navOpen, setNavOpen] = useState(false)
   const [gatewayOnline, setGatewayOnline] = useState(false)
-  const [profileQid, setProfileQid] = useState(null)
+
+  // Normalize a bare URL (no hash) to the default view.
+  useEffect(() => {
+    if (!window.location.hash) window.history.replaceState(null, '', '#/worksheets')
+  }, [])
 
   const checkGateway = useCallback(async () => {
     try {
@@ -38,11 +56,13 @@ export default function App() {
   const toggleTheme = () =>
     setTheme(t => (t === 'dark' ? 'light' : 'dark'))
 
+  const goTo = (v) => navigate(`/${v}`)
+
   return (
     <div style={styles.shell}>
       <Sidebar
         active={view}
-        onNav={setView}
+        onNav={goTo}
         open={navOpen}
         onToggle={() => setNavOpen(o => !o)}
       />
@@ -54,13 +74,13 @@ export default function App() {
           onThemeToggle={toggleTheme}
         />
         <div style={styles.content}>
-          {profileQid ? (
-            <QueryProfile queryId={profileQid} onBack={() => setProfileQid(null)} />
+          {view === 'history' && queryId ? (
+            <QueryProfile queryId={queryId} onBack={() => navigate('/history')} />
           ) : (
             <>
               {view === 'worksheet'  && <Worksheet gatewayOnline={gatewayOnline} />}
               {view === 'warehouses' && <Warehouses gatewayOnline={gatewayOnline} />}
-              {view === 'history'    && <History gatewayOnline={gatewayOnline} onOpenProfile={setProfileQid} />}
+              {view === 'history'    && <History gatewayOnline={gatewayOnline} onOpenProfile={q => navigate(`/history/${q.query_id}`)} />}
               {view === 'explorer'   && <DataExplorer gatewayOnline={gatewayOnline} />}
             </>
           )}

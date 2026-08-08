@@ -228,6 +228,11 @@ def list_history():
     return {'history': list(state.query_history), 'count': len(state.query_history)}
 
 
+@history_router.delete('', status_code=204)
+def clear_history():
+    state.query_history.clear()
+
+
 @history_router.get('/{query_id}')
 def get_history_entry(query_id: str):
     entry = next((e for e in state.query_history if e['query_id'] == query_id), None)

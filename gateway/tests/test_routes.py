@@ -415,3 +415,9 @@ class TestHistory:
     def test_history_entry_not_found(self, client):
         resp = client.get('/history/nonexistent')
         assert resp.status_code == 404
+
+    def test_clear(self, client):
+        state.query_history.append({'query_id': 'abc', 'sql': 'SELECT 1'})
+        resp = client.delete('/history')
+        assert resp.status_code == 204
+        assert len(state.query_history) == 0
