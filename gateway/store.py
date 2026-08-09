@@ -10,6 +10,7 @@ from decimal import Decimal
 
 import boto3
 from boto3.dynamodb.conditions import Attr
+from botocore.exceptions import ClientError
 
 _TABLE_NAME = os.environ.get('FLASHPOINT_WAREHOUSES_TABLE', 'flashpoint-dev-warehouses')
 _QUERIES_TABLE_NAME = os.environ.get('FLASHPOINT_QUERIES_TABLE', 'flashpoint-dev-queries')
@@ -54,6 +55,28 @@ def put_warehouse(name: str, item: dict) -> None:
     record = {'name': name, 'updated_at': Decimal(str(time.time()))}
     record.update(_to_ddb(item))
     _table().put_item(Item=record)
+
+
+def put_warehouse_if_absent(name: str, item: dict) -> bool:
+    """Atomically claim a warehouse name; False if a record already exists.
+
+    The exists-check and the write happen in one conditional PutItem, so two
+    concurrent creates cannot both claim the same name (which previously
+    launched two driver/executor pairs and orphaned the loser).
+    """
+    record = {'name': name, 'updated_at': Decimal(str(time.time()))}
+    record.update(_to_ddb(item))
+    try:
+        _table().put_item(
+            Item=record,
+            ConditionExpression='attribute_not_exists(#name)',
+            ExpressionAttributeNames={'#name': 'name'},
+        )
+        return True
+    except ClientError as exc:
+        if exc.response['Error']['Code'] == 'ConditionalCheckFailedException':
+            return False
+        raise
 
 
 def update_warehouse_status(name: str, status: str, **extra) -> None:

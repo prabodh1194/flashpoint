@@ -95,6 +95,34 @@ class TestCreateWarehouse:
         resp = client.post('/warehouses', json={'name': 'existing', 'size': 'XS'})
         assert resp.status_code == 409
 
+    def test_duplicate_concurrent_create_does_not_launch(self, client, monkeypatch, mock_store):
+        launched: list[str] = []
+
+        def _launch(warehouse_name, executor_count, grpc_port):
+            launched.append(warehouse_name)
+            return 'arn:driver-1', '10.0.0.5', 'sc://10.0.0.5:15002', []
+
+        monkeypatch.setattr(ecs_tasks, 'launch_driver_with_executors', _launch)
+        client.post('/warehouses', json={'name': 'dup-wh', 'size': 'XS'})
+        resp = client.post('/warehouses', json={'name': 'dup-wh', 'size': 'XS'})
+        assert resp.status_code == 409
+        assert launched == ['dup-wh']
+
+    def test_launch_failure_rolls_back(self, client, monkeypatch, mock_store):
+        _db, _ = mock_store
+        stopped: list[str] = []
+
+        def _boom(warehouse_name, executor_count, grpc_port):
+            raise RuntimeError('run_task exploded')
+
+        monkeypatch.setattr(ecs_tasks, 'launch_driver_with_executors', _boom)
+        monkeypatch.setattr(ecs_tasks, 'stop_orphan_tasks', lambda name: stopped.append(name))
+
+        resp = client.post('/warehouses', json={'name': 'rollback-wh', 'size': 'XS'})
+        assert resp.status_code == 500
+        assert store.get_warehouse('rollback-wh') is None
+        assert stopped == ['rollback-wh']
+
 
 class TestListWarehouses:
     def test_empty(self, client, mock_store):
@@ -248,6 +276,31 @@ class TestRunQuery:
         client.post('/warehouses/my-wh/query', json={'sql': 'bad'})
         assert len(state.query_history) == 1
         assert state.query_history[0]['status'] == 'failed'
+
+    def test_query_times_out(self, client, monkeypatch):
+        import threading
+
+        monkeypatch.setattr(routes_queries, 'QUERY_TIMEOUT_S', 1)
+
+        mock_spark = MagicMock()
+        mock_df = MagicMock()
+        mock_df.columns = ['x']
+        mock_df.collect.side_effect = lambda: threading.Event().wait(5)
+        mock_spark.sql.return_value = mock_df
+        monkeypatch.setattr(spark_client, 'get', lambda endpoint, name: mock_spark)
+        interrupted: list[str] = []
+        monkeypatch.setattr(
+            spark_client, 'interrupt', lambda name, qid=None: interrupted.append(qid)
+        )
+
+        resp = client.post('/warehouses/my-wh/query', json={'sql': 'SELECT slow()'})
+        assert resp.status_code == 504
+        assert 'timed out' in resp.json()['detail']
+        assert len(interrupted) == 1
+        assert any(
+            e['status'] == 'failed' and 'timed out' in e.get('error', '')
+            for e in state.query_history
+        )
 
 
 class TestDeleteWarehouse:

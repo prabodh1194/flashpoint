@@ -100,6 +100,23 @@ def stop_tasks(warehouse_record: dict) -> None:
             log.error('Failed to stop task %s: %s', arn, exc)
 
 
+def stop_orphan_tasks(warehouse_name: str) -> None:
+    """Stop every task tagged for a warehouse whose launch must be rolled back.
+
+    When a create fails mid-launch we have no ARNs to stop (the record was
+    never written), but every task carries the Warehouse tag — stop them all.
+    """
+    arns = ecs.list_tasks(
+        cluster=CLUSTER,
+        tags=[{'key': 'Warehouse', 'value': warehouse_name}],
+    ).get('taskArns', [])
+    for arn in arns:
+        try:
+            ecs.stop_task(cluster=CLUSTER, task=arn)
+        except Exception as exc:
+            log.error('Failed to stop orphan task %s: %s', arn, exc)
+
+
 def launch_driver_with_executors(
     warehouse_name: str, executor_count: int, grpc_port: int
 ) -> tuple[str, str, str, list[str]]:

@@ -27,4 +27,7 @@ HOURLY_RATE: dict[str, float] = {'XS': 0.08, 'S': 0.16, 'M': 0.32, 'L': 0.64, 'X
 # Monthly spend budget (USD) for the Cost Center projection warning.
 MONTHLY_BUDGET_USD = float(os.environ.get('FLASHPOINT_MONTHLY_BUDGET', '20.0'))
 
+# Sync-query deadline (seconds) — a hung driver must not wedge the API forever.
+QUERY_TIMEOUT_S = int(os.environ.get('FLASHPOINT_QUERY_TIMEOUT_S', '300'))
+
 METERS_TABLE = os.environ.get('FLASHPOINT_METERS_TABLE', 'flashpoint-dev-meters')

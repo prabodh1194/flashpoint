@@ -14,7 +14,7 @@ import ecs_tasks
 import spark_client
 import state
 import store
-from config import QUERY_RESULT_TTL_DAYS, QUERY_RESULTS_BUCKET, REGION
+from config import QUERY_RESULT_TTL_DAYS, QUERY_RESULTS_BUCKET, QUERY_TIMEOUT_S, REGION
 from models import QueryRequest, QueryResponse
 from state import QueryStatus
 
@@ -67,10 +67,42 @@ def run_query(name: str, req: QueryRequest):
     spark.addTag(qid)
 
     t0 = time.time()
-    try:
-        df = spark.sql(req.sql)
-        collected = df.collect()
-    except Exception as exc:
+    outcome: dict = {'columns': None, 'rows': None, 'exc': None}
+
+    def _execute():
+        try:
+            df = spark.sql(req.sql)
+            outcome['columns'] = df.columns
+            outcome['rows'] = df.collect()
+        except BaseException as exc:  # noqa: BLE001 — re-raised by caller
+            outcome['exc'] = exc
+
+    # spark.sql() is lazy and collect() can hang on a wedged driver (see #38):
+    # bound the whole execution so the API thread never blocks forever.
+    thread = threading.Thread(target=_execute, daemon=True)
+    thread.start()
+    thread.join(QUERY_TIMEOUT_S)
+
+    if thread.is_alive():
+        spark_client.interrupt(name, qid)
+        duration_ms = int((time.time() - t0) * 1000)
+        state.query_history.append(
+            {
+                'query_id': qid,
+                'sql': req.sql,
+                'status': 'failed',
+                'duration_ms': duration_ms,
+                'row_count': 0,
+                'name': name,
+                'ts': time.strftime('%H:%M:%S', time.localtime()),
+                'error': f'timed out after {QUERY_TIMEOUT_S}s',
+            }
+        )
+        raise HTTPException(
+            status_code=504, detail=f'query timed out after {QUERY_TIMEOUT_S}s'
+        )
+
+    if outcome['exc'] is not None:
         state.query_history.append(
             {
                 'query_id': qid,
@@ -82,10 +114,11 @@ def run_query(name: str, req: QueryRequest):
                 'ts': time.strftime('%H:%M:%S', time.localtime()),
             }
         )
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(outcome['exc']))
 
+    collected = outcome['rows']
     duration_ms = int((time.time() - t0) * 1000)
-    columns = df.columns
+    columns = outcome['columns']
     rows = [[str(v) for v in row] for row in collected]
     sid = spark_client.session_id(name)
     profile = _fetch_query_dag(s, sid) if sid else None

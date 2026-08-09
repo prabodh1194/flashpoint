@@ -8,7 +8,7 @@ dependencies = [
     "boto3>=1.43.18",
     "fastapi>=0.136.3",
     "uvicorn[standard]>=0.48.0",
-    "pyspark>=4.0.2",
+    "pyspark==4.0.2",  # must match the driver image's Spark version (#38)
     "pandas>=2.2.0",
     "pyarrow>=15.0.0",
     "grpcio>=1.62.0",

@@ -20,34 +20,47 @@ router = APIRouter(prefix='/warehouses', tags=['warehouses'])
 def create_warehouse(req: CreateWarehouseRequest):
     if req.size not in SIZES:
         raise HTTPException(status_code=400, detail=f'unknown size {req.size!r}')
-    if store.get_warehouse(req.name) is not None:
-        raise HTTPException(status_code=409, detail=f'warehouse {req.name!r} already exists')
     if store.count_running_warehouses() >= MAX_WAREHOUSES:
         raise HTTPException(status_code=429, detail=f'warehouse cap reached ({MAX_WAREHOUSES} max)')
     name = req.name
     executor_count = SIZES[req.size]
     log.info('Creating warehouse %s (size=%s, executors=%d)', name, req.size, executor_count)
 
-    task_arn, task_ip, endpoint, executor_arns = ecs_tasks.launch_driver_with_executors(
-        name, executor_count, GRPC_PORT
-    )
-
     now = time.time()
-    record = {
-        'task_arn': task_arn,
-        'executor_arns': executor_arns,
-        'task_ip': task_ip,
-        'endpoint': endpoint,
-        'status': 'running',
-        'size': req.size,
-        'executor_count': executor_count,
-        'created_at': now,
-        # Metering: the session is billable from now; checkpoint now so the
-        # first heartbeat tick bills only the delta since start.
-        'session_started_at': now,
-        'last_metered_at': now,
-    }
-    store.put_warehouse(name, record)
+    claimed = store.put_warehouse_if_absent(
+        name,
+        {
+            'status': 'provisioning',
+            'size': req.size,
+            'executor_count': executor_count,
+            'created_at': now,
+            # Metering checkpoint at claim time — the session is billable from
+            # the moment we own the name, not after the ~30s task launch.
+            'session_started_at': now,
+            'last_metered_at': now,
+        },
+    )
+    if not claimed:
+        raise HTTPException(status_code=409, detail=f'warehouse {name!r} already exists')
+
+    try:
+        task_arn, task_ip, endpoint, executor_arns = ecs_tasks.launch_driver_with_executors(
+            name, executor_count, GRPC_PORT
+        )
+    except Exception:
+        log.error('Launch of warehouse %s failed — rolling back', name, exc_info=True)
+        ecs_tasks.stop_orphan_tasks(name)
+        store.delete_warehouse(name)
+        raise HTTPException(status_code=500, detail='failed to launch warehouse tasks')
+
+    store.update_warehouse_status(
+        name,
+        'running',
+        task_arn=task_arn,
+        executor_arns=executor_arns,
+        task_ip=task_ip,
+        endpoint=endpoint,
+    )
     return WarehouseResponse(
         name=name,
         task_arn=task_arn,

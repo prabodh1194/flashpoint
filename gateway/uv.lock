@@ -252,7 +252,7 @@ requires-dist = [
     { name = "httpx", marker = "extra == 'test'", specifier = ">=0.27.0" },
     { name = "pandas", specifier = ">=2.2.0" },
     { name = "pyarrow", specifier = ">=15.0.0" },
-    { name = "pyspark", specifier = ">=4.0.2" },
+    { name = "pyspark", specifier = "==4.0.2" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=8.0.0" },
     { name = "pytest-cov", marker = "extra == 'test'", specifier = ">=5.0.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.48.0" },
@@ -712,12 +712,12 @@ wheels = [
 
 [[package]]
 name = "pyspark"
-version = "4.2.0"
+version = "4.0.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "py4j" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c3/33/c987434f5d50aa802779a004ca0fd45ee4350caab50554ad7283d5a22b50/pyspark-4.2.0.tar.gz", hash = "sha256:5ad689d53570ee1674193fd4f9bda065f0db3be9363a27d2a3406cc457b70b61", size = 450129423, upload-time = "2026-07-14T22:16:46Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/96/89/408b42c803db71f4a4d8a3f1ab0745a40dfe41aeacdfc453545665a171f4/pyspark-4.0.2.tar.gz", hash = "sha256:938b4a1883383374d331ebfcb5d92debfa1891cf3d7a6d730520a1a2d23f1a90", size = 434209940, upload-time = "2026-02-05T19:31:13.6Z" }
 
 [[package]]
 name = "pytest"

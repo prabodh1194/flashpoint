@@ -60,6 +60,12 @@ def mock_store():
     def _put(name: str, item: dict) -> None:
         _db[name] = {**item, 'name': name}
 
+    def _put_if_absent(name: str, item: dict) -> bool:
+        if name in _db:
+            return False
+        _db[name] = {**item, 'name': name}
+        return True
+
     def _update(name: str, status: str, **extra) -> None:
         if name in _db:
             _db[name]['status'] = status
@@ -76,6 +82,7 @@ def mock_store():
 
     store.get_warehouse = _get  # ty: ignore
     store.put_warehouse = _put  # ty: ignore
+    store.put_warehouse_if_absent = _put_if_absent  # ty: ignore
     store.update_warehouse_status = _update  # ty: ignore
     store.delete_warehouse = _delete  # ty: ignore
     store.list_warehouses = _list  # ty: ignore
