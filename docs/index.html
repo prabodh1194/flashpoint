@@ -59,11 +59,13 @@
 <nav>
   <a class="logo" href="index.html">FLASHPOINT<span>_</span></a>
   <a class="nav-link" href="quickstart.html">quickstart</a>
+  <a class="nav-link" href="deploy.html">deploy</a>
   <a class="nav-link" href="mockups.html">ui mockups</a>
   <a class="nav-link" href="https://github.com/prabodh1194/flashpoint">github</a>
   <span class="spacer"></span>
   <a class="nav-link" href="#architecture">architecture</a>
   <a class="nav-link" href="#monitoring">monitoring</a>
+  <a class="nav-link" href="#cost-center">cost center</a>
   <a class="nav-link" href="#roadmap">roadmap</a>
 </nav>
 
@@ -75,6 +77,7 @@
      Spark Connect gRPC protocol, with query profiles rendered the way Snowflake taught us to expect.</p>
   <div class="cta">
     <a class="btn primary" href="quickstart.html">Run it on your laptop →</a>
+    <a class="btn primary" href="deploy.html">Deploy on AWS →</a>
     <a class="btn" href="mockups.html">See the UI mockups</a>
     <a class="btn" href="https://github.com/prabodh1194/flashpoint">GitHub</a>
   </div>
@@ -136,9 +139,48 @@
   </div>
 </section>
 
+<section id="cost-center">
+  <div class="wrap">
+    <h2><span class="mono">04</span>cost center</h2>
+    <p>Every resource with its state, uptime and monthly estimate — drivers and executors joined to
+       the warehouse they serve, the always-on gateway EC2, and the tag-registry infra. Daily spend
+       comes from Cost Explorer (tag-filtered, ~24h lag) fused with live per-warehouse meters for
+       today, projected against a monthly budget with spike-day flags. Every row deep-links to the
+       AWS console.</p>
+    <figure>
+      <img src="cost-center.png" alt="Flashpoint Cost Center — stat strip, daily spend chart, resource inventory with monthly estimates, per-warehouse spend table">
+      <figcaption>cost center: budget projection in the stat strip, spike days in red, console deep-links on every resource.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section id="deploy">
+  <div class="wrap">
+    <h2><span class="mono">05</span>deploy on aws</h2>
+    <div class="grid">
+      <div class="card">
+        <h3><span>▲</span>One apply</h3>
+        <p>OpenTofu brings up the whole production shape: t4g.small EC2 gateway (self-boots via
+           user-data), Spark Connect drivers on Fargate with spot executors, DynamoDB state. The
+           gateway clones <code>main</code>, so every deploy ships the current UI and API.</p>
+        <span class="tag">tofu</span><span class="tag">~15 min</span>
+      </div>
+      <div class="card">
+        <h3><span>$</span>What it costs</h3>
+        <p>~$14/mo baseline while idle (gateway + EBS + pennies), warehouses bill only while
+           running (~$0.08/h for XS). Real Cost Center numbers from Cost Explorer, tag-filtered.</p>
+        <span class="tag">~$14/mo idle</span><span class="tag">$0.08/h XS</span>
+      </div>
+    </div>
+    <p style="margin-top:16px">
+      <a class="btn primary" href="deploy.html">Step-by-step deploy guide →</a>
+    </p>
+  </div>
+</section>
+
 <section id="roadmap">
   <div class="wrap">
-    <h2><span class="mono">04</span>roadmap</h2>
+    <h2><span class="mono">06</span>roadmap</h2>
     <table>
       <tr><th>milestone</th><th>layer</th><th>scope</th></tr>
       <tr><td class="mono">Ember</td><td>storage + compute</td><td>driver, executors, shuffle, benchmarks</td></tr>
@@ -155,6 +197,7 @@
 <footer class="wrap">
   <p>Flashpoint · MIT licensed ·
     <a href="quickstart.html">quickstart</a> ·
+    <a href="deploy.html">deploy</a> ·
     <a href="https://github.com/prabodh1194/flashpoint">github.com/prabodh1194/flashpoint</a></p>
 </footer>
 </body>

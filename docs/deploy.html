@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deploy — Flashpoint on AWS</title>
+<meta name="description" content="Boot the real Flashpoint stack on AWS with OpenTofu: a t4g.small EC2 gateway, Fargate Spark Connect drivers with spot executors, DynamoDB state, and a live Cost Center. ~15 minutes, ~$14/month baseline.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-base: #0d0e10; --bg-surface: #13151a; --bg-raised: #1c1f27; --bg-overlay: #242834;
+    --border: #2a2f3d; --border-dim: #1e2230;
+    --text-primary: #e8eaf0; --text-secondary: #8b93a8; --text-dim: #4e5568; --text-mono: #c8cfe0;
+    --amber: #f59e0b; --amber-glow: #fbbf24;
+    --amber-bg: rgba(245,158,11,0.08); --amber-border: rgba(245,158,11,0.2);
+    --green: #22c55e; --green-bg: rgba(34,197,94,0.08); --green-border: rgba(34,197,94,0.25);
+    --red: #ef4444;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg-base); color: var(--text-primary); font-family: 'IBM Plex Sans', sans-serif; font-size: 15px; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 820px; margin: 0 auto; padding: 0 24px; }
+  nav { display: flex; align-items: center; gap: 24px; padding: 16px 24px; border-bottom: 1px solid var(--border-dim); position: sticky; top: 0; background: var(--bg-base); z-index: 10; }
+  nav .logo { font-weight: 600; letter-spacing: 0.5px; color: var(--text-primary); text-decoration: none; }
+  nav .logo span { color: var(--amber); }
+  nav a { color: var(--text-secondary); text-decoration: none; font-size: 13px; }
+  nav a:hover { color: var(--amber); }
+  header { padding: 56px 0 32px; }
+  header .kicker { color: var(--amber); font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 12px; }
+  header h1 { font-size: 34px; font-weight: 600; letter-spacing: -0.3px; margin-bottom: 12px; }
+  header p { color: var(--text-secondary); max-width: 640px; }
+  .outcome { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 24px 0; }
+  .outcome .card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+  .outcome .card b { display: block; font-size: 20px; color: var(--amber-glow); font-family: 'IBM Plex Mono', monospace; font-weight: 600; }
+  .outcome .card span { color: var(--text-secondary); font-size: 12.5px; }
+  .step { padding: 36px 0; border-top: 1px solid var(--border-dim); }
+  .step .num { color: var(--amber); font-family: 'IBM Plex Mono', monospace; font-size: 13px; }
+  .step h2 { font-size: 20px; font-weight: 600; margin: 4px 0 10px; }
+  .step > p { color: var(--text-secondary); margin-bottom: 14px; }
+  pre { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; line-height: 1.7; color: var(--text-mono); margin-bottom: 14px; }
+  pre .c { color: var(--text-dim); }
+  code { font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; background: var(--bg-raised); border: 1px solid var(--border-dim); border-radius: 4px; padding: 1px 6px; color: var(--amber-glow); }
+  .stuck { background: var(--amber-bg); border: 1px solid var(--amber-border); border-radius: 10px; padding: 16px 18px; margin-top: 16px; }
+  .stuck .head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .stuck .head b { font-size: 13.5px; color: var(--amber-glow); }
+  .stuck p { color: var(--text-secondary); font-size: 13px; margin-bottom: 10px; }
+  .stuck a.ds { display: inline-block; background: var(--amber); color: #0d0e10; font-weight: 600; font-size: 12.5px; text-decoration: none; padding: 7px 14px; border-radius: 6px; }
+  .stuck a.ds:hover { background: var(--amber-glow); }
+  .stuck pre { background: var(--bg-base); border-color: var(--amber-border); font-size: 12px; margin: 10px 0 0; white-space: pre-wrap; word-break: break-word; }
+  .note { border: 1px solid var(--green-border); background: var(--green-bg); border-radius: 8px; padding: 12px 16px; font-size: 13.5px; color: var(--text-secondary); margin: 14px 0; }
+  .note b { color: var(--green); }
+  ul.tight { padding-left: 20px; color: var(--text-secondary); font-size: 14px; }
+  ul.tight li { margin-bottom: 6px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; margin: 14px 0; }
+  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border-dim); }
+  th { color: var(--text-dim); font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
+  td.mono { font-family: 'IBM Plex Mono', monospace; font-size: 13px; }
+  footer { padding: 40px 0 64px; color: var(--text-dim); font-size: 13px; }
+  footer a { color: var(--text-secondary); text-decoration: none; }
+  footer a:hover { color: var(--amber); }
+</style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="index.html">FLASHPOINT<span>_</span></a>
+  <a href="quickstart.html">quickstart</a>
+  <a href="deploy.html">deploy</a>
+  <a href="https://github.com/prabodh1194/flashpoint">github</a>
+</nav>
+
+<header class="wrap">
+  <div class="kicker">aws deploy · ~15 minutes · open tofu</div>
+  <h1>Boot the real Flashpoint stack on AWS</h1>
+  <p>One OpenTofu apply creates the full production shape: a t4g.small EC2 gateway running the
+     FastAPI control plane, Spark Connect drivers on Fargate with spot executors, DynamoDB state,
+     and a Cost Center fed by real Cost Explorer data. The booted gateway serves
+     <code>main</code>, so this deploys the whole Cost Center feature.</p>
+  <div class="outcome">
+    <div class="card"><b>~15 min</b><span>apply → healthy gateway</span></div>
+    <div class="card"><b>1 × t4g.small</b><span>always-on gateway EC2</span></div>
+    <div class="card"><b>~$14/mo</b><span>baseline while idle</span></div>
+    <div class="card"><b>$0.08/h</b><span>XS warehouse while running</span></div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <section class="step" id="step-0">
+    <div class="num">step 0</div>
+    <h2>Prerequisites</h2>
+    <ul class="tight">
+      <li><code>tofu</code> (OpenTofu 1.x) — <a href="https://opentofu.org/docs/cli/install/" style="color:var(--amber)">install</a></li>
+      <li><code>aws</code> CLI with credentials for your AWS account (any profile works — the guide uses <code>personal-aws-iam</code>)</li>
+      <li>Default region <code>us-east-1</code> (the infra is region-parameterized but dev is deployed there)</li>
+      <li>Node 18+ for the web UI (local laptop only — nothing web-side runs on AWS)</li>
+      <li>Budget sanity: the always-on gateway costs ~$14/mo even when idle. Warehouses bill only while running.</li>
+    </ul>
+    <pre><span class="c"># check what you have</span>
+tofu --version
+aws --version
+aws sts get-caller-identity <span class="c"># confirms the profile resolves</span></pre>
+    <div class="stuck">
+      <div class="head"><b>Stuck?</b></div>
+      <p><code>aws sts get-caller-identity</code> fails → you need credentials. Flashpoint was built
+         with an IAM user profile named <code>personal-aws-iam</code>; use yours and export it for
+         every command below, or set it as the default.</p>
+      <a class="ds" href="https://chat.deepseek.com/" target="_blank">Open DeepSeek chat</a>
+      <pre>I'm deploying the flashpoint repo's infra/ with OpenTofu. `aws sts get-caller-identity` fails with "Unable to locate credentials" on macOS. My AWS CLI profile is named [profile-name]. What exactly should I set in ~/.aws/config so `tofu apply -var-file=dev.tfvars` picks it up, and how do I verify?</pre>
+    </div>
+  </section>
+
+  <section class="step" id="step-1">
+    <div class="num">step 1</div>
+    <h2>One apply</h2>
+    <p>The repo ships Terraform state, so the second apply is a no-op for everything except what's
+       missing — and today the gateway EC2 instance is the only missing piece. State is local
+       (<code>infra/terraform.tfstate</code>), no remote backend needed.</p>
+    <pre>cd infra
+tofu init
+tofu apply -var-file=dev.tfvars -auto-approve</pre>
+    <p>Expected: one <code>aws_instance.gateway</code> created (plus instance profile bits). If
+       apply shows a long plan touching VPC/ECS/DynamoDB, stop — something is out of sync; the
+       apply should be surgical.</p>
+    <div class="note"><b>What pins the gateway code?</b> <code>dev.tfvars</code> has a
+      <code>gateway_branch</code> setting. On first boot the EC2 instance clones that branch from
+      GitHub and runs it — it is <b>not</b> deployed from your laptop. Point it at <code>main</code>
+      unless you're deliberately testing a branch.</div>
+    <div class="stuck">
+      <div class="head"><b>Stuck?</b></div>
+      <p>Plan shows diffs on resources you didn't touch (VPC, ECS, DynamoDB). The state file is
+         stale vs. what's live — don't apply blindly, or you'll rebuild the world.</p>
+      <a class="ds" href="https://chat.deepseek.com/" target="_blank">Open DeepSeek chat</a>
+      <pre>I ran `tofu apply -var-file=dev.tfvars` in the flashpoint repo's infra/ and the plan wants to replace/modify aws_vpc, aws_ecs_cluster and DynamoDB tables I didn't change. The repo has committed terraform.tfstate. The apply previously only created aws_instance.gateway. What should I check (tofu state list, remote vs local state, tfvars drift)?</pre>
+    </div>
+  </section>
+
+  <section class="step" id="step-2">
+    <div class="num">step 2</div>
+    <h2>Wait for first boot</h2>
+    <p>On first launch the instance runs <code>gateway-init.sh</code> from user-data: installs
+       Python 3.12 + uv, clones the repo, runs <code>uv sync</code> (pulls pyspark — this is the
+       slow part), writes <code>/etc/flashpoint-gateway.env</code>, and starts a systemd service
+       <code>flashpoint-gateway</code> running the FastAPI app on <code>:8080</code>. Allow 3–6
+       minutes.</p>
+    <pre>tofu output gateway_api     <span class="c"># http://&lt;public-ip&gt;:8080</span>
+
+<span class="c"># poll until it answers:</span>
+curl -s http://$(tofu output -raw gateway_public_ip):8080/healthz</pre>
+    <p>Healthy response looks like:</p>
+    <pre>{"status":"ok"}</pre>
+    <div class="note"><b>Probing from inside</b> — the instance carries the SSM agent, so you can
+      inspect the boot directly without SSH:
+      <pre style="margin:8px 0 0;font-size:11.5px">aws ssm send-command --instance-ids "$(aws ssm describe-instance-information --query 'InstanceInformationList[0].InstanceId' --output text)" \
+  --document-name AWS-RunShellScript \
+  --parameters 'commands=["journalctl -u flashpoint-gateway -n 40 --no-pager"]' \
+  --query 'Command.CommandId' --output text</pre></div>
+    <div class="stuck">
+      <div class="head"><b>Stuck?</b></div>
+      <p><code>/healthz</code> doesn't answer after 6 minutes. Most likely the user-data script
+         failed (bad branch name is the classic — see step 1) or <code>uv sync</code> is still
+         downloading. Check <code>journalctl -u flashpoint-gateway</code> and the cloud-init log
+         <code>/var/log/cloud-init-output.log</code> via SSM.</p>
+      <a class="ds" href="https://chat.deepseek.com/" target="_blank">Open DeepSeek chat</a>
+      <pre>Flashpoint deploy on AWS: I applied infra/ with OpenTofu, the t4g.small gateway instance is running, but curl http://[public-ip]:8080/healthz times out after 6+ minutes. I ran `aws ssm send-command` with `journalctl -u flashpoint-gateway -n 40` and it shows: [paste output]. What failed in gateway-init.sh / systemd?</pre>
+    </div>
+  </section>
+
+  <section class="step" id="step-3">
+    <div class="num">step 3</div>
+    <h2>Open the UI</h2>
+    <p>The web app runs on your laptop; point it at the live gateway with one env var. The gateway
+       serves CORS-open, so any origin works.</p>
+    <pre>cd web
+npm install
+VITE_GATEWAY_URL=http://$(cd ../infra && tofu output -raw gateway_public_ip):8080 npm run dev</pre>
+    <p>Open <code>http://localhost:5173</code>. The top bar should show the gateway as connected.
+       The worksheet can run SQL against real warehouses now; <b>Cost Center</b> will show the
+       real gateway EC2 row and (after warehouses run) live Fargate drivers/executors.</p>
+    <div class="stuck">
+      <div class="head"><b>Stuck?</b></div>
+      <p>The UI shows an offline/connection banner while <code>curl</code> to
+         <code>IP:8080/healthz</code> works. The <code>VITE_GATEWAY_URL</code> env var must be set
+         at <code>npm run dev</code> start time — restarting the dev server with the var is the fix.</p>
+      <a class="ds" href="https://chat.deepseek.com/" target="_blank">Open DeepSeek chat</a>
+      <pre>Flashpoint UI on localhost:5173 shows the gateway offline banner, but `curl http://[gateway-ip]:8080/healthz` returns {"status":"ok"}. I ran `VITE_GATEWAY_URL=http://[gateway-ip]:8080 npm run dev`. What else could make the web app unable to reach the gateway? (CORS? fetch errors in devtools? the api.js BASE constant?)</pre>
+    </div>
+  </section>
+
+  <section class="step" id="step-4">
+    <div class="num">step 4</div>
+    <h2>First warehouse + query</h2>
+    <p>Create an XS warehouse — this launches a Fargate driver task (on-demand) plus one executor
+       (spot). The driver image is already in ECR; pulling + Spark JVM boot takes 2–3 minutes.</p>
+    <pre>GATEWAY=http://$(cd ../infra && tofu output -raw gateway_public_ip):8080
+
+curl -s -X POST $GATEWAY/warehouses -H 'Content-Type: application/json' \
+  -d '{"name":"demo","size":"XS"}'
+
+<span class="c"># watch the Fargate tasks come up:</span>
+aws ecs list-tasks --cluster flashpoint-dev-cluster --desired-status RUNNING
+aws ecs describe-tasks --cluster flashpoint-dev-cluster --tasks $(aws ecs list-tasks --cluster flashpoint-dev-cluster --query 'taskArns[0]' --output text) \
+  --query 'tasks[].{role:containers[0].name,lastStatus:lastStatus,capacity:capacityProviderName}' --output table</pre>
+    <p>Once the warehouse state is <code>RUNNING</code>, run a query that actually exercises the
+       cluster — <code>range()</code> needs no tables, and the count is computed across the driver
+       and the executor:</p>
+    <pre>curl -s -X POST $GATEWAY/warehouses/demo/query -H 'Content-Type: application/json' \
+  -d '{"sql":"SELECT count(*) AS rows FROM range(100000000)"}' | python3 -m json.tool</pre>
+    <p>Expect a single row, 100,000,000, with <code>duration_ms</code> in the response. Open the
+       query id in History for the full operator tree profile.</p>
+    <div class="stuck">
+      <div class="head"><b>Stuck?</b></div>
+      <p>The warehouse hangs in <code>PROVISIONING</code>. Check the driver task's containers —
+         the classic failure is the task role missing a permission (read the gateway log for the
+         exact error) or the ECR image tag referenced by <code>ecs.tf</code> no longer existing in
+         the repo.</p>
+      <a class="ds" href="https://chat.deepseek.com/" target="_blank">Open DeepSeek chat</a>
+      <pre>Flashpoint on AWS: I POSTed a warehouse to the gateway, it stays PROVISIONING, and the Fargate driver task in `aws ecs describe-tasks` shows containers with `lastStatus: STOPPED` / exit code [X]. The gateway log shows: [paste the error]. What is wrong — task role IAM, ECR image tag in infra/ecs.tf, or something in the driver container entrypoint?</pre>
+    </div>
+  </section>
+
+  <section class="step" id="step-5">
+    <div class="num">step 5</div>
+    <h2>Cost Center on real data</h2>
+    <p>With the gateway up and a warehouse run behind you, Cost Center is live:</p>
+    <ul class="tight">
+      <li><b>Resources</b> — the always-on gateway EC2 (with its monthly estimate), plus drivers
+          and executors joined to the warehouse they serve.</li>
+      <li><b>Daily spend</b> — Cost Explorer filtered by the <code>Project=flashpoint</code> cost
+          allocation tag. The tag must be <b>active</b> in Billing for the filter to return
+          anything; once active, CE data has ~24h lag, so today's spend is fused from live
+          per-warehouse meters.</li>
+      <li><b>Budget projection</b> — trailing 7-day average × days in the calendar month, compared
+          against <code>FLASHPOINT_MONTHLY_BUDGET</code> (default $20). Spike days (over 1.5× the
+          window average) render in red on the chart.</li>
+    </ul>
+    <div class="stuck">
+      <div class="head"><b>Stuck?</b></div>
+      <p>Cost Center shows resources but the chart is all zeros. That's the cost allocation tag:
+         check its status in Billing → Cost allocation tags, or with
+         <code>aws ce list-cost-allocation-tags</code>. The tag change propagates within ~24h and
+         does not backfill.</p>
+      <a class="ds" href="https://chat.deepseek.com/" target="_blank">Open DeepSeek chat</a>
+      <pre>Flashpoint Cost Center on AWS shows the EC2/Fargate resources but the daily spend chart is all $0.00. `aws ce get-cost-and-usage` with a Filter on Tags Project=flashpoint returns zero amounts, but the same query without the filter shows real numbers. I checked `aws ce list-cost-allocation-tags` — what does an Inactive status mean and how do I activate the Project tag?</pre>
+    </div>
+  </section>
+
+  <section class="step" id="step-6">
+    <div class="num">step 6</div>
+    <h2>What it costs &amp; teardown</h2>
+    <table>
+      <tr><th>resource</th><th>detail</th><th>cost</th></tr>
+      <tr><td class="mono">gateway EC2</td><td>t4g.small, always on</td><td class="mono">~$12.26/mo</td></tr>
+      <tr><td class="mono">gateway EBS</td><td>20 GB gp3 root volume</td><td class="mono">~$1.60/mo</td></tr>
+      <tr><td class="mono">warehouses</td><td>XS = driver + 1 spot executor</td><td class="mono">~$0.08/h while running</td></tr>
+      <tr><td class="mono">infra pennies</td><td>ECR, S3, DynamoDB, log groups</td><td class="mono">~$0.10/mo</td></tr>
+      <tr><td class="mono">Route 53</td><td>hosted zone (per zone)</td><td class="mono">$0.50/mo</td></tr>
+    </table>
+    <p>Warehouses auto-suspend after their TTL (2h default) — usage meters keep accruing per
+       session so Cost Center reconciles what actually ran.</p>
+    <pre><span class="c"># stop the gateway instance (infra stays for the next boot):</span>
+aws ec2 stop-instances --instance-ids \
+  $(aws ec2 describe-instances --filters Name=tag:Project,Values=flashpoint \
+     --query 'Reservations[0].Instances[0].InstanceId' --output text)
+
+<span class="c"># full teardown (removes the whole stack):</span>
+cd infra
+tofu destroy -var-file=dev.tfvars -auto-approve</pre>
+    <div class="note"><b>Stopped vs. terminated</b> — <code>stop-instances</code> keeps the EBS
+      root volume (and the ~$1.60/mo charge) and boots straight into the already-installed gateway
+      next time. <code>tofu destroy</code> removes everything including the volumes.</div>
+  </section>
+
+  <section class="step" id="next">
+    <div class="num">next</div>
+    <h2>What now?</h2>
+    <ul class="tight">
+      <li>Watch a real multi-node query profile: run a join across the executor and open the profile DAG.</li>
+      <li>Compare the same query on the laptop (<code>quickstart.html</code>) vs. AWS — profile and cost both.</li>
+      <li>Watch Cost Explorer pick up the tag spend over the next day (<code>aws ce get-cost-and-usage</code> with the Project filter).</li>
+      <li>Deep-dives: <code>docs/</code> — ADRs, warehouse sizing, Fargate notes.</li>
+    </ul>
+  </section>
+
+</div>
+
+<footer class="wrap">
+  <p>Flashpoint · MIT · <a href="index.html">home</a> ·
+     <a href="quickstart.html">quickstart</a> ·
+     <a href="https://github.com/prabodh1194/flashpoint">github.com/prabodh1194/flashpoint</a></p>
+</footer>
+</body>
+</html>
