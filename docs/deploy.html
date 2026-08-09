@@ -246,28 +246,45 @@ aws ecs describe-tasks --cluster flashpoint-dev-cluster --tasks $(aws ecs list-t
 
   <section class="step" id="step-6">
     <div class="num">step 6</div>
-    <h2>What it costs &amp; teardown</h2>
+    <h2>What it costs &amp; full teardown</h2>
     <table>
       <tr><th>resource</th><th>detail</th><th>cost</th></tr>
       <tr><td class="mono">gateway EC2</td><td>t4g.small, always on</td><td class="mono">~$12.26/mo</td></tr>
       <tr><td class="mono">gateway EBS</td><td>20 GB gp3 root volume</td><td class="mono">~$1.60/mo</td></tr>
       <tr><td class="mono">warehouses</td><td>XS = driver + 1 spot executor</td><td class="mono">~$0.08/h while running</td></tr>
       <tr><td class="mono">infra pennies</td><td>ECR, S3, DynamoDB, log groups</td><td class="mono">~$0.10/mo</td></tr>
-      <tr><td class="mono">Route 53</td><td>hosted zone (per zone)</td><td class="mono">$0.50/mo</td></tr>
     </table>
     <p>Warehouses auto-suspend after their TTL (2h default) — usage meters keep accruing per
-       session so Cost Center reconciles what actually ran.</p>
-    <pre><span class="c"># stop the gateway instance (infra stays for the next boot):</span>
-aws ec2 stop-instances --instance-ids \
-  $(aws ec2 describe-instances --filters Name=tag:Project,Values=flashpoint \
-     --query 'Reservations[0].Instances[0].InstanceId' --output text)
-
-<span class="c"># full teardown (removes the whole stack):</span>
-cd infra
+       session so Cost Center reconciles what actually ran. Pausing a demo without losing the
+       stack is one command: <code>aws ec2 stop-instances</code> (keeps the EBS volume and boots
+       the already-installed gateway next time; the ~$1.60/mo volume charge stays).</p>
+    <h2 style="font-size:17px;margin-top:24px">Full teardown → Flashpoint cost goes to $0</h2>
+    <p><code>tofu destroy</code> removes the entire Flashpoint stack: gateway EC2 + its root EBS,
+       ECS cluster and task definitions, DynamoDB tables, S3 bucket, ECR repo, log groups, and the
+       VPC. Run it from <code>infra/</code>:</p>
+    <pre>cd infra
 tofu destroy -var-file=dev.tfvars -auto-approve</pre>
-    <div class="note"><b>Stopped vs. terminated</b> — <code>stop-instances</code> keeps the EBS
-      root volume (and the ~$1.60/mo charge) and boots straight into the already-installed gateway
-      next time. <code>tofu destroy</code> removes everything including the volumes.</div>
+    <p>Then verify nothing is left running or billed:</p>
+    <pre><span class="c"># these should all come back empty:</span>
+aws ec2 describe-instances --query 'Reservations[].Instances[].InstanceId'
+aws ec2 describe-volumes      --query 'Volumes[].VolumeId'
+aws ecs list-tasks --cluster flashpoint-dev-cluster
+aws dynamodb list-tables      --query 'TableNames[?starts_with(@,`flashpoint`)]'
+aws s3 ls</pre>
+    <div class="note"><b>What stays:</b> Route 53 hosted zones for personal domains
+      (<code>prabodhagarwal.com</code>, <code>openn.ai</code>) are <b>not</b> part of the
+      Flashpoint stack and are left untouched — they bill ~$0.50/mo each but deleting them would
+      take your DNS offline. The day after a full teardown, Cost Explorer shows only that
+      pre-Flashpoint baseline instead of the ~$14/mo stack.</div>
+    <div class="stuck">
+      <div class="head"><b>Stuck?</b></div>
+      <p><code>tofu destroy</code> fails halfway (a resource already deleted manually, a VPC
+         dependency, an S3 bucket that isn't empty). The state may also drift if anything was
+         changed by hand since apply.</p>
+      <a class="ds" href="https://chat.deepseek.com/" target="_blank">Open DeepSeek chat</a>
+      <pre>Flashpoint teardown: `tofu destroy -var-file=dev.tfvars` in the repo's infra/ fails with [paste the error]. I previously applied the stack and then manually deleted/stopped some resources in the AWS console. How do I reconcile the state file (tofu state rm?) so destroy completes and Flashpoint stops billing?</pre>
+    </div>
+  </section>
   </section>
 
   <section class="step" id="next">
