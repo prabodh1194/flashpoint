@@ -271,11 +271,6 @@ aws ec2 describe-volumes      --query 'Volumes[].VolumeId'
 aws ecs list-tasks --cluster flashpoint-dev-cluster
 aws dynamodb list-tables      --query 'TableNames[?starts_with(@,`flashpoint`)]'
 aws s3 ls</pre>
-    <div class="note"><b>What stays:</b> Route 53 hosted zones for personal domains
-      (<code>prabodhagarwal.com</code>, <code>openn.ai</code>) are <b>not</b> part of the
-      Flashpoint stack and are left untouched — they bill ~$0.50/mo each but deleting them would
-      take your DNS offline. The day after a full teardown, Cost Explorer shows only that
-      pre-Flashpoint baseline instead of the ~$14/mo stack.</div>
     <div class="stuck">
       <div class="head"><b>Stuck?</b></div>
       <p><code>tofu destroy</code> fails halfway (a resource already deleted manually, a VPC
