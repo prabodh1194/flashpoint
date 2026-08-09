@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UI Mockups — Flashpoint</title>
+<meta name="description" content="Static mockups of the Flashpoint product UI: worksheet, query profile DAG, warehouse manager, data explorer, query history.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-base:#0d0e10; --bg-surface:#13151a; --bg-raised:#1c1f27; --bg-overlay:#242834;
+    --border:#2a2f3d; --border-dim:#1e2230;
+    --text-primary:#e8eaf0; --text-secondary:#8b93a8; --text-dim:#4e5568; --text-mono:#c8cfe0;
+    --amber:#f59e0b; --amber-glow:#fbbf24; --amber-bg:rgba(245,158,11,.08); --amber-border:rgba(245,158,11,.2);
+    --green:#22c55e; --red:#ef4444; --blue:#3b82f6; --purple:#a78bfa;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--bg-base); color:var(--text-primary); font-family:'IBM Plex Sans',sans-serif; font-size:14px; line-height:1.5; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:1100px; margin:0 auto; padding:0 24px; }
+  nav { display:flex; align-items:center; gap:24px; padding:16px 24px; border-bottom:1px solid var(--border-dim); position:sticky; top:0; background:var(--bg-base); z-index:10; }
+  nav .logo { font-weight:600; letter-spacing:.5px; color:var(--text-primary); text-decoration:none; }
+  nav .logo span { color:var(--amber); }
+  nav a.nav-link { color:var(--text-secondary); text-decoration:none; font-size:13px; }
+  nav a.nav-link:hover { color:var(--amber); }
+  nav .spacer { flex:1; }
+  header { padding:48px 0 8px; }
+  header .kicker { color:var(--amber); font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:2px; text-transform:uppercase; margin-bottom:12px; }
+  header h1 { font-size:32px; font-weight:600; letter-spacing:-.3px; margin-bottom:10px; }
+  header p { color:var(--text-secondary); max-width:700px; }
+
+  .panel { margin:40px 0; }
+  .panel > h2 { font-size:19px; font-weight:600; margin-bottom:4px; }
+  .panel > .sub { color:var(--text-dim); font-size:13px; margin-bottom:14px; font-family:'IBM Plex Mono',monospace; }
+  .frame { border:1px solid var(--border); border-radius:12px; overflow:hidden; background:var(--bg-surface); box-shadow:0 8px 30px rgba(0,0,0,.4); }
+  .chrome { display:flex; align-items:center; gap:8px; padding:8px 12px; background:var(--bg-raised); border-bottom:1px solid var(--border-dim); }
+  .chrome .dots { display:flex; gap:5px; }
+  .chrome .dots i { width:9px; height:9px; border-radius:50%; display:block; }
+  .chrome .dots i:nth-child(1){background:#ef4444} .chrome .dots i:nth-child(2){background:#f59e0b} .chrome .dots i:nth-child(3){background:#22c55e}
+  .chrome .url { flex:1; background:var(--bg-base); border:1px solid var(--border-dim); border-radius:5px; font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--text-dim); padding:3px 10px; }
+
+  .app { display:flex; height:460px; }
+  .navrail { width:170px; background:var(--bg-surface); border-right:1px solid var(--border-dim); flex-shrink:0; padding-top:10px; }
+  .navrail .logo { color:var(--amber); font-size:16px; padding:0 14px 10px; }
+  .navrail .logo b { font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.08em; color:var(--text-primary); text-transform:uppercase; margin-left:6px; }
+  .navrail .item { display:flex; align-items:center; gap:8px; height:34px; padding:0 12px; color:var(--text-secondary); font-size:12.5px; }
+  .navrail .item.active { color:var(--text-primary); background:var(--amber-bg); border-left:2px solid var(--amber); padding-left:10px; }
+  .navrail .item i { font-style:normal; width:15px; color:var(--text-dim); }
+  .navrail .item.active i { color:var(--amber); }
+  .appmain { flex:1; display:flex; flex-direction:column; min-width:0; }
+  .topbar { height:38px; background:var(--bg-surface); border-bottom:1px solid var(--border-dim); display:flex; align-items:center; justify-content:space-between; padding:0 12px; flex-shrink:0; }
+  .topbar .view { font-size:12.5px; font-weight:500; }
+  .pill { display:flex; align-items:center; gap:5px; border-radius:100px; padding:2px 8px; font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.04em; }
+  .pill i { width:5px; height:5px; border-radius:50%; }
+  .pill.green { background:rgba(34,197,94,.1); border:1px solid rgba(34,197,94,.25); color:var(--green); }
+  .pill.green i { background:var(--green); box-shadow:0 0 4px var(--green); }
+  .pill.grey { background:rgba(139,147,168,.08); border:1px solid rgba(139,147,168,.2); color:var(--text-secondary); }
+  .pill.grey i { background:var(--text-secondary); }
+
+  /* worksheet */
+  .ws { flex:1; display:flex; min-height:0; }
+  .editor { flex:1.4; border-right:1px solid var(--border-dim); display:flex; flex-direction:column; min-width:0; }
+  .editor .sql { font-family:'IBM Plex Mono',monospace; font-size:12.5px; line-height:1.8; padding:14px 16px; color:var(--text-mono); flex:1; white-space:pre; overflow:hidden; }
+  .editor .sql .kw { color:var(--purple); } .editor .sql .fn { color:var(--blue); } .editor .sql .str { color:var(--green); } .editor .sql .cmt { color:var(--text-dim); }
+  .editor .runbar { display:flex; align-items:center; gap:10px; padding:8px 12px; border-top:1px solid var(--border-dim); }
+  .btn { background:var(--amber); color:#0d0e10; font-weight:600; font-size:12px; border:none; border-radius:6px; padding:6px 14px; font-family:'IBM Plex Mono',monospace; }
+  .flow { display:flex; align-items:center; gap:6px; font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:var(--text-dim); }
+  .flow .step { padding:2px 8px; border-radius:4px; border:1px solid var(--border-dim); }
+  .flow .step.done { color:var(--green); border-color:rgba(34,197,94,.3); }
+  .flow .step.cur { color:var(--amber); border-color:var(--amber-border); background:var(--amber-bg); }
+  .flow .arrow { color:var(--text-dim); }
+  .results { flex:1; display:flex; flex-direction:column; min-width:0; }
+  .results .meta { padding:8px 12px; font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--text-dim); border-bottom:1px solid var(--border-dim); display:flex; gap:16px; }
+  .results .meta b { color:var(--text-mono); font-weight:500; }
+  .grid { flex:1; overflow:hidden; font-size:12.5px; }
+  .grid table { width:100%; border-collapse:collapse; }
+  .grid th { text-align:left; font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:var(--text-dim); font-weight:500; text-transform:uppercase; letter-spacing:.08em; padding:8px 12px; border-bottom:1px solid var(--border-dim); }
+  .grid td { padding:7px 12px; border-bottom:1px solid var(--border-dim); font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--text-mono); }
+  .grid td.num { color:var(--text-secondary); }
+
+  /* profile dag */
+  .dag { flex:1; display:flex; min-height:0; }
+  .tree { flex:1.6; overflow:hidden; padding:14px; display:flex; flex-direction:column; align-items:center; gap:6px; }
+  .chain { display:flex; flex-direction:column; align-items:center; gap:0; }
+  .vline { width:1px; height:10px; background:var(--border); }
+  .card { width:230px; background:var(--bg-raised); border:1px solid var(--border); border-radius:8px; padding:7px 10px; }
+  .card .nm { font-size:12px; font-weight:600; color:var(--text-primary); }
+  .card .nm .ct { float:right; font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:var(--text-dim); font-weight:400; }
+  .card .dt { font-family:'IBM Plex Mono',monospace; font-size:9.5px; color:var(--text-secondary); margin:3px 0 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .card .dt .amt { color:var(--amber); }
+  .card .bar { height:4px; background:#0d0e10; border-radius:2px; margin-top:5px; overflow:hidden; }
+  .card .bar i { display:block; height:100%; border-radius:2px; }
+  .card.root { background:transparent; border-style:dashed; }
+  .card.root .nm { color:var(--text-dim); }
+  .chip { font-family:'IBM Plex Mono',monospace; font-size:10px; font-weight:600; color:var(--amber); background:var(--amber-bg); border:1px solid var(--amber-border); border-radius:100px; padding:3px 12px; }
+  .chip .m { color:var(--text-dim); font-weight:400; }
+  .fan { display:flex; gap:44px; align-items:flex-start; }
+  .fan .arm { display:flex; flex-direction:column; align-items:center; }
+  .fan .hbar { width:56px; height:1px; background:var(--border); margin-bottom:8px; }
+  .fan .hbar.part { width:28px; margin:0; }
+  .fancap { font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--text-dim); margin-top:8px; }
+  .sidebar { width:240px; border-left:1px solid var(--border-dim); background:var(--bg-base); padding:12px; font-size:12px; flex-shrink:0; overflow:hidden; }
+  .sidebar .sel { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+  .sidebar .sel b { font-size:12.5px; }
+  .sidebar .rank { font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--amber); background:var(--amber-bg); border:1px solid var(--amber-border); border-radius:100px; padding:2px 8px; }
+  .sidebar .treat { border-top:1px solid var(--border-dim); padding:7px 0; font-family:'IBM Plex Mono',monospace; font-size:11px; }
+  .sidebar .treat .k { color:var(--text-dim); }
+  .sidebar .treat .v { color:var(--text-mono); word-break:break-all; }
+  .sidebar .timing { margin-top:8px; background:var(--bg-raised); border:1px solid var(--border-dim); border-radius:6px; padding:8px 10px; font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--text-secondary); }
+  .sidebar .timing b { color:var(--text-primary); font-weight:500; }
+
+  /* warehouses */
+  .wh { flex:1; overflow:hidden; padding:16px; display:flex; flex-direction:column; gap:14px; }
+  .whflow { display:flex; align-items:center; gap:6px; font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:var(--text-dim); }
+  .whflow .step { padding:3px 9px; border-radius:5px; border:1px solid var(--border-dim); background:var(--bg-raised); }
+  .whflow .step.done { color:var(--green); border-color:rgba(34,197,94,.3); }
+  .whflow .step.cur { color:var(--amber); border-color:var(--amber-border); background:var(--amber-bg); }
+  .whtable table { width:100%; border-collapse:collapse; font-size:12.5px; }
+  .whtable th { text-align:left; font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--text-dim); font-weight:500; text-transform:uppercase; letter-spacing:.08em; padding:8px 12px; border-bottom:1px solid var(--border-dim); }
+  .whtable td { padding:9px 12px; border-bottom:1px solid var(--border-dim); }
+  .whtable .nm { font-weight:600; }
+  .whtable .mono { font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--text-mono); }
+  .st { display:inline-flex; align-items:center; gap:5px; font-family:'IBM Plex Mono',monospace; font-size:10.5px; border-radius:100px; padding:2px 9px; }
+  .st.running { color:var(--green); background:rgba(34,197,94,.1); border:1px solid rgba(34,197,94,.25); }
+  .st.suspended { color:var(--text-secondary); background:rgba(139,147,168,.08); border:1px solid rgba(139,147,168,.2); }
+  .st.starting { color:var(--amber); background:var(--amber-bg); border:1px solid var(--amber-border); }
+  .actions { font-family:'IBM Plex Mono',monospace; font-size:10.5px; }
+  .actions a { color:var(--text-dim); text-decoration:none; margin-right:10px; }
+  .actions a.on { color:var(--amber); }
+
+  /* explorer */
+  .ex { flex:1; display:flex; min-height:0; }
+  .treex { width:300px; border-right:1px solid var(--border-dim); padding:10px 0; font-size:12.5px; overflow:hidden; }
+  .treex .node { display:flex; align-items:center; gap:7px; padding:4px 14px; color:var(--text-secondary); }
+  .treex .node i { font-style:normal; width:14px; color:var(--text-dim); }
+  .treex .node.cat { color:var(--text-dim); font-family:'IBM Plex Mono',monospace; font-size:11px; text-transform:uppercase; letter-spacing:.08em; margin-top:8px; }
+  .treex .node.tbl { font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--text-mono); cursor:pointer; }
+  .treex .node.tbl:hover { color:var(--amber); }
+  .treex .node.col { padding-left:34px; font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--text-secondary); }
+  .treex .node.col b { color:var(--text-primary); font-weight:500; }
+  .exmain { flex:1; padding:14px; }
+  .exmain .tblhead { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+  .exmain .tblhead .nm { font-size:16px; font-weight:600; font-family:'IBM Plex Mono',monospace; }
+  .exmain .tblhead .meta { font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--text-dim); }
+  .exmain .sample { border:1px solid var(--border-dim); border-radius:8px; overflow:hidden; }
+
+  /* history */
+  .hist { flex:1; overflow:hidden; }
+  .hist table { width:100%; border-collapse:collapse; font-size:12.5px; }
+  .hist th { text-align:left; font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--text-dim); font-weight:500; text-transform:uppercase; letter-spacing:.08em; padding:8px 12px; border-bottom:1px solid var(--border-dim); }
+  .hist td { padding:8px 12px; border-bottom:1px solid var(--border-dim); }
+  .hist .qid { font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--amber); }
+  .hist .sql { color:var(--text-secondary); font-family:'IBM Plex Mono',monospace; font-size:11px; max-width:340px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .hist .dur { font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--text-mono); }
+  .hist .rows { font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--text-secondary); }
+  .hist .ok { color:var(--green); font-family:'IBM Plex Mono',monospace; font-size:10.5px; }
+  .hist .fail { color:var(--red); font-family:'IBM Plex Mono',monospace; font-size:10.5px; }
+
+  footer { padding:48px 0 64px; color:var(--text-dim); font-size:13px; }
+  footer a { color:var(--text-secondary); text-decoration:none; }
+  footer a:hover { color:var(--amber); }
+</style>
+</head>
+<body>
+<nav>
+  <a class="logo" href="index.html">FLASHPOINT<span>_</span></a>
+  <a class="nav-link" href="index.html">home</a>
+  <a class="nav-link" href="quickstart.html">quickstart</a>
+  <a class="nav-link" href="mockups.html" style="color:var(--amber)">ui mockups</a>
+  <span class="spacer"></span>
+  <a class="nav-link" href="https://github.com/prabodh1194/flashpoint">github</a>
+</nav>
+
+<header class="wrap">
+  <div class="kicker">static mockups · no backend required</div>
+  <h1>Product UI mockups</h1>
+  <p>Every view from the app, rendered statically with dummy data — the same scenario as the
+     blog post (1M customers × 10M orders, the region join). These are fixed mockups: nothing here
+     is clickable, but everything you see is what the real UI shows against a live warehouse.</p>
+</header>
+
+<div class="wrap">
+
+  <!-- 1. Worksheet -->
+  <section class="panel">
+    <h2>01 · Worksheet</h2>
+    <div class="sub">run SQL → grid results, with the query lifecycle visible (submitted → running → done)</div>
+    <div class="frame">
+      <div class="chrome"><span class="dots"><i></i><i></i><i></i></span><span class="url">localhost:5173/#/worksheets</span></div>
+      <div class="app">
+        <div class="navrail">
+          <div class="logo">⬡<b>Flashpoint</b></div>
+          <div class="item active"><i>⌘</i>Worksheets</div>
+          <div class="item"><i>⚡</i>Warehouses</div>
+          <div class="item"><i>◷</i>Query History</div>
+          <div class="item"><i>▦</i>Data Explorer</div>
+        </div>
+        <div class="appmain">
+          <div class="topbar"><span class="view">Worksheets</span><span class="pill green"><i></i>connected · demo</span></div>
+          <div class="ws">
+            <div class="editor">
+              <div class="sql"><span class="cmt">-- 10M orders × 1M customers, grouped by region</span>
+<span class="kw">SELECT</span> c.region, <span class="fn">count</span>(*) <span class="kw">AS</span> cnt
+<span class="kw">FROM</span> orders o <span class="kw">JOIN</span> customers c
+  <span class="kw">ON</span> o.customer_id = c.customer_id
+<span class="kw">GROUP BY</span> c.region
+<span class="kw">ORDER BY</span> cnt <span class="kw">DESC</span></div>
+              <div class="runbar">
+                <button class="btn">▶ Run</button>
+                <div class="flow">
+                  <span class="step done">submitted</span><span class="arrow">→</span>
+                  <span class="step done">running · 2.9s</span><span class="arrow">→</span>
+                  <span class="step done">profile</span><span class="arrow">→</span>
+                  <span class="step cur">done</span>
+                </div>
+              </div>
+            </div>
+            <div class="results">
+              <div class="meta"><span>query <b>59ccd824ad04e34f</b></span><span>2.9 s</span><span>21 nodes · 17 with column treatments</span><span>5 rows</span></div>
+              <div class="grid">
+                <table>
+                  <tr><th>region</th><th>cnt</th></tr>
+                  <tr><td>central</td><td class="num">2,000,000</td></tr>
+                  <tr><td>west</td><td class="num">2,000,000</td></tr>
+                  <tr><td>north</td><td class="num">2,000,000</td></tr>
+                  <tr><td>south</td><td class="num">2,000,000</td></tr>
+                  <tr><td>east</td><td class="num">2,000,000</td></tr>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. Query profile -->
+  <section class="panel">
+    <h2>02 · Query profile</h2>
+    <div class="sub">result-at-top DAG — the join fans out side-by-side, codegen clusters are slim chips</div>
+    <div class="frame">
+      <div class="chrome"><span class="dots"><i></i><i></i><i></i></span><span class="url">localhost:5173/#/history/59ccd824ad04e34f</span></div>
+      <div class="app">
+        <div class="navrail">
+          <div class="logo">⬡<b>Flashpoint</b></div>
+          <div class="item"><i>⌘</i>Worksheets</div>
+          <div class="item"><i>⚡</i>Warehouses</div>
+          <div class="item active"><i>◷</i>Query History</div>
+          <div class="item"><i>▦</i>Data Explorer</div>
+        </div>
+        <div class="appmain">
+          <div class="topbar"><span class="view">Query Profile · 59ccd824ad04e34f</span><span class="pill green"><i></i>connected</span></div>
+          <div class="dag">
+            <div class="tree">
+              <div class="chain">
+                <div class="card root"><div class="nm">AdaptiveSparkPlan</div></div>
+                <div class="vline"></div>
+                <div class="chip">WholeStageCodegen (4) <span class="m">20 ms</span></div>
+                <div class="vline"></div>
+                <div class="card"><div class="nm">Sort <span class="ct">0.2% · 20 ms</span></div><div class="dt">5 rows</div><div class="bar"><i style="width:2%;background:#8a93a8"></i></div></div>
+                <div class="vline"></div>
+                <div class="card"><div class="nm">Exchange <span class="ct">1.2% · 156 ms</span></div><div class="dt">×7 tasks</div><div class="bar"><i style="width:8%;background:#c9a04c"></i></div></div>
+                <div class="vline"></div>
+                <div class="chip">WholeStageCodegen (2) <span class="m">5.40 s ×8</span></div>
+                <div class="vline"></div>
+                <div class="card sel"><div class="nm">HashAggregate <span class="ct">37.8% · 4.80 s</span></div><div class="dt">40 rows · ×8 · ~589 ms/task</div><div class="bar"><i style="width:78%;background:#f59e0b"></i></div></div>
+                <div class="vline"></div>
+                <div class="card"><div class="nm">Project</div><div class="dt">Output [2] · Input [3]</div></div>
+                <div class="vline"></div>
+                <div class="card"><div class="nm">BroadcastHashJoin <span class="ct">INNER</span></div><div class="dt">customers.customer_id = orders.customer_id</div><div class="dt">10M rows</div></div>
+                <div class="vline"></div>
+                <div class="fan">
+                  <div class="arm">
+                    <div class="hbar"></div>
+                    <div class="chain">
+                      <div class="card"><div class="nm">Filter <span class="ct">WHERE</span></div><div class="dt">isnotnull(customer_id)</div></div>
+                      <div class="vline"></div>
+                      <div class="card"><div class="nm">Scan parquet <span class="ct">2.8% · 361 ms</span></div><div class="dt">customers /tmp/spark-data/customers</div><div class="dt">1M rows · ×9</div><div class="bar"><i style="width:16%;background:#e0865a"></i></div></div>
+                    </div>
+                  </div>
+                  <div class="arm">
+                    <div class="hbar"></div>
+                    <div class="chain">
+                      <div class="card"><div class="nm">BroadcastExchange <span class="ct">1.4% · 178 ms</span></div><div class="dt">1M rows</div></div>
+                      <div class="vline"></div>
+                      <div class="chip">WholeStageCodegen (1) <span class="m">1.40 s ×8</span></div>
+                      <div class="vline"></div>
+                      <div class="card"><div class="nm">Filter <span class="ct">WHERE</span></div><div class="dt">isnotnull(customer_id)</div></div>
+                      <div class="vline"></div>
+                      <div class="card"><div class="nm">Scan parquet <span class="ct">2.9% · 368 ms</span></div><div class="dt">orders /tmp/spark-data/orders</div><div class="dt">10M rows · ×8</div><div class="bar"><i style="width:16%;background:#e0865a"></i></div></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="fancap">join fans its two inputs out side-by-side — data flows up</div>
+            </div>
+            <div class="sidebar">
+              <div class="sel"><b>HashAggregate</b><span class="rank">#2 / 21</span></div>
+              <div class="treat"><span class="k">Output [2]</span><br><span class="v">[region, cnt]</span></div>
+              <div class="treat"><span class="k">Keys</span><br><span class="v">[region]</span></div>
+              <div class="treat"><span class="k">Functions</span><br><span class="v">[partial_count(1), count(1)]</span></div>
+              <div class="timing">~589 ms per task ×8 tasks<br>duration 4.80 s · 37.8% of query<br><b>ranked #2 of 21 nodes</b></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. Warehouses -->
+  <section class="panel">
+    <h2>03 · Warehouse manager</h2>
+    <div class="sub">t-shirt sizing → ECS Fargate; lifecycle: created → starting → running → idle → suspended → resuming</div>
+    <div class="frame">
+      <div class="chrome"><span class="dots"><i></i><i></i><i></i></span><span class="url">localhost:5173/#/warehouses</span></div>
+      <div class="app">
+        <div class="navrail">
+          <div class="logo">⬡<b>Flashpoint</b></div>
+          <div class="item"><i>⌘</i>Worksheets</div>
+          <div class="item active"><i>⚡</i>Warehouses</div>
+          <div class="item"><i>◷</i>Query History</div>
+          <div class="item"><i>▦</i>Data Explorer</div>
+        </div>
+        <div class="appmain">
+          <div class="topbar"><span class="view">Warehouses</span><span class="pill grey"><i></i>2 running · 1 suspended</span></div>
+          <div class="wh">
+            <div class="whflow">
+              <span class="step done">create</span><span>→</span>
+              <span class="step done">starting</span><span>→</span>
+              <span class="step cur">running</span><span>→</span>
+              <span class="step">idle · 5m</span><span>→</span>
+              <span class="step">suspended</span><span>→</span>
+              <span class="step">resuming</span>
+            </div>
+            <div class="whtable">
+              <table>
+                <tr><th>name</th><th>size</th><th>driver</th><th>executors</th><th>status</th><th>actions</th></tr>
+                <tr>
+                  <td class="nm">analytics</td><td class="mono">L</td><td class="mono">4 vCPU / 8 GB</td><td class="mono">4 · spot</td>
+                  <td><span class="st running">● running</span></td>
+                  <td class="actions"><a href="#" onclick="return false">suspend</a><a href="#" onclick="return false">resize</a><a href="#" onclick="return false">delete</a></td>
+                </tr>
+                <tr>
+                  <td class="nm">demo</td><td class="mono">S</td><td class="mono">2 vCPU / 4 GB</td><td class="mono">2 · spot</td>
+                  <td><span class="st running">● running</span></td>
+                  <td class="actions"><a href="#" onclick="return false">suspend</a><a href="#" onclick="return false">resize</a><a href="#" onclick="return false">delete</a></td>
+                </tr>
+                <tr>
+                  <td class="nm">etl-nightly</td><td class="mono">XS</td><td class="mono">2 vCPU / 4 GB</td><td class="mono">1 · spot</td>
+                  <td><span class="st suspended">○ suspended</span></td>
+                  <td class="actions"><a class="on" href="#" onclick="return false">resume</a><a href="#" onclick="return false">resize</a><a href="#" onclick="return false">delete</a></td>
+                </tr>
+                <tr>
+                  <td class="nm">ad-hoc</td><td class="mono">M</td><td class="mono">4 vCPU / 8 GB</td><td class="mono">4 · spot</td>
+                  <td><span class="st starting">◌ starting</span></td>
+                  <td class="actions"><a href="#" onclick="return false">resize</a><a href="#" onclick="return false">delete</a></td>
+                </tr>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. Data explorer -->
+  <section class="panel">
+    <h2>04 · Data explorer</h2>
+    <div class="sub">catalog browser — schemas, tables, columns, sample rows</div>
+    <div class="frame">
+      <div class="chrome"><span class="dots"><i></i><i></i><i></i></span><span class="url">localhost:5173/#/explorer</span></div>
+      <div class="app">
+        <div class="navrail">
+          <div class="logo">⬡<b>Flashpoint</b></div>
+          <div class="item"><i>⌘</i>Worksheets</div>
+          <div class="item"><i>⚡</i>Warehouses</div>
+          <div class="item"><i>◷</i>Query History</div>
+          <div class="item active"><i>▦</i>Data Explorer</div>
+        </div>
+        <div class="appmain">
+          <div class="topbar"><span class="view">Data Explorer</span><span class="pill green"><i></i>connected</span></div>
+          <div class="ex">
+            <div class="treex">
+              <div class="node cat">Catalog</div>
+              <div class="node tbl">▾ spark_catalog</div>
+              <div class="node cat">Schema · default</div>
+              <div class="node tbl">▾ customers</div>
+              <div class="node col"><b>customer_id</b> int</div>
+              <div class="node col"><b>name</b> string</div>
+              <div class="node col"><b>region</b> string</div>
+              <div class="node col"><b>tier</b> int</div>
+              <div class="node tbl">▾ orders</div>
+              <div class="node col"><b>id</b> long</div>
+              <div class="node col"><b>customer_id</b> int</div>
+              <div class="node col"><b>product_id</b> int</div>
+              <div class="node col"><b>amount</b> decimal(10,2)</div>
+              <div class="node col"><b>order_date</b> string</div>
+            </div>
+            <div class="exmain">
+              <div class="tblhead"><span class="nm">orders</span><span class="meta">parquet · 10,000,000 rows · /tmp/spark-data/orders</span></div>
+              <div class="sample">
+                <div class="grid">
+                  <table>
+                    <tr><th>id</th><th>customer_id</th><th>product_id</th><th>amount</th><th>order_date</th></tr>
+                    <tr><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">0.00</td><td>2024-01-01</td></tr>
+                    <tr><td class="num">1</td><td class="num">1</td><td class="num">1</td><td class="num">1.00</td><td>2024-01-02</td></tr>
+                    <tr><td class="num">2</td><td class="num">2</td><td class="num">2</td><td class="num">2.00</td><td>2024-01-03</td></tr>
+                    <tr><td class="num">3</td><td class="num">3</td><td class="num">3</td><td class="num">3.00</td><td>2024-01-04</td></tr>
+                    <tr><td class="num">…</td><td class="num">…</td><td class="num">…</td><td class="num">…</td><td>…</td></tr>
+                    <tr><td class="num">9,999,999</td><td class="num">999,999</td><td class="num">4,999</td><td class="num">9,999,999.00</td><td>2024-12-31</td></tr>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. History -->
+  <section class="panel">
+    <h2>05 · Query history</h2>
+    <div class="sub">every run has a reload-safe URL — click a row to open its profile</div>
+    <div class="frame">
+      <div class="chrome"><span class="dots"><i></i><i></i><i></i></span><span class="url">localhost:5173/#/history</span></div>
+      <div class="app">
+        <div class="navrail">
+          <div class="logo">⬡<b>Flashpoint</b></div>
+          <div class="item"><i>⌘</i>Worksheets</div>
+          <div class="item"><i>⚡</i>Warehouses</div>
+          <div class="item active"><i>◷</i>Query History</div>
+          <div class="item"><i>▦</i>Data Explorer</div>
+        </div>
+        <div class="appmain">
+          <div class="topbar"><span class="view">Query History</span><span class="pill grey"><i></i>ring buffer · 500 entries</span></div>
+          <div class="hist">
+            <table>
+              <tr><th>time</th><th>query id</th><th>sql</th><th>warehouse</th><th>duration</th><th>rows</th><th>status</th></tr>
+              <tr><td class="rows">22:41:02</td><td class="qid">59ccd824ad04e34f</td><td class="sql">SELECT c.region, count(*) AS cnt FROM orders o JOIN…</td><td class="rows">demo</td><td class="dur">2.9 s</td><td class="rows">5</td><td class="ok">success · profile</td></tr>
+              <tr><td class="rows">22:38:47</td><td class="qid">faae3bb101fa8e1e</td><td class="sql">SELECT c.region, count(*) AS cnt FROM orders o JOIN…</td><td class="rows">demo</td><td class="dur">1.5 s</td><td class="rows">5</td><td class="ok">success · profile</td></tr>
+              <tr><td class="rows">22:35:10</td><td class="qid">8c1e4f3ab92d7710</td><td class="sql">SELECT region, count(*) FROM customers GROUP BY region</td><td class="rows">analytics</td><td class="dur">1.1 s</td><td class="rows">5</td><td class="ok">success · profile</td></tr>
+              <tr><td class="rows">22:31:55</td><td class="qid">0f4d77c2aa19b6e4</td><td class="sql">SELECT * FROM orders WHERE amount > 5000 LIMIT 100</td><td class="rows">demo</td><td class="dur">0.8 s</td><td class="rows">100</td><td class="ok">success · profile</td></tr>
+              <tr><td class="rows">22:28:33</td><td class="qid">b34d8f1ac07e5539</td><td class="sql">DROP TABLE IF EXISTS staging_raw</td><td class="rows">etl-nightly</td><td class="dur">0.2 s</td><td class="rows">0</td><td class="fail">failed · no table</td></tr>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<footer class="wrap">
+  <p>Flashpoint · MIT · <a href="index.html">home</a> · <a href="quickstart.html">quickstart</a> ·
+     <a href="https://github.com/prabodh1194/flashpoint">github.com/prabodh1194/flashpoint</a></p>
+</footer>
+</body>
+</html>
