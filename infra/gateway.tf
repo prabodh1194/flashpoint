@@ -63,6 +63,7 @@ resource "aws_iam_role_policy" "gateway_ecs" {
           "ecs:StopTask",
           "ecs:DescribeTasks",
           "ecs:ListTasks",
+          "ecs:TagResource",
         ]
         Resource = "*"
       },
@@ -93,9 +94,9 @@ resource "aws_iam_role_policy" "gateway_ecs" {
         ]
       },
       {
-        Effect   = 'Allow'
-        Action   = ['s3:PutObject', 's3:GetObject', 's3:DeleteObject']
-        Resource = '${aws_s3_bucket.query_results.arn}/*'
+        Effect   = "Allow"
+        Action   = ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"]
+        Resource = "${aws_s3_bucket.query_results.arn}/*"
       },
       {
         # AWS Pricing API does not support resource-level permissions

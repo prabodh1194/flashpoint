@@ -1,6 +1,7 @@
 resource "aws_ecr_repository" "driver" {
-  name                 = "${local.prefix}-driver"
+  name         = "${local.prefix}-driver"
   image_tag_mutability = "MUTABLE"
+  force_delete = true  # teardown must not leave images behind
 
   image_scanning_configuration {
     scan_on_push = true

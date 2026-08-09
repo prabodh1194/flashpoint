@@ -112,9 +112,9 @@ aws sts get-caller-identity <span class="c"># confirms the profile resolves</spa
   <section class="step" id="step-1">
     <div class="num">step 1</div>
     <h2>One apply</h2>
-    <p>The repo ships Terraform state, so the second apply is a no-op for everything except what's
-       missing — and today the gateway EC2 instance is the only missing piece. State is local
-       (<code>infra/terraform.tfstate</code>), no remote backend needed.</p>
+    <p>State is local (<code>infra/terraform.tfstate</code>, gitignored) — no remote backend
+       needed. On a fresh clone the first apply builds the whole stack; with existing state it
+       only reconciles drift (e.g. recreating the gateway EC2 if it was terminated).</p>
     <pre>cd infra
 tofu init
 tofu apply -var-file=dev.tfvars -auto-approve</pre>
