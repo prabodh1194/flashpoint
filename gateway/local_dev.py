@@ -59,6 +59,13 @@ def _put(name: str, item: dict) -> None:
     _db[name] = {**item, 'name': name}
 
 
+def _put_if_absent(name: str, item: dict) -> bool:
+    if name in _db:
+        return False
+    _db[name] = {**item, 'name': name}
+    return True
+
+
 def _update(name: str, status: str, **extra) -> None:
     if name in _db:
         _db[name]['status'] = status
@@ -97,6 +104,7 @@ def _list_queries() -> list[dict]:
 
 store.get_warehouse = _get  # ty: ignore[invalid-assignment]
 store.put_warehouse = _put  # ty: ignore[invalid-assignment]
+store.put_warehouse_if_absent = _put_if_absent  # ty: ignore[invalid-assignment]
 store.update_warehouse_status = _update  # ty: ignore[invalid-assignment]
 store.delete_warehouse = _delete  # ty: ignore[invalid-assignment]
 store.list_warehouses = _list  # ty: ignore[invalid-assignment]
