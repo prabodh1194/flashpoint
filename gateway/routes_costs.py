@@ -15,7 +15,7 @@ from fastapi import APIRouter
 import cost_data
 import meters
 import store
-from config import MONTHLY_BUDGET_USD
+from config import MONTHLY_BUDGET_USD, REGION
 
 log = logging.getLogger(__name__)
 router = APIRouter(tags=['costs'])
@@ -50,6 +50,7 @@ def list_resources():
             'type': f"{(t.get('cpu') or '?')} vCPU / {(t.get('memory') or '?')} MB",
             'uptime_h': uptime_h,
             'monthly_est': None,  # included in the warehouse's rate
+            'console_url': _console_url(t['arn'], 'fargate'),
         })
 
     # Gateway EC2 instance + its root EBS volume (the always-on cost).
@@ -64,6 +65,7 @@ def list_resources():
             'type': i['type'],
             'uptime_h': None,
             'monthly_est': cost_data.monthly_estimate('ec2', type=i['type']),
+            'console_url': _console_url(i['id'], 'ec2'),
         })
     for v in cost_data.list_volumes():
         rows.append({
@@ -75,6 +77,7 @@ def list_resources():
             'type': f"{v['type']} {v['size_gb']} GB",
             'uptime_h': None,
             'monthly_est': cost_data.monthly_estimate('ebs', size_gb=v['size_gb']),
+            'console_url': _console_url(v['id'], 'ebs'),
         })
 
     # Everything else with the Project tag — DynamoDB, S3, ECR, log groups, VPC…
@@ -92,6 +95,7 @@ def list_resources():
             'type': kind,
             'uptime_h': None,
             'monthly_est': None,
+            'console_url': _console_url(arn, kind),
         })
 
     rows.sort(key=lambda r: (r['kind'], r['role'], r['id']))
@@ -177,6 +181,45 @@ def _projection(daily: list[dict]) -> dict:
         'over_budget': monthly > MONTHLY_BUDGET_USD,
         'spike_days': spike_days,
     }
+
+
+def _console_url(arn_or_id: str, kind: str) -> str | None:
+    """AWS Console deep link for a resource row; None when unlinkable."""
+    if kind == 'fargate':
+        parts = arn_or_id.split('/')  # arn:aws:ecs:region:acct:task/cluster/taskid
+        if len(parts) != 3 or ':task' not in parts[0]:
+            return None
+        cluster, task_id = parts[1], parts[2]
+        return (
+            f'https://{REGION}.console.aws.amazon.com/ecs/home?region={REGION}'
+            f'#/clusters/{cluster}/tasks/{task_id}/details'
+        )
+    if kind == 'ec2':
+        if not arn_or_id.startswith('i-'):
+            return None
+        return f'https://{REGION}.console.aws.amazon.com/ec2/home?region={REGION}#InstanceDetails:instanceId={arn_or_id}'
+    if kind == 'ebs':
+        if not arn_or_id.startswith('vol-'):
+            return None
+        return f'https://{REGION}.console.aws.amazon.com/ec2/home?region={REGION}#VolumeDetails:volumeId={arn_or_id}'
+    if kind == 'dynamodb':
+        if ':dynamodb:' not in arn_or_id:
+            return None
+        table = arn_or_id.split('/')[-1]
+        return f'https://{REGION}.console.aws.amazon.com/dynamodbv2/home?region={REGION}#table/{table}'
+    if kind == 's3':
+        bucket = arn_or_id.split(':')[-1]
+        return f'https://s3.console.aws.amazon.com/s3/buckets/{bucket}?region={REGION}'
+    if kind == 'ecr':
+        return f'https://{REGION}.console.aws.amazon.com/ecr/repositories?region={REGION}'
+    if kind == 'logs':
+        return f'https://{REGION}.console.aws.amazon.com/cloudwatch/home?region={REGION}#logsV2:log-groups'
+    if kind == 'vpc':
+        vpc_id = arn_or_id.split('/')[-1]
+        if not vpc_id.startswith('vpc-'):
+            return None
+        return f'https://{REGION}.console.aws.amazon.com/vpc/home?region={REGION}#VpcDetails:vpcId={vpc_id}'
+    return None
 
 
 def _meter_daily_series(meter_map: dict, days: int) -> list[dict]:

@@ -156,6 +156,41 @@
   .hist .ok { color:var(--green); font-family:'IBM Plex Mono',monospace; font-size:10.5px; }
   .hist .fail { color:var(--red); font-family:'IBM Plex Mono',monospace; font-size:10.5px; }
 
+  /* cost center */
+  .frame.costs .app { height:560px; }
+  .costs { flex:1; overflow:hidden; display:flex; flex-direction:column; }
+  .costs .stats { display:grid; grid-template-columns:repeat(5,1fr); gap:8px; padding:10px 12px 0; }
+  .costs .stat { background:var(--bg-raised); border:1px solid var(--border-dim); border-radius:8px; padding:8px 10px; }
+  .costs .stat .lbl { font-family:'IBM Plex Mono',monospace; font-size:9px; letter-spacing:.08em; color:var(--text-dim); text-transform:uppercase; }
+  .costs .stat .val { font-family:'IBM Plex Mono',monospace; font-size:15px; font-weight:600; margin-top:2px; }
+  .costs .stat .val.amber { color:var(--amber); }
+  .costs .stat .sub { font-family:'IBM Plex Mono',monospace; font-size:9.5px; color:var(--text-dim); }
+  .costs .cbody { flex:1; overflow:hidden; padding:10px 12px 12px; display:flex; flex-direction:column; gap:10px; }
+  .costs .card { border:1px solid var(--border-dim); border-radius:8px; }
+  .costs .card .chead { display:flex; align-items:center; gap:8px; padding:8px 12px 4px; }
+  .costs .card .chead .t { font-size:12px; font-weight:600; }
+  .costs .card .chead .ce { font-family:'IBM Plex Mono',monospace; font-size:9px; color:var(--amber); background:var(--amber-bg); border:1px solid var(--amber-border); border-radius:100px; padding:1px 7px; }
+  .costs .bars { display:flex; align-items:flex-end; gap:2px; height:88px; padding:6px 12px 0; }
+  .costs .bars i { flex:1; background:var(--amber); opacity:.35; border-radius:2px 2px 0 0; min-width:2px; }
+  .costs .bars i.spike { background:var(--red); opacity:1; }
+  .costs .bars i.today { background:var(--amber); opacity:1; }
+  .costs table { width:100%; border-collapse:collapse; font-size:11.5px; }
+  .costs th { text-align:left; font-family:'IBM Plex Mono',monospace; font-size:9px; color:var(--text-dim); font-weight:500; text-transform:uppercase; letter-spacing:.08em; padding:5px 12px; border-bottom:1px solid var(--border-dim); }
+  .costs td { padding:5px 12px; border-bottom:1px solid var(--border-dim); }
+  .costs .mono { font-family:'IBM Plex Mono',monospace; font-size:10.5px; }
+  .costs .resname { font-family:'IBM Plex Mono',monospace; font-size:10.5px; }
+  .costs .link { color:var(--text-dim); text-decoration:none; margin-left:4px; font-family:'IBM Plex Mono',monospace; font-size:10px; }
+  .costs .dot { display:inline-block; width:5px; height:5px; border-radius:50%; margin-right:6px; vertical-align:1px; }
+  .costs .dot.green { background:var(--green); }
+  .costs .dot.grey { background:var(--text-dim); }
+  .costs .whchip { font-family:'IBM Plex Mono',monospace; font-size:9px; color:var(--amber); background:var(--amber-bg); border:1px solid var(--amber-border); border-radius:100px; padding:1px 8px; }
+  .costs .infra { font-family:'IBM Plex Mono',monospace; font-size:9px; color:var(--text-dim); }
+  .costs .suspend { font-family:'IBM Plex Mono',monospace; font-size:9.5px; color:var(--amber); border:1px solid var(--border); border-radius:5px; padding:2px 7px; }
+  .costs .rows { font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:var(--text-secondary); }
+  .costs .kw { color:var(--text-secondary); }
+  .costs .kgroup { font-size:11px; font-weight:600; padding:6px 12px 0; color:var(--text-primary); }
+  .costs .kgrp { padding:2px 12px 0; }
+
   footer { padding:48px 0 64px; color:var(--text-dim); font-size:13px; }
   footer a { color:var(--text-secondary); text-decoration:none; }
   footer a:hover { color:var(--amber); }
@@ -194,6 +229,7 @@
           <div class="item"><i>⚡</i>Warehouses</div>
           <div class="item"><i>◷</i>Query History</div>
           <div class="item"><i>▦</i>Data Explorer</div>
+          <div class="item"><i>◈</i>Cost Center</div>
         </div>
         <div class="appmain">
           <div class="topbar"><span class="view">Worksheets</span><span class="pill green"><i></i>connected · demo</span></div>
@@ -245,8 +281,9 @@
           <div class="logo">⬡<b>Flashpoint</b></div>
           <div class="item"><i>⌘</i>Worksheets</div>
           <div class="item"><i>⚡</i>Warehouses</div>
-          <div class="item active"><i>◷</i>Query History</div>
+          <div class="item"><i>◷</i>Query History</div>
           <div class="item"><i>▦</i>Data Explorer</div>
+          <div class="item"><i>◈</i>Cost Center</div>
         </div>
         <div class="appmain">
           <div class="topbar"><span class="view">Query Profile · 59ccd824ad04e34f</span><span class="pill green"><i></i>connected</span></div>
@@ -320,6 +357,7 @@
           <div class="item active"><i>⚡</i>Warehouses</div>
           <div class="item"><i>◷</i>Query History</div>
           <div class="item"><i>▦</i>Data Explorer</div>
+          <div class="item"><i>◈</i>Cost Center</div>
         </div>
         <div class="appmain">
           <div class="topbar"><span class="view">Warehouses</span><span class="pill grey"><i></i>2 running · 1 suspended</span></div>
@@ -429,8 +467,9 @@
           <div class="logo">⬡<b>Flashpoint</b></div>
           <div class="item"><i>⌘</i>Worksheets</div>
           <div class="item"><i>⚡</i>Warehouses</div>
-          <div class="item active"><i>◷</i>Query History</div>
+          <div class="item"><i>◷</i>Query History</div>
           <div class="item"><i>▦</i>Data Explorer</div>
+          <div class="item"><i>◈</i>Cost Center</div>
         </div>
         <div class="appmain">
           <div class="topbar"><span class="view">Query History</span><span class="pill grey"><i></i>ring buffer · 500 entries</span></div>
@@ -443,6 +482,69 @@
               <tr><td class="rows">22:31:55</td><td class="qid">0f4d77c2aa19b6e4</td><td class="sql">SELECT * FROM orders WHERE amount > 5000 LIMIT 100</td><td class="rows">demo</td><td class="dur">0.8 s</td><td class="rows">100</td><td class="ok">success · profile</td></tr>
               <tr><td class="rows">22:28:33</td><td class="qid">b34d8f1ac07e5539</td><td class="sql">DROP TABLE IF EXISTS staging_raw</td><td class="rows">etl-nightly</td><td class="dur">0.2 s</td><td class="rows">0</td><td class="fail">failed · no table</td></tr>
             </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6. Cost Center -->
+  <section class="panel">
+    <h2>06 · Cost Center</h2>
+    <div class="sub">every resource with state + monthly estimate, daily spend from Cost Explorer with budget projection, console deep-links</div>
+    <div class="frame costs">
+      <div class="chrome"><span class="dots"><i></i><i></i><i></i></span><span class="url">localhost:5173/#/costs</span></div>
+      <div class="app">
+        <div class="navrail">
+          <div class="logo">⬡<b>Flashpoint</b></div>
+          <div class="item"><i>⌘</i>Worksheets</div>
+          <div class="item"><i>⚡</i>Warehouses</div>
+          <div class="item"><i>◷</i>Query History</div>
+          <div class="item"><i>▦</i>Data Explorer</div>
+          <div class="item active"><i>◈</i>Cost Center</div>
+        </div>
+        <div class="appmain">
+          <div class="topbar"><span class="view">Cost Center</span><span class="pill green"><i></i>connected · demo</span></div>
+          <div class="costs">
+            <div class="stats">
+              <div class="stat"><div class="lbl">Today</div><div class="val amber">$0.42</div></div>
+              <div class="stat"><div class="lbl">Last 7 days</div><div class="val">$2.18</div></div>
+              <div class="stat"><div class="lbl">Last 30 days</div><div class="val">$8.92</div></div>
+              <div class="stat"><div class="lbl">Projected month</div><div class="val">$12.60</div><div class="sub">budget $20.00</div></div>
+              <div class="stat"><div class="lbl">Active resources</div><div class="val">8</div><div class="sub">16 tracked</div></div>
+            </div>
+            <div class="cbody">
+              <div class="card">
+                <div class="chead"><span class="t">Daily spend</span><span class="ce">Cost Explorer</span></div>
+                <div class="bars">
+                  <i style="height:18%"></i><i style="height:26%"></i><i style="height:20%"></i><i style="height:34%"></i><i style="height:30%"></i><i style="height:44%"></i><i style="height:38%"></i><i style="height:52%"></i><i style="height:46%"></i><i style="height:58%"></i><i style="height:50%"></i><i style="height:64%"></i><i style="height:56%"></i><i style="height:72%"></i><i style="height:62%"></i><i style="height:68%"></i><i style="height:80%"></i><i style="height:70%"></i><i style="height:86%"></i><i style="height:76%"></i><i class="spike" style="height:100%"></i><i style="height:66%"></i><i style="height:74%"></i><i style="height:60%"></i><i style="height:70%"></i><i style="height:48%"></i><i style="height:56%"></i><i style="height:40%"></i><i style="height:52%"></i><i class="today" style="height:90%"></i>
+                </div>
+              </div>
+              <div class="card">
+                <div class="kgroup">Fargate <span class="rows">· 8 tasks</span></div>
+                <table>
+                  <tr><th>Resource</th><th>State</th><th>Spec</th><th>Uptime</th><th>Est. monthly</th><th>Warehouse</th></tr>
+                  <tr><td class="resname">arn:…task/flashpoint/etl-driver<i class="link">↗</i></td><td><span class="dot green"></span>running</td><td class="rows">2 vCPU / 8GB</td><td class="rows">2.1d</td><td class="rows">in rate</td><td><span class="whchip">etl</span></td></tr>
+                  <tr><td class="resname">arn:…task/flashpoint/ana-driver<i class="link">↗</i></td><td><span class="dot green"></span>running</td><td class="rows">4 vCPU / 16GB</td><td class="rows">5.8h</td><td class="rows">in rate</td><td><span class="whchip">analytics</span></td></tr>
+                  <tr><td class="resname">arn:…task/flashpoint/etl-exec-0<i class="link">↗</i></td><td><span class="dot green"></span>running</td><td class="rows">2 vCPU / 8GB</td><td class="rows">2.1d</td><td class="rows">in rate</td><td><span class="whchip">etl</span></td></tr>
+                  <tr><td class="resname">arn:…task/flashpoint/ana-exec-0<i class="link">↗</i></td><td><span class="dot green"></span>running</td><td class="rows">2 vCPU / 8GB</td><td class="rows">5.8h</td><td class="rows">in rate</td><td><span class="whchip">analytics</span></td></tr>
+                </table>
+                <div class="kgrp kgroup">Gateway · infra</div>
+                <table>
+                  <tr><td class="resname">i-0a1b2c3d4e5f67890<i class="link">↗</i></td><td><span class="dot green"></span>running</td><td class="rows">t4g.small</td><td class="rows">41d</td><td class="rows">$12.26/mo</td><td><span class="infra">infra</span></td></tr>
+                  <tr><td class="resname">vol-0ff21ec9aab7e<i class="link">↗</i></td><td><span class="dot green"></span>in-use</td><td class="rows">gp3 20GB</td><td class="rows">—</td><td class="rows">$1.60/mo</td><td><span class="infra">infra</span></td></tr>
+                  <tr><td class="resname">flashpoint-dev-warehouses<i class="link">↗</i></td><td><span class="dot green"></span>active</td><td class="rows">dynamodb</td><td class="rows">—</td><td class="rows">—</td><td><span class="infra">infra</span></td></tr>
+                  <tr><td class="resname">flashpoint-dev-query-results<i class="link">↗</i></td><td><span class="dot green"></span>active</td><td class="rows">s3</td><td class="rows">—</td><td class="rows">—</td><td><span class="infra">infra</span></td></tr>
+                </table>
+                <div class="kgrp kgroup">Warehouse spend</div>
+                <table>
+                  <tr><th>Warehouse</th><th>Size</th><th>Status</th><th>Today</th><th>7d</th><th>30d</th></tr>
+                  <tr><td class="resname">etl</td><td class="rows">S</td><td><span class="dot green"></span>running</td><td class="rows">$0.42</td><td class="rows">$2.18</td><td class="rows">$8.92</td></tr>
+                  <tr><td class="resname">analytics</td><td class="rows">M</td><td><span class="dot green"></span>running</td><td class="rows">$0.00</td><td class="rows">$0.94</td><td class="rows">$3.10</td></tr>
+                  <tr><td class="resname">old-nightly</td><td class="rows">XS</td><td><span class="dot grey"></span>suspended</td><td class="rows">$0.00</td><td class="rows">$0.12</td><td class="rows">$0.38</td></tr>
+                </table>
+              </div>
+            </div>
           </div>
         </div>
       </div>

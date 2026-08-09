@@ -237,3 +237,43 @@ class TestResourcesEndpoint:
         kinds = {r['kind'] for r in client.get('/resources').json()['resources']}
         assert 'dynamodb' in kinds
         assert 'logs' in kinds
+
+
+class TestConsoleLinks:
+    def test_ec2_and_ebs_deep_links(self, client, mock_store, monkeypatch):
+        monkeypatch.setattr(cost_data, 'list_instances', lambda: [{
+            'id': 'i-123', 'type': 't4g.small', 'state': 'running',
+            'launch_time': datetime.now() - timedelta(days=1),
+        }])
+        monkeypatch.setattr(cost_data, 'list_volumes', lambda: [{
+            'id': 'vol-abc', 'state': 'in-use', 'size_gb': 20, 'type': 'gp3',
+        }])
+        rows = {r['kind']: r for r in client.get('/resources').json()['resources']}
+        assert rows['ec2']['console_url'] == (
+            'https://us-east-1.console.aws.amazon.com/ec2/home?region=us-east-1'
+            '#InstanceDetails:instanceId=i-123'
+        )
+        assert rows['ebs']['console_url'].endswith('#VolumeDetails:volumeId=vol-abc')
+
+    def test_fargate_links_task_details(self, client, mock_store, monkeypatch):
+        monkeypatch.setattr(cost_data, 'list_running_tasks', lambda: [{
+            'arn': 'arn:aws:ecs:us-east-1:0:task/flashpoint-dev/abc123',
+            'role': 'spark-connect', 'started_at': datetime.now() - timedelta(hours=1),
+            'cpu': '2048', 'memory': '8192',
+        }])
+        _seed_warehouse('my-wh', task_arn='arn:aws:ecs:us-east-1:0:task/flashpoint-dev/abc123')
+        row = [r for r in client.get('/resources').json()['resources']
+               if r['kind'] == 'fargate'][0]
+        assert row['console_url'].endswith(
+            '#/clusters/flashpoint-dev/tasks/abc123/details'
+        )
+
+    def test_unlinkable_ids_get_no_link(self, client, mock_store, monkeypatch):
+        monkeypatch.setattr(cost_data, 'list_running_tasks', lambda: [{
+            'arn': 'local-driver-mock', 'role': 'spark-connect',
+            'started_at': datetime.now() - timedelta(hours=1),
+            'cpu': '2048', 'memory': '8192',
+        }])
+        row = [r for r in client.get('/resources').json()['resources']
+               if r['kind'] == 'fargate'][0]
+        assert row['console_url'] is None

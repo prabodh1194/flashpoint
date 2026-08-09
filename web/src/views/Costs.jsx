@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
   Wallet, Cpu, Server, HardDrive, Database, Boxes, Archive, Network,
-  RefreshCw, Loader, Clock, Pause,
+  RefreshCw, Loader, Clock, Pause, ExternalLink,
 } from 'lucide-react'
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell } from 'recharts'
 
@@ -216,6 +216,17 @@ export function Costs({ gatewayOnline }) {
                       <div style={s.resCell}>
                         <Icon size={12} style={{ color: 'var(--amber)', flexShrink: 0 }} />
                         <span style={s.resName}>{shortId(r.id)}</span>
+                        {r.console_url && (
+                          <a
+                            href={r.console_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            title="Open in AWS console"
+                            style={s.consoleLink}
+                          >
+                            <ExternalLink size={11} />
+                          </a>
+                        )}
                       </div>
                     </td>
                     <td style={s.td}>
@@ -381,6 +392,10 @@ const s = {
   td: { padding: '7px 16px', fontSize: 12, color: 'var(--text-secondary)' },
   resCell: { display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 },
   resName: { color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: 11.5 },
+  consoleLink: {
+    color: 'var(--text-dim)', display: 'inline-flex', cursor: 'pointer',
+    textDecoration: 'none',
+  },
   stateText: { fontSize: 11, color: 'var(--text-secondary)' },
   mono: { fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--text-mono)' },
   whChip: {
