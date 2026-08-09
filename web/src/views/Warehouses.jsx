@@ -75,7 +75,10 @@ export function Warehouses({ gatewayOnline }) {
     <div style={s.root}>
       {!gatewayOnline && <OfflineBanner />}
       <div style={s.header}>
-        <h2 style={s.title}>Warehouses</h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <h2 style={s.title}>Warehouses</h2>
+          <LifecycleStrip status={warehouses.find(w => w.status !== 'suspended')?.status ?? 'created'} />
+        </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <button style={s.refreshBtn} onClick={refresh} title="Refresh">
             <RefreshCw size={13} />
@@ -220,6 +223,32 @@ function StatusBadge({ status }) {
   )
 }
 
+// Lifecycle strip, mirrors the mockup: created → starting → running → suspended → deleted.
+function LifecycleStrip({ status }) {
+  const steps = ['created', 'starting', 'running', 'suspended', 'deleted']
+  const idx = steps.indexOf(status)
+  const done = i => i < idx
+  const cur = i => i === idx
+  return (
+    <div style={lcS.bar}>
+      {steps.map((st, i) => (
+        <span key={st} style={{ display: 'contents' }}>
+          {i > 0 && <span style={lcS.arrow}>→</span>}
+          <span
+            style={{
+              ...lcS.step,
+              ...(done(i) ? lcS.done : {}),
+              ...(cur(i) ? lcS.cur : {}),
+            }}
+          >
+            {st}
+          </span>
+        </span>
+      ))}
+    </div>
+  )
+}
+
 function MetaPair({ label, value, mono }) {
   return (
     <div style={s.metaPair}>
@@ -318,4 +347,25 @@ const s = {
   empty: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, gap: 8, minHeight: 200 },
   emptyText: { fontSize: 13, color: 'var(--text-secondary)' },
   emptyHint: { fontSize: 12, color: 'var(--text-dim)' },
+}
+
+const lcS = {
+  bar: {
+    display: 'flex', alignItems: 'center', gap: 5,
+    fontFamily: 'var(--font-mono)', fontSize: 10, flexShrink: 0,
+  },
+  step: {
+    padding: '2px 8px', borderRadius: 100,
+    border: '1px solid var(--border-dim)', background: 'transparent',
+    color: 'var(--text-dim)', whiteSpace: 'nowrap',
+  },
+  done: {
+    border: '1px solid var(--amber-border)', background: 'var(--amber-bg)',
+    color: 'var(--amber)',
+  },
+  cur: {
+    border: '1px solid var(--amber-border)', background: 'var(--amber)',
+    color: '#1c1405', fontWeight: 600,
+  },
+  arrow: { color: 'var(--text-dim)', userSelect: 'none' },
 }

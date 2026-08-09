@@ -69,12 +69,14 @@ function Branch({ id, model, selected, onSelect }) {
   if (node.isWsg) return <StageChip node={node.node} pct={node.pct} />
 
   const kids = model.children.get(id) || []
-  if (kids.length === 0) return <OpCard row={node} selected={selected === id} onSelect={onSelect} />
+  const isRoot = id === model.rootId
+  const card = row => <OpCard row={row} selected={selected === id} onSelect={onSelect} isRoot={isRoot} />
+  if (kids.length === 0) return card(node)
 
   if (kids.length === 1) {
     return (
       <div style={s.col}>
-        <OpCard row={node} selected={selected === id} onSelect={onSelect} />
+        {card(node)}
         <Connector />
         {model.stageChips.get(kids[0])?.map(c => <StageChip key={c.node.id} node={c.node} pct={c.pct} />)}
         <Branch id={kids[0]} model={model} selected={selected} onSelect={onSelect} />
@@ -85,7 +87,7 @@ function Branch({ id, model, selected, onSelect }) {
   // fan-out: multiple inputs (a join) render side-by-side below the parent
   return (
     <div style={s.col}>
-      <OpCard row={node} selected={selected === id} onSelect={onSelect} />
+      {card(node)}
       <Connector />
       <div style={s.fanBar} />
       <div style={s.fanRow}>
@@ -100,7 +102,7 @@ function Branch({ id, model, selected, onSelect }) {
   )
 }
 
-function OpCard({ row, selected, onSelect }) {
+function OpCard({ row, selected, onSelect, isRoot }) {
   const { node, pct } = row
   const rowCount = node.metrics?.['number of output rows']
   const perTask = node.median_task_ms
@@ -109,7 +111,7 @@ function OpCard({ row, selected, onSelect }) {
   const condition = filterCondition(node)
   const join = row.join
   return (
-    <button style={{ ...s.card, ...(selected ? s.cardSel : {}) }} onClick={() => onSelect(node.id)}>
+    <button style={{ ...s.card, ...(isRoot ? s.cardRoot : {}), ...(selected ? s.cardSel : {}) }} onClick={() => onSelect(node.id)}>
       <div style={s.cardTop}>
         <span style={s.opName}>{node.name}</span>
         <span style={s.badges}>
@@ -451,6 +453,10 @@ const s = {
     background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8,
     padding: '8px 11px', fontFamily: 'var(--font-ui)',
     transition: 'border-color 0.12s, background 0.12s',
+  },
+  cardRoot: {
+    background: 'transparent', border: '1px dashed var(--border)',
+    color: 'var(--text-dim)',
   },
   cardSel: { borderColor: 'var(--amber)', background: 'var(--bg-raised)' },
   cardTop: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },

@@ -80,6 +80,14 @@ html, body, #root {
 .mono { font-family: var(--font-mono); }
 .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* SQL editor token colors (worksheet highlight layer) */
+.sql-kw    { color: var(--amber); }
+.sql-fn    { color: var(--purple); }
+.sql-str   { color: var(--green); }
+.sql-num   { color: var(--amber); font-style: italic; }
+.sql-cmt   { color: var(--text-dim); font-style: italic; }
+.sql-plain { color: var(--text-mono); }
+
 *:focus-visible {
   outline: 1.5px solid var(--amber);
   outline-offset: 2px;

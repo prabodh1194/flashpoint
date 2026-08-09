@@ -111,8 +111,9 @@ const styles = {
   navItemActive: {
     color: 'var(--text-primary)',
     background: 'var(--amber-bg)',
-    borderLeft: '2px solid var(--amber)',
-    paddingLeft: 14,
+    // inset shadow (not border/padding) so layout never shifts when the
+    // active state is applied or removed
+    boxShadow: 'inset 2px 0 0 var(--amber)',
   },
   navLabel: {
     fontSize: 13,

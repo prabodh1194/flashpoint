@@ -3,30 +3,49 @@ import { Database, Table2, ChevronRight, ChevronDown, Hash, Type, Calendar } fro
 
 import { OfflineBanner } from '../components/OfflineBanner'
 
+// Live demo schema, mirrors the e2e script's seed (scripts/e2e_demo.py):
+// 10M orders joined against 1M customers via the Spark Connect server on :15002.
 const CATALOG = {
-  prod: {
-    orders:  [
-      { name: 'id',         type: 'BIGINT' },
-      { name: 'customer_id',type: 'BIGINT' },
-      { name: 'total',      type: 'DECIMAL(18,2)' },
-      { name: 'dt',         type: 'DATE' },
-      { name: 'status',     type: 'VARCHAR' },
-    ],
-    users: [
-      { name: 'id',    type: 'BIGINT' },
-      { name: 'email', type: 'VARCHAR' },
-      { name: 'name',  type: 'VARCHAR' },
-      { name: 'created_at', type: 'TIMESTAMP' },
-    ],
+  'spark_catalog': {
+    default: {
+      name: 'default',
+      tables: {
+        orders: [
+          { name: 'id',           type: 'INT' },
+          { name: 'customer_id',  type: 'INT' },
+          { name: 'product_id',   type: 'INT' },
+          { name: 'amount',       type: 'DECIMAL(10,2)' },
+          { name: 'order_date',   type: 'STRING' },
+        ],
+        customers: [
+          { name: 'customer_id',  type: 'INT' },
+          { name: 'name',         type: 'STRING' },
+          { name: 'region',       type: 'STRING' },
+          { name: 'tier',         type: 'INT' },
+        ],
+      },
+    },
   },
-  staging: {
-    events: [
-      { name: 'event_id',  type: 'VARCHAR' },
-      { name: 'user_id',   type: 'BIGINT' },
-      { name: 'event_type',type: 'VARCHAR' },
-      { name: 'ts',        type: 'TIMESTAMP' },
-    ],
-  },
+}
+
+// Sample rows, real values from the seeded parquet files.
+const SAMPLE_ROWS = {
+  'spark_catalog.default.customers': [
+    { customer_id: 1,     name: 'user_1',    region: 'north',   tier: 1 },
+    { customer_id: 2,     name: 'user_2',    region: 'south',   tier: 2 },
+    { customer_id: 3,     name: 'user_3',    region: 'east',    tier: 0 },
+    { customer_id: 4,     name: 'user_4',    region: 'west',    tier: 1 },
+    { customer_id: 5,     name: 'user_5',    region: 'central', tier: 2 },
+    { customer_id: 6,     name: 'user_6',    region: 'north',   tier: 0 },
+  ],
+  'spark_catalog.default.orders': [
+    { id: 1, customer_id: 1, product_id: 1,   amount: '1.00', order_date: '2024-01-02' },
+    { id: 2, customer_id: 2, product_id: 2,   amount: '2.00', order_date: '2024-01-03' },
+    { id: 3, customer_id: 3, product_id: 3,   amount: '3.00', order_date: '2024-01-04' },
+    { id: 4, customer_id: 4, product_id: 4,   amount: '4.00', order_date: '2024-01-05' },
+    { id: 5, customer_id: 5, product_id: 5,   amount: '5.00', order_date: '2024-01-06' },
+    { id: 6, customer_id: 6, product_id: 6,   amount: '6.00', order_date: '2024-01-07' },
+  ],
 }
 
 function typeIcon(type) {
@@ -38,16 +57,18 @@ function typeIcon(type) {
 }
 
 export function DataExplorer({ gatewayOnline }) {
-  const [openDbs, setOpenDbs] = useState({ prod: true })
-  const [openTables, setOpenTables] = useState({})
-  const [selected, setSelected] = useState(null)
+  const [openDbs, setOpenDbs] = useState({ 'spark_catalog': true })
+  const [openTables, setOpenTables] = useState({ 'spark_catalog.default': true })
+  const [selected, setSelected] = useState('spark_catalog.default.customers')
 
   const toggleDb = db => setOpenDbs(s => ({ ...s, [db]: !s[db] }))
   const toggleTable = key => setOpenTables(s => ({ ...s, [key]: !s[key] }))
-  const selectTable = (db, table) => setSelected(`${db}.${table}`)
+  const selectTable = key => setSelected(key)
 
-  const [selDb, selTable] = selected?.split('.') ?? []
-  const cols = selDb && selTable ? CATALOG[selDb]?.[selTable] : null
+  const parts = selected.split('.')
+  const selDb = parts[0], selSchema = parts[1] ?? '', selTable = parts[2] ?? ''
+  const cols = CATALOG[selDb]?.[selSchema]?.tables?.[selTable]
+  const rows = SAMPLE_ROWS[selected]
 
   return (
     <div style={s.root}>
@@ -55,34 +76,49 @@ export function DataExplorer({ gatewayOnline }) {
       {/* Tree */}
       <div style={s.tree}>
         <div style={s.treeHeader}>Catalog</div>
-        {Object.entries(CATALOG).map(([db, tables]) => (
+        {Object.entries(CATALOG).map(([db, schemas]) => (
           <div key={db}>
             <button style={s.dbRow} onClick={() => toggleDb(db)}>
               {openDbs[db] ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
               <Database size={13} style={{ color: 'var(--amber)', flexShrink: 0 }} />
               <span style={s.dbName}>{db}</span>
             </button>
-            {openDbs[db] && Object.keys(tables).map(table => {
-              const key = `${db}.${table}`
-              const isOpen = openTables[key]
-              const isSel = selected === key
+            {openDbs[db] && Object.entries(schemas).map(([schema, schemaObj]) => {
+              const schKey = `${db}.${schema}`
+              const isOpen = openTables[schKey]
+              const isSel = selected === schKey
               return (
-                <div key={table}>
+                <div key={schema}>
                   <button
                     style={{ ...s.tableRow, ...(isSel ? s.tableRowSel : {}) }}
-                    onClick={() => { toggleTable(key); selectTable(db, table) }}
+                    onClick={() => { toggleTable(schKey); selectTable(schKey) }}
                   >
                     {isOpen ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
                     <Table2 size={12} style={{ color: 'var(--text-dim)', flexShrink: 0 }} />
-                    <span style={s.tableName}>{table}</span>
+                    <span style={s.tableName}>{schema}</span>
                   </button>
-                  {isOpen && CATALOG[db][table].map(col => (
-                    <div key={col.name} style={s.colRow}>
-                      {typeIcon(col.type)}
-                      <span style={s.colName}>{col.name}</span>
-                      <span style={s.colType}>{col.type}</span>
-                    </div>
-                  ))}
+                  {isOpen && Object.entries(schemaObj.tables).map(([table, tableCols]) => {
+                    const key = `${db}.${schema}.${table}`
+                    const isTblSel = selected === key
+                    return (
+                      <div key={table}>
+                        <button
+                          style={{ ...s.colRowBtn, ...(isTblSel ? s.tableRowSel : {}) }}
+                          onClick={() => selectTable(key)}
+                        >
+                          <Table2 size={11} style={{ color: 'var(--text-dim)', flexShrink: 0 }} />
+                          <span style={s.tableName}>{table}</span>
+                        </button>
+                        {isTblSel && tableCols.map(col => (
+                          <div key={col.name} style={s.colRow}>
+                            {typeIcon(col.type)}
+                            <span style={s.colName}>{col.name}</span>
+                            <span style={s.colType}>{col.type}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  })}
                 </div>
               )
             })}
@@ -122,6 +158,32 @@ export function DataExplorer({ gatewayOnline }) {
                 ))}
               </tbody>
             </table>
+
+            {rows && (
+              <>
+                <div style={s.sampleHeader}>Sample rows</div>
+                <div style={s.sampleWrap}>
+                  <table style={s.sampleTable}>
+                    <thead>
+                      <tr>
+                        {Object.keys(rows[0]).map(k => (
+                          <th key={k} style={s.sampleTh}>{k}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map((r, i) => (
+                        <tr key={i} style={i % 2 === 0 ? {} : s.altRow}>
+                          {Object.values(r).map((v, j) => (
+                            <td key={j} style={s.sampleTd}>{String(v)}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
           </>
         ) : (
           <div style={s.empty}>
@@ -188,6 +250,20 @@ const s = {
     fontFamily: 'var(--font-ui)',
     textAlign: 'left',
   },
+  colRowBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 5,
+    width: '100%',
+    padding: '4px 14px 4px 44px',
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    color: 'var(--text-secondary)',
+    fontSize: 12,
+    fontFamily: 'var(--font-mono)',
+    textAlign: 'left',
+  },
   tableRowSel: {
     background: 'var(--amber-bg)',
     color: 'var(--text-primary)',
@@ -197,7 +273,7 @@ const s = {
     display: 'flex',
     alignItems: 'center',
     gap: 6,
-    padding: '3px 14px 3px 46px',
+    padding: '3px 14px 3px 60px',
     fontSize: 11,
     fontFamily: 'var(--font-mono)',
     color: 'var(--text-dim)',
@@ -209,6 +285,43 @@ const s = {
   colType: {
     color: 'var(--text-dim)',
     fontSize: 10,
+  },
+  sampleHeader: {
+    padding: '12px 20px 6px',
+    fontSize: 10,
+    letterSpacing: '0.06em',
+    textTransform: 'uppercase',
+    color: 'var(--text-dim)',
+    fontWeight: 500,
+  },
+  sampleWrap: {
+    overflowX: 'auto',
+    margin: '0 20px 16px',
+    border: '1px solid var(--border-dim)',
+    borderRadius: 'var(--radius)',
+  },
+  sampleTable: {
+    width: '100%',
+    borderCollapse: 'collapse',
+    fontSize: 11.5,
+    fontFamily: 'var(--font-mono)',
+  },
+  sampleTh: {
+    padding: '6px 12px',
+    textAlign: 'left',
+    fontSize: 10,
+    letterSpacing: '0.04em',
+    textTransform: 'uppercase',
+    color: 'var(--amber)',
+    background: 'var(--bg-surface)',
+    borderBottom: '1px solid var(--border-dim)',
+    whiteSpace: 'nowrap',
+  },
+  sampleTd: {
+    padding: '5px 12px',
+    borderBottom: '1px solid var(--border-dim)',
+    color: 'var(--text-mono)',
+    whiteSpace: 'nowrap',
   },
   detail: {
     flex: 1,

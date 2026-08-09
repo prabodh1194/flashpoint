@@ -1,8 +1,87 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { Play, Plus, ChevronDown, Clock, Rows, Database, Cpu, Hash, X, Loader, Unplug } from 'lucide-react'
 import { createWarehouse, deleteWarehouse, runQuery } from '../api'
 import { QueryDag } from '../components/QueryDag'
 import { OfflineBanner } from '../components/OfflineBanner'
+
+// Lightweight SQL highlighter — zero deps, one pass, good enough for a
+// worksheet. Token classes are matched to the mockup palette.
+const KEYWORDS = new Set(
+  `SELECT FROM WHERE JOIN LEFT RIGHT INNER ON GROUP BY ORDER AS ASC DESC AND OR NOT IN IS NULL
+   TRUE FALSE CASE WHEN THEN ELSE END CREATE REPLACE TEMPORARY VIEW USING OPTIONS DROP TABLE
+   IF EXISTS LIMIT DISTINCT HAVING UNION ALL SET WITH OVER PARTITION ROWS BETWEEN
+   CURRENT INTERVAL ADD COLUMN TO VALUES INTO`.split(/\s+/)
+)
+
+function tokenizeSql(sql) {
+  const out = []
+  const re = /(--[^\n]*)|('(?:[^']|'')*')|(\b\d+(?:\.\d+)?\b)|([A-Za-z_][A-Za-z0-9_]*)(?=\s*\()|\b([A-Za-z_][A-Za-z0-9_]*)\b|(\s+)|(.)/g
+  let m
+  while ((m = re.exec(sql))) {
+    const [full, cmt, str, num, fn, word] = m
+    if (cmt) out.push([full, 'sql-cmt'])
+    else if (str) out.push([full, 'sql-str'])
+    else if (num) out.push([full, 'sql-num'])
+    else if (fn) out.push([full, 'sql-fn'])
+    else if (word) out.push([full, KEYWORDS.has(word.toUpperCase()) ? 'sql-kw' : 'sql-plain'])
+    else out.push([full, 'sql-plain'])
+  }
+  return out
+}
+
+function esc(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+function SqlHighlight({ sql }) {
+  const html = useMemo(
+    () => tokenizeSql(sql).map(([t, cls]) => `<span class="${cls}">${esc(t)}</span>`).join(''),
+    [sql]
+  )
+  return <pre style={s.hl} dangerouslySetInnerHTML={{ __html: html || '\n' }} />
+}
+
+function FlowStrip({ gatewayOnline, connecting, running, hasResults, hasProfile, elapsed }) {
+  const dim = { ...flowS.step, ...flowS.grey }
+  let steps
+  if (!gatewayOnline) {
+    steps = [{ label: 'offline', style: { ...flowS.step, ...flowS.red } }]
+  } else if (connecting) {
+    steps = [{ label: 'submitted', style: flowS.done }, { label: 'connecting…', style: flowS.cur }]
+  } else if (running) {
+    steps = [{ label: 'submitted', style: flowS.done }, { label: `running · ${elapsed}s`, style: flowS.cur }]
+  } else if (hasResults && hasProfile) {
+    steps = [
+      { label: 'submitted', style: flowS.done },
+      { label: 'running', style: flowS.done },
+      { label: 'profile', style: flowS.done },
+      { label: 'done', style: flowS.cur },
+    ]
+  } else if (hasResults) {
+    steps = [
+      { label: 'submitted', style: flowS.done },
+      { label: 'running', style: flowS.done },
+      { label: 'done', style: flowS.cur },
+    ]
+  } else {
+    steps = [
+      { label: 'submitted', style: dim },
+      { label: 'running', style: dim },
+      { label: 'profile', style: dim },
+      { label: 'done', style: dim },
+    ]
+  }
+  return (
+    <div style={flowS.bar}>
+      {steps.map((st, i) => (
+        <span key={st.label} style={{ display: 'contents' }}>
+          {i > 0 && <span style={flowS.arrow}>→</span>}
+          <span style={st.style}>{st.label}</span>
+        </span>
+      ))}
+    </div>
+  )
+}
 
 const PLACEHOLDER = `-- Flashpoint SQL Worksheet
 -- ⌘↵ to run  •  connects a warehouse automatically on first run
@@ -26,7 +105,9 @@ export function Worksheet({ gatewayOnline }) {
   const [stats, setStats] = useState(null)
   const [error, setError] = useState(null)
   const [session, setSession] = useState(null)  // {session_id, endpoint}
+  const [elapsed, setElapsed] = useState(0)
   const textareaRef = useRef(null)
+  const hlRef = useRef(null)
 
   // Clean up session when unmounting
   useEffect(() => {
@@ -45,8 +126,25 @@ export function Worksheet({ gatewayOnline }) {
     setError(null)
   }
 
+  // Live elapsed-seconds while a query is running (for the flow strip).
+  useEffect(() => {
+    if (!running) return
+    const iv = setInterval(() => setElapsed(t => t + 1), 1000)
+    return () => clearInterval(iv)
+  }, [running])
+
+  // Keep the highlight layer scrolled in lockstep with the (transparent) editor.
+  const syncScroll = () => {
+    const ta = textareaRef.current, hl = hlRef.current
+    if (ta && hl) {
+      hl.scrollTop = ta.scrollTop
+      hl.scrollLeft = ta.scrollLeft
+    }
+  }
+
   const run = async () => {
     setRunning(true)
+    setElapsed(0)
     setError(null)
 
     try {
@@ -56,7 +154,7 @@ export function Worksheet({ gatewayOnline }) {
       if (!activeWarehouse) {
         setConnecting(true)
         try {
-          activeWarehouse = await createWarehouse()
+          activeWarehouse = await createWarehouse(`ws-${Date.now().toString(36)}`)
           setSession(activeWarehouse)
         } finally {
           setConnecting(false)
@@ -116,13 +214,18 @@ export function Worksheet({ gatewayOnline }) {
             <div key={i} style={s.lineNum}>{i + 1}</div>
           ))}
         </div>
-        <textarea
-          ref={textareaRef}
-          style={s.editor}
-          value={sql}
-          onChange={e => setSql(e.target.value)}
-          spellCheck={false}
-          onKeyDown={e => {
+        <div style={s.editorStack}>
+          <div ref={hlRef} style={s.hlWrap} aria-hidden>
+            <SqlHighlight sql={sql} />
+          </div>
+          <textarea
+            ref={textareaRef}
+            style={s.editor}
+            value={sql}
+            onChange={e => setSql(e.target.value)}
+            onScroll={syncScroll}
+            spellCheck={false}
+            onKeyDown={e => {
             if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
               e.preventDefault()
               if (!isLoading) run()
@@ -136,7 +239,8 @@ export function Worksheet({ gatewayOnline }) {
               })
             }
           }}
-        />
+          />
+        </div>
       </div>
 
       {/* Run bar */}
@@ -153,6 +257,15 @@ export function Worksheet({ gatewayOnline }) {
           {!gatewayOnline ? 'Offline' : connecting ? 'Connecting…' : running ? 'Running…' : 'Run'}
           {!isLoading && gatewayOnline && <span style={s.kbd}>⌘↵</span>}
         </button>
+
+        <FlowStrip
+          gatewayOnline={gatewayOnline}
+          connecting={connecting}
+          running={running}
+          hasResults={!!results}
+          hasProfile={!!profile}
+          elapsed={elapsed}
+        />
 
         {stats && <StatBar stats={stats} />}
       </div>
@@ -315,24 +428,39 @@ const s = {
     borderRadius: 'var(--radius-sm)', marginLeft: 2,
   },
   editorWrap: {
-    display: 'flex', flex: '1 1 200px', overflow: 'auto',
+    display: 'flex', flex: '1 1 200px', overflow: 'hidden',
     background: 'var(--bg-base)', borderBottom: '1px solid var(--border-dim)',
     minHeight: 160, maxHeight: '50vh',
   },
   lineNums: {
     padding: '12px 0', minWidth: 40, textAlign: 'right',
     background: 'var(--bg-surface)', borderRight: '1px solid var(--border-dim)',
-    flexShrink: 0, userSelect: 'none',
+    flexShrink: 0, userSelect: 'none', overflow: 'hidden',
   },
   lineNum: {
     padding: '0 10px', height: '1.6em', fontFamily: 'var(--font-mono)',
     fontSize: 11, color: 'var(--text-dim)', lineHeight: '1.6em',
   },
+  editorStack: {
+    position: 'relative', flex: 1, minWidth: 0, overflow: 'hidden',
+  },
+  hlWrap: {
+    position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none',
+  },
+  hl: {
+    margin: 0, padding: '12px 16px', fontFamily: 'var(--font-mono)',
+    fontSize: 12.5, lineHeight: '1.6em', whiteSpace: 'pre',
+    color: 'var(--text-mono)', '-webkit-font-smoothing': 'antialiased',
+    overflow: 'hidden', pointerEvents: 'none',
+    fontVariantLigatures: 'none',
+  },
   editor: {
-    flex: 1, padding: '12px 16px', background: 'transparent', border: 'none',
-    resize: 'none', fontFamily: 'var(--font-mono)', fontSize: 12.5,
-    lineHeight: '1.6em', color: 'var(--text-mono)', outline: 'none',
+    position: 'absolute', inset: 0, padding: '12px 16px',
+    background: 'transparent', border: 'none', resize: 'none',
+    fontFamily: 'var(--font-mono)', fontSize: 12.5,
+    lineHeight: '1.6em', color: 'transparent', outline: 'none',
     caretColor: 'var(--amber)', whiteSpace: 'pre', overflowWrap: 'normal',
+    fontVariantLigatures: 'none',
   },
   runBar: {
     display: 'flex', alignItems: 'center', gap: 16, padding: '8px 16px',
@@ -429,4 +557,35 @@ const indS = {
     background: 'none', border: 'none', cursor: 'pointer', color: 'var(--amber)',
     display: 'flex', alignItems: 'center', padding: 0, marginLeft: 2,
   },
+}
+
+// Query lifecycle strip — matches the mockup flow: submitted → running → profile → done.
+const flowS = {
+  bar: {
+    display: 'flex', alignItems: 'center', gap: 6,
+    fontFamily: 'var(--font-mono)', fontSize: 10,
+    marginLeft: 'auto', flexShrink: 0, padding: '0 6px',
+  },
+  step: {
+    padding: '2px 8px', borderRadius: 100,
+    border: '1px solid var(--border)', background: 'var(--bg-surface)',
+    color: 'var(--text-dim)', whiteSpace: 'nowrap',
+  },
+  done: {
+    padding: '2px 8px', borderRadius: 100,
+    border: '1px solid var(--amber-border)', background: 'var(--amber-bg)',
+    color: 'var(--amber)', whiteSpace: 'nowrap',
+  },
+  cur: {
+    padding: '2px 8px', borderRadius: 100,
+    border: '1px solid var(--amber-border)', background: 'var(--amber)',
+    color: '#1c1405', fontWeight: 600, whiteSpace: 'nowrap',
+  },
+  red: {
+    padding: '2px 8px', borderRadius: 100,
+    border: '1px solid rgba(239,68,68,0.4)', background: 'rgba(239,68,68,0.12)',
+    color: 'var(--red)', whiteSpace: 'nowrap',
+  },
+  grey: { opacity: 0.45 },
+  arrow: { color: 'var(--text-dim)', userSelect: 'none' },
 }

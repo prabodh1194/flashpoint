@@ -27,7 +27,7 @@ export function History({ gatewayOnline, onOpenProfile }) {
         <table style={s.table}>
           <thead>
             <tr>
-              {['Status', 'Query', 'Duration', 'Rows', 'Warehouse', 'Time', ''].map(h => (
+              {['Status', 'Query', 'Query ID', 'Duration', 'Rows', 'Warehouse', 'Time', ''].map(h => (
                 <th key={h} style={s.th}>{h}</th>
               ))}
             </tr>
@@ -43,6 +43,7 @@ export function History({ gatewayOnline, onOpenProfile }) {
                 <td style={{ ...s.td, ...s.sqlCell }}>
                   <span style={s.sql}>{q.sql}</span>
                 </td>
+                <td style={{ ...s.td, ...s.mono, color: 'var(--amber)' }}>{q.query_id}</td>
                 <td style={{ ...s.td, ...s.mono }}>{q.duration_ms}ms</td>
                 <td style={{ ...s.td, ...s.mono }}>{q.row_count.toLocaleString()}</td>
                 <td style={{ ...s.td, ...s.mono, color: 'var(--amber)' }}>{q.name}</td>
