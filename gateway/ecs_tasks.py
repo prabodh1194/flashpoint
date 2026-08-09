@@ -11,11 +11,12 @@ log = logging.getLogger(__name__)
 ecs = boto3.client('ecs', region_name=REGION)
 
 
-def run_driver_task() -> str:
+def run_driver_task(warehouse_name: str) -> str:
     resp = ecs.run_task(
         cluster=CLUSTER,
         taskDefinition=TASK_DEF,
         launchType='FARGATE',
+        tags=_task_tags(warehouse_name),
         networkConfiguration={
             'awsvpcConfiguration': {
                 'subnets': SUBNETS,
@@ -41,13 +42,26 @@ def private_ip(task_arn: str) -> str:
     return next(d['value'] for d in details if d['name'] == 'privateIPv4Address')
 
 
-def run_executor_tasks(master_url: str, count: int) -> list[str]:
+def _task_tags(warehouse_name: str) -> list[dict]:
+    """Tags for Fargate tasks — required for cost-allocation attribution.
+
+    Task-definition tags never propagate to running tasks; the Cost Center
+    view groups spend by warehouse via these tags.
+    """
+    return [
+        {'key': 'Project', 'value': 'flashpoint'},
+        {'key': 'Warehouse', 'value': warehouse_name},
+    ]
+
+
+def run_executor_tasks(master_url: str, count: int, warehouse_name: str) -> list[str]:
     """Launch `count` Fargate Spot executor tasks in a single RunTask call."""
     resp = ecs.run_task(
         count=count,
         cluster=CLUSTER,
         taskDefinition=EXECUTOR_TASK_DEF,
         capacityProviderStrategy=[{'capacityProvider': 'FARGATE_SPOT', 'weight': 1}],
+        tags=_task_tags(warehouse_name),
         networkConfiguration={
             'awsvpcConfiguration': {
                 'subnets': SUBNETS,
@@ -87,13 +101,13 @@ def stop_tasks(warehouse_record: dict) -> None:
 
 
 def launch_driver_with_executors(
-    executor_count: int, grpc_port: int
+    warehouse_name: str, executor_count: int, grpc_port: int
 ) -> tuple[str, str, str, list[str]]:
     """Launch a Fargate driver + N Spot executors.
 
     Returns (task_arn, ip, endpoint, executor_arns).
     """
-    task_arn = run_driver_task()
+    task_arn = run_driver_task(warehouse_name)
     log.info('Driver task launched: %s', task_arn)
 
     wait_running(task_arn)
@@ -102,7 +116,7 @@ def launch_driver_with_executors(
     endpoint = f'sc://{task_ip}:{grpc_port}'
     log.info('Driver ready — master=%s endpoint=%s', master_url, endpoint)
 
-    executor_arns = run_executor_tasks(master_url, executor_count)
+    executor_arns = run_executor_tasks(master_url, executor_count, warehouse_name)
     log.info('Launched %d executor tasks (Spot): %s', len(executor_arns), executor_arns)
 
     return task_arn, task_ip, endpoint, executor_arns

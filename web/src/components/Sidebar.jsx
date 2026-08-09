@@ -1,10 +1,11 @@
-import { FileCode2, Database, History, BarChart3, ChevronRight, Zap } from 'lucide-react'
+import { FileCode2, Database, History, Wallet, ChevronRight, Zap } from 'lucide-react'
 
 const NAV_ITEMS = [
   { id: 'worksheet',  label: 'Worksheets',   icon: FileCode2 },
   { id: 'warehouses', label: 'Warehouses',   icon: Zap },
   { id: 'history',    label: 'Query History', icon: History },
   { id: 'explorer',   label: 'Data Explorer', icon: Database },
+  { id: 'costs',      label: 'Cost Center',  icon: Wallet },
 ]
 
 export function Sidebar({ active, onNav, open, onToggle }) {

@@ -6,6 +6,7 @@ import time
 from fastapi import APIRouter, HTTPException
 
 import ecs_tasks
+import meters
 import spark_client
 import store
 from config import CLUSTER, GRPC_PORT, MAX_WAREHOUSES, SIZES
@@ -28,9 +29,10 @@ def create_warehouse(req: CreateWarehouseRequest):
     log.info('Creating warehouse %s (size=%s, executors=%d)', name, req.size, executor_count)
 
     task_arn, task_ip, endpoint, executor_arns = ecs_tasks.launch_driver_with_executors(
-        executor_count, GRPC_PORT
+        name, executor_count, GRPC_PORT
     )
 
+    now = time.time()
     record = {
         'task_arn': task_arn,
         'executor_arns': executor_arns,
@@ -39,7 +41,11 @@ def create_warehouse(req: CreateWarehouseRequest):
         'status': 'running',
         'size': req.size,
         'executor_count': executor_count,
-        'created_at': time.time(),
+        'created_at': now,
+        # Metering: the session is billable from now; checkpoint now so the
+        # first heartbeat tick bills only the delta since start.
+        'session_started_at': now,
+        'last_metered_at': now,
     }
     store.put_warehouse(name, record)
     return WarehouseResponse(
@@ -97,6 +103,8 @@ def delete_warehouse(name: str):
         raise HTTPException(status_code=404, detail='warehouse not found')
 
     spark_client.drop(name)
+    if s.get('status') != 'suspended':
+        meters.accrue_session(s)
     ecs_tasks.stop_tasks(s)
     store.delete_warehouse(name)
     log.info('Deleted warehouse %s (driver + %d executors stopped)', name, len(s['executor_arns']))
@@ -111,6 +119,7 @@ def suspend_warehouse(name: str):
         return {'status': 'suspended'}
 
     spark_client.drop(name)
+    meters.accrue_session(s)
     ecs_tasks.stop_tasks(s)
     store.update_warehouse_status(name, 'suspended', task_arn=None, executor_arns=[], task_ip=None)
     log.info('Suspended warehouse %s', name)
@@ -137,9 +146,10 @@ def resume_warehouse(name: str):
     log.info('Resuming warehouse %s (size=%s)', name, size)
 
     task_arn, task_ip, endpoint, executor_arns = ecs_tasks.launch_driver_with_executors(
-        executor_count, GRPC_PORT
+        name, executor_count, GRPC_PORT
     )
 
+    now = time.time()
     store.update_warehouse_status(
         name,
         'running',
@@ -148,6 +158,8 @@ def resume_warehouse(name: str):
         task_ip=task_ip,
         endpoint=endpoint,
         executor_count=executor_count,
+        session_started_at=now,
+        last_metered_at=now,
     )
     log.info('Resumed warehouse %s → driver %s', name, task_arn)
     return WarehouseResponse(
@@ -177,7 +189,7 @@ def resize_warehouse(name: str, req: ResizeRequest):
 
     if new_count > current_count:
         delta = new_count - current_count
-        new_arns = ecs_tasks.run_executor_tasks(master_url, delta)
+        new_arns = ecs_tasks.run_executor_tasks(master_url, delta, name)
         executor_arns.extend(new_arns)
         log.info('Scaled warehouse %s up: +%d executors (Spot)', name, delta)
     elif new_count < current_count:

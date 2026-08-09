@@ -13,6 +13,7 @@ import logging
 import time
 
 import ecs_tasks
+import meters
 import store
 
 log = logging.getLogger(__name__)
@@ -101,8 +102,20 @@ async def reap_idle_warehouses(spark_client, warehouse_ttl_s: int, cluster: str)
             if record.get('status') != 'running':
                 continue
             wid = record['name']
-            if now - record.get('created_at', now) > warehouse_ttl_s:
+
+            # Metering heartbeat: accrue compute/cost since the last checkpoint
+            # and checkpoint the record so the next tick (and the finalize on
+            # suspend/delete) bills only its own delta. Reaped warehouses skip
+            # the checkpoint — the finalize bills the whole open window.
+            idle = now - record.get('created_at', now) > warehouse_ttl_s
+
+            if idle:
                 log.warning('Reaping idle warehouse %s (TTL exceeded)', wid)
+                meters.accrue_session(record)
+            elif meters.accrue_session(record) > 0:
+                store.update_warehouse_status(wid, 'running', last_metered_at=time.time())
+
+            if idle:
                 spark_client.drop(wid)
                 for arn in ([record['task_arn']] if record.get('task_arn') else []) + (
                     record.get('executor_arns') or []

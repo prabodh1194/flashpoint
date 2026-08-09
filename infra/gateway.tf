@@ -103,6 +103,17 @@ resource "aws_iam_role_policy" "gateway_ecs" {
         Action   = "pricing:GetProducts"
         Resource = "*"
       },
+      {
+        # Cost Center view: tagged-resource inventory, billing data, EC2 state
+        Effect   = "Allow"
+        Action   = [
+          "tag:GetResources",
+          "ce:GetCostAndUsage",
+          "ec2:DescribeInstances",
+          "ec2:DescribeVolumes",
+        ]
+        Resource = "*"
+      },
     ]
   })
 }
@@ -124,6 +135,10 @@ resource "aws_instance" "gateway" {
   vpc_security_group_ids      = [aws_security_group.gateway.id]
   iam_instance_profile        = aws_iam_instance_profile.gateway.name
   associate_public_ip_address = true
+
+  # Root EBS volume does NOT inherit instance tags — tag it explicitly so the
+  # volume shows up in tag-based cost attribution (Cost Center view).
+  volume_tags = local.tags
 
   user_data = base64encode(templatefile("${path.module}/gateway-init.sh", {
     cluster            = aws_ecs_cluster.flashpoint.name

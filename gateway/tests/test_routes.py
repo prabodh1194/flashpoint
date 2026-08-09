@@ -20,7 +20,7 @@ def reset_state(mock_store):
 
 @pytest.fixture
 def mock_create_warehouse_deps(monkeypatch, mock_ecs):
-    def _launch(executor_count, grpc_port):
+    def _launch(warehouse_name, executor_count, grpc_port):
         arns = [f'arn:exec-{i}' for i in range(executor_count)]
         return 'arn:driver-1', '10.0.0.5', 'sc://10.0.0.5:15002', arns
 
@@ -64,7 +64,7 @@ class TestCreateWarehouse:
         monkeypatch.setattr(
             ecs_tasks,
             'launch_driver_with_executors',
-            lambda executor_count, grpc_port: ('arn:x', '10.0.0.1', 'sc://10.0.0.1:15002', []),
+            lambda warehouse_name, executor_count, grpc_port: ('arn:x', '10.0.0.1', 'sc://10.0.0.1:15002', []),
         )
         store.put_warehouse(
             'existing',
@@ -314,7 +314,7 @@ class TestSuspendResume:
         monkeypatch.setattr(
             ecs_tasks,
             'launch_driver_with_executors',
-            lambda executor_count, grpc_port: (
+            lambda warehouse_name, executor_count, grpc_port: (
                 'arn:new-driver',
                 '10.0.0.6',
                 'sc://10.0.0.6:15002',
@@ -355,7 +355,7 @@ class TestResize:
         monkeypatch.setattr(
             ecs_tasks,
             'run_executor_tasks',
-            lambda url, count: [f'arn:new-{i}' for i in range(count)],
+            lambda url, count, name: [f'arn:new-{i}' for i in range(count)],
         )
         resp = client.post('/warehouses/my-wh/resize', json={'size': 'M'})
         assert resp.status_code == 200

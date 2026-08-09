@@ -59,6 +59,14 @@ export async function fetchHistory() {
   return _request('GET', '/history')
 }
 
+export async function fetchResources() {
+  return _request('GET', '/resources')
+}
+
+export async function fetchCosts(days = 30) {
+  return _request('GET', `/costs?days=${days}`)
+}
+
 export async function fetchQueryById(queryId) {
   return _request('GET', `/history/${queryId}`)
 }

@@ -6,10 +6,11 @@ import { Warehouses } from './views/Warehouses'
 import { History } from './views/History'
 import { QueryProfile } from './views/QueryProfile'
 import { DataExplorer } from './views/DataExplorer'
+import { Costs } from './views/Costs'
 import { healthz } from './api'
 import { navigate, useHashRoute } from './router'
 
-const VALID_VIEWS = ['worksheet', 'warehouses', 'history', 'explorer']
+const VALID_VIEWS = ['worksheet', 'warehouses', 'history', 'explorer', 'costs']
 
 // #/worksheets | #/warehouses | #/history | #/history/:queryId | #/explorer
 export function parseRoute(path) {
@@ -82,6 +83,7 @@ export default function App() {
               {view === 'warehouses' && <Warehouses gatewayOnline={gatewayOnline} />}
               {view === 'history'    && <History gatewayOnline={gatewayOnline} onOpenProfile={q => navigate(`/history/${q.query_id}`)} />}
               {view === 'explorer'   && <DataExplorer gatewayOnline={gatewayOnline} />}
+              {view === 'costs'      && <Costs gatewayOnline={gatewayOnline} />}
             </>
           )}
         </div>

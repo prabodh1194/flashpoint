@@ -14,6 +14,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 import reconcile as _reconcile_mod
+import routes_costs
 import routes_queries
 import routes_warehouses
 import spark_client
@@ -49,6 +50,7 @@ app.include_router(routes_warehouses.router)
 app.include_router(routes_queries.router)
 app.include_router(routes_queries.queries_router)
 app.include_router(routes_queries.history_router)
+app.include_router(routes_costs.router)
 
 
 @app.get('/healthz')

@@ -5,6 +5,7 @@ const VIEW_LABELS = {
   warehouses: 'Warehouses',
   history: 'Query History',
   explorer: 'Data Explorer',
+  costs: 'Cost Center',
 }
 
 export function Topbar({ view, theme, gatewayOnline, onThemeToggle }) {

@@ -19,3 +19,12 @@ QUERY_RESULTS_BUCKET = os.environ.get(
 QUERY_RESULT_TTL_DAYS = int(os.environ.get('FLASHPOINT_QUERY_RESULT_TTL_DAYS', '7'))
 
 SIZES: dict[str, int] = {'XS': 1, 'S': 2, 'M': 4, 'L': 8, 'XL': 16}
+
+# Hourly rate per warehouse size (USD) — driver + executors, on-demand ceiling.
+# Single source of truth; the web UI reads it from the gateway.
+HOURLY_RATE: dict[str, float] = {'XS': 0.08, 'S': 0.16, 'M': 0.32, 'L': 0.64, 'XL': 1.28}
+
+# Monthly spend budget (USD) for the Cost Center projection warning.
+MONTHLY_BUDGET_USD = float(os.environ.get('FLASHPOINT_MONTHLY_BUDGET', '20.0'))
+
+METERS_TABLE = os.environ.get('FLASHPOINT_METERS_TABLE', 'flashpoint-dev-meters')

@@ -6,6 +6,7 @@ wire it up; otherwise queries will fail but warehouse CRUD works.
 """
 
 import os
+import time
 
 os.environ.setdefault('FLASHPOINT_ECS_CLUSTER', 'local')
 os.environ.setdefault('FLASHPOINT_DRIVER_TASK_DEF', 'local-driver')
@@ -31,17 +32,18 @@ import ecs_tasks  # noqa: E402
 import store  # noqa: E402
 
 # Mock ECS operations
-ecs_tasks.run_driver_task = lambda: 'local-driver-arn'  # ty: ignore[invalid-assignment]
+# ARNs are name-scoped so the Cost Center join (arn -> warehouse) works.
+ecs_tasks.run_driver_task = lambda name: f'local-driver-{name}'  # ty: ignore[invalid-assignment]
 ecs_tasks.wait_running = lambda arn: None  # ty: ignore[invalid-assignment]
 ecs_tasks.private_ip = lambda arn: '127.0.0.1'  # ty: ignore[invalid-assignment]
-ecs_tasks.run_executor_tasks = lambda master_url, count: [f'local-exec-{i}' for i in range(count)]  # ty: ignore[invalid-assignment]
+ecs_tasks.run_executor_tasks = lambda master_url, count, name: [f'local-exec-{name}-{i}' for i in range(count)]  # ty: ignore[invalid-assignment]
 ecs_tasks.is_running = lambda arn: True  # ty: ignore[invalid-assignment]
 ecs_tasks.stop_tasks = lambda record: None  # ty: ignore[invalid-assignment]
-ecs_tasks.launch_driver_with_executors = lambda executor_count, grpc_port: (  # ty: ignore[invalid-assignment]
-    'local-driver-arn',
+ecs_tasks.launch_driver_with_executors = lambda name, executor_count, grpc_port: (  # ty: ignore[invalid-assignment]
+    f'local-driver-{name}',
     '127.0.0.1',
     f'sc://127.0.0.1:{grpc_port}',
-    [f'local-exec-{i}' for i in range(executor_count)],
+    [f'local-exec-{name}-{i}' for i in range(executor_count)],
 )
 
 # Mock DynamoDB store — use in-memory dicts
@@ -108,6 +110,106 @@ store.list_query_records = _list_queries  # ty: ignore[invalid-assignment]
 import reconcile as _reconcile_mod  # noqa: E402
 
 _reconcile_mod.reconcile = lambda cluster: None  # ty: ignore[invalid-assignment]
+
+
+# Mock meters — in-memory accrual so the Cost Center view shows live data.
+import datetime as _dt  # noqa: E402
+import meters as _meters_mod  # noqa: E402
+
+_meter_db: dict[tuple[str, str], dict] = {}
+
+
+def _meter_accrue(warehouse_name: str, seconds: float, cost_usd: float) -> None:
+    key = (warehouse_name, time.strftime('%Y-%m-%d'))
+    row = _meter_db.setdefault(key, {'compute_seconds': 0.0, 'cost_usd': 0.0})
+    row['compute_seconds'] += seconds
+    row['cost_usd'] += cost_usd
+
+
+def _meter_list(days: int = 30) -> dict[str, dict[str, dict]]:
+    cutoff = time.strftime('%Y-%m-%d', time.localtime(time.time() - days * 86400))
+    out: dict[str, dict[str, dict]] = {}
+    for (name, day), row in _meter_db.items():
+        if day >= cutoff:
+            out.setdefault(name, {})[day] = dict(row)
+    return out
+
+
+_meters_mod.accrue = _meter_accrue  # ty: ignore[invalid-assignment]
+_meters_mod.list_meters = _meter_list  # ty: ignore[invalid-assignment]
+
+
+# Mock cost data — synthetic inventory + a deterministic history fused with
+# the live in-memory meters so the Cost Center view has something to show.
+import cost_data as _cost_data_mod  # noqa: E402
+
+
+def _dt_from(ts: float | None):
+    return _dt.datetime.fromtimestamp(ts) if ts else None
+
+
+def _local_tasks() -> list[dict]:
+    rows = []
+    for wh in _db.values():
+        if wh.get('status') == 'running' and wh.get('task_arn'):
+            start = _dt_from(wh.get('session_started_at'))
+            rows.append({
+                'arn': wh['task_arn'], 'role': 'spark-connect',
+                'capacity': 'FARGATE', 'cpu': '2048', 'memory': '8192',
+                'started_at': start,
+            })
+            for arn in wh.get('executor_arns') or []:
+                rows.append({
+                    'arn': arn, 'role': 'spark-executor',
+                    'capacity': 'FARGATE_SPOT', 'cpu': '2048', 'memory': '8192',
+                    'started_at': start,
+                })
+    return rows
+
+
+def _local_instances() -> list[dict]:
+    return [{
+        'id': 'i-local-gateway', 'type': 't4g.small', 'state': 'running',
+        'launch_time': _dt.datetime.now() - _dt.timedelta(days=60),
+        'tags': {'Name': 'flashpoint-local-gateway', 'Project': 'flashpoint'},
+    }]
+
+
+def _local_volumes() -> list[dict]:
+    return [{'id': 'vol-local-root', 'state': 'in-use', 'size_gb': 20, 'type': 'gp3'}]
+
+
+def _local_tagged() -> list[dict]:
+    return [
+        {'arn': 'arn:aws:dynamodb:us-east-1:000000000000:table/local-warehouses',
+         'tags': {'Project': 'flashpoint'}},
+        {'arn': 'arn:aws:dynamodb:us-east-1:000000000000:table/local-meters',
+         'tags': {'Project': 'flashpoint'}},
+        {'arn': 'arn:aws:logs:us-east-1:000000000000:log-group:/flashpoint/driver',
+         'tags': {'Project': 'flashpoint'}},
+        {'arn': 'arn:aws:s3:::local-bucket',
+         'tags': {'Project': 'flashpoint'}},
+    ]
+
+
+def _local_daily(days: int = 30) -> list[dict]:
+    """Deterministic 30-day history; today fused with the live meters."""
+    today = _dt.date.today()
+    out = []
+    for i in range(days - 1, -1, -1):
+        baseline = 0.08 + ((i * 7) % 10) * 0.02
+        if i == 0:
+            baseline += sum(r['cost_usd'] for r in _meter_db.values())
+        out.append({'date': (today - _dt.timedelta(days=i)).isoformat(),
+                    'total_usd': round(baseline, 4)})
+    return out
+
+
+_cost_data_mod.list_running_tasks = _local_tasks  # ty: ignore[invalid-assignment]
+_cost_data_mod.list_instances = _local_instances  # ty: ignore[invalid-assignment]
+_cost_data_mod.list_volumes = _local_volumes  # ty: ignore[invalid-assignment]
+_cost_data_mod.list_tagged_resources = _local_tagged  # ty: ignore[invalid-assignment]
+_cost_data_mod.get_daily_cost = _local_daily  # ty: ignore[invalid-assignment]
 
 
 # Boot uvicorn

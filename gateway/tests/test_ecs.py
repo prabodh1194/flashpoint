@@ -11,7 +11,7 @@ class TestRunDriverTask:
             'tasks': [{'taskArn': 'arn:aws:ecs:us-east-1:123456789:task/test/abc123'}],
             'failures': [],
         }
-        result = ecs_tasks.run_driver_task()
+        result = ecs_tasks.run_driver_task("test-wh")
         assert result == 'arn:aws:ecs:us-east-1:123456789:task/test/abc123'
 
     def test_raises_on_failure(self, mock_ecs):
@@ -20,14 +20,14 @@ class TestRunDriverTask:
             'failures': [{'arn': '...', 'reason': 'capacity'}],
         }
         with pytest.raises(RuntimeError, match='RunTask failed'):
-            ecs_tasks.run_driver_task()
+            ecs_tasks.run_driver_task("test-wh")
 
     def test_uses_fargate_launch_type(self, mock_ecs):
         mock_ecs.run_task.return_value = {
             'tasks': [{'taskArn': 'arn:test'}],
             'failures': [],
         }
-        ecs_tasks.run_driver_task()
+        ecs_tasks.run_driver_task("test-wh")
         call_kwargs = mock_ecs.run_task.call_args.kwargs
         assert call_kwargs['launchType'] == 'FARGATE'
 
@@ -90,7 +90,7 @@ class TestRunExecutorTasks:
             ],
             'failures': [],
         }
-        result = ecs_tasks.run_executor_tasks('spark://10.0.0.1:7077', 3)
+        result = ecs_tasks.run_executor_tasks('spark://10.0.0.1:7077', 3, "test-wh")
         assert len(result) == 3
         assert result == ['arn:exec-1', 'arn:exec-2', 'arn:exec-3']
         assert mock_ecs.run_task.call_args.kwargs['count'] == 3
@@ -100,7 +100,7 @@ class TestRunExecutorTasks:
             'tasks': [{'taskArn': 'arn:exec'}],
             'failures': [],
         }
-        ecs_tasks.run_executor_tasks('spark://10.0.0.1:7077', 1)
+        ecs_tasks.run_executor_tasks('spark://10.0.0.1:7077', 1, "test-wh")
         call_kwargs = mock_ecs.run_task.call_args.kwargs
         strategies = call_kwargs['capacityProviderStrategy']
         assert any(s['capacityProvider'] == 'FARGATE_SPOT' for s in strategies)
@@ -110,7 +110,7 @@ class TestRunExecutorTasks:
             'tasks': [{'taskArn': 'arn:exec'}],
             'failures': [],
         }
-        ecs_tasks.run_executor_tasks('spark://10.0.0.1:7077', 1)
+        ecs_tasks.run_executor_tasks('spark://10.0.0.1:7077', 1, "test-wh")
         call_kwargs = mock_ecs.run_task.call_args.kwargs
         overrides = call_kwargs['overrides']['containerOverrides'][0]
         env = {e['name']: e['value'] for e in overrides['environment']}
@@ -126,7 +126,7 @@ class TestRunExecutorTasks:
                 {'arn': 'arn:bad', 'reason': 'capacity'},
             ],
         }
-        result = ecs_tasks.run_executor_tasks('spark://10.0.0.1:7077', 3)
+        result = ecs_tasks.run_executor_tasks('spark://10.0.0.1:7077', 3, "test-wh")
         assert result == ['arn:ok-1', 'arn:ok-2']
 
 
