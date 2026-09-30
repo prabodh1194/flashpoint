@@ -84,6 +84,16 @@ def reconcile(cluster: str) -> None:
         log.error('Reconcile failed: %s', exc)
 
 
+def reap_reason(record: dict, now: float, ttl_s: int) -> str | None:
+    """Why a running warehouse should be stopped, or None to keep it."""
+    deadline = record.get('session_deadline')
+    if deadline and now > deadline:
+        return 'session deadline'
+    if now - record.get('created_at', now) > ttl_s:
+        return 'idle TTL'
+    return None
+
+
 async def reap_idle_warehouses(spark_client, warehouse_ttl_s: int, cluster: str):
     """Background task — stops warehouses that have been idle too long.
 
@@ -108,10 +118,11 @@ async def reap_idle_warehouses(spark_client, warehouse_ttl_s: int, cluster: str)
             # and checkpoint the record so the next tick (and the finalize on
             # suspend/delete) bills only its own delta. Reaped warehouses skip
             # the checkpoint — the finalize bills the whole open window.
-            idle = now - record.get('created_at', now) > warehouse_ttl_s
+            reason = reap_reason(record, now, warehouse_ttl_s)
+            idle = reason is not None
 
             if idle:
-                log.warning('Reaping idle warehouse %s (TTL exceeded)', wid)
+                log.warning('Reaping warehouse %s (%s)', wid, reason)
                 meters.accrue_session(record)
             elif meters.accrue_session(record) > 0:
                 store.update_warehouse_status(wid, 'running', last_metered_at=time.time())

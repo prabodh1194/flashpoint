@@ -10,7 +10,7 @@ import ecs_tasks
 import meters
 import spark_client
 import store
-from config import CLUSTER, GRPC_PORT, MAX_WAREHOUSES, SIZES
+from config import CLUSTER, GRPC_PORT, MAX_WAREHOUSES, SESSION_MAX_S, SIZES, TRYIT_MODE
 from models import CreateWarehouseRequest, ResizeRequest, WarehouseResponse
 
 log = logging.getLogger(__name__)
@@ -26,23 +26,24 @@ def create_warehouse(req: CreateWarehouseRequest):
     if not budget.can_launch():
         raise HTTPException(status_code=429, detail='spark budget exhausted for this month')
     name = req.name
-    executor_count = SIZES[req.size]
-    log.info('Creating warehouse %s (size=%s, executors=%d)', name, req.size, executor_count)
+    size = 'XS' if TRYIT_MODE else req.size
+    executor_count = SIZES[size]
+    log.info('Creating warehouse %s (size=%s, executors=%d)', name, size, executor_count)
 
     now = time.time()
-    claimed = store.put_warehouse_if_absent(
-        name,
-        {
-            'status': 'provisioning',
-            'size': req.size,
-            'executor_count': executor_count,
-            'created_at': now,
-            # Metering checkpoint at claim time — the session is billable from
-            # the moment we own the name, not after the ~30s task launch.
-            'session_started_at': now,
-            'last_metered_at': now,
-        },
-    )
+    record = {
+        'status': 'provisioning',
+        'size': size,
+        'executor_count': executor_count,
+        'created_at': now,
+        # Metering checkpoint at claim time — the session is billable from
+        # the moment we own the name, not after the ~30s task launch.
+        'session_started_at': now,
+        'last_metered_at': now,
+    }
+    if TRYIT_MODE:
+        record['session_deadline'] = now + SESSION_MAX_S
+    claimed = store.put_warehouse_if_absent(name, record)
     if not claimed:
         raise HTTPException(status_code=409, detail=f'warehouse {name!r} already exists')
 
@@ -69,7 +70,7 @@ def create_warehouse(req: CreateWarehouseRequest):
         task_arn=task_arn,
         endpoint=endpoint,
         status='running',
-        size=req.size,
+        size=size,
         executor_count=executor_count,
     )
 
@@ -157,7 +158,7 @@ def resume_warehouse(name: str):
             executor_count=s['executor_count'],
         )
 
-    size = s['size']
+    size = 'XS' if TRYIT_MODE else s['size']
     executor_count = SIZES[size]
     if not budget.can_launch():
         raise HTTPException(status_code=429, detail='spark budget exhausted for this month')
@@ -178,6 +179,7 @@ def resume_warehouse(name: str):
         executor_count=executor_count,
         session_started_at=now,
         last_metered_at=now,
+        **({'session_deadline': now + SESSION_MAX_S} if TRYIT_MODE else {}),
     )
     log.info('Resumed warehouse %s → driver %s', name, task_arn)
     return WarehouseResponse(
@@ -195,6 +197,8 @@ def resize_warehouse(name: str, req: ResizeRequest):
     s = store.get_warehouse(name)
     if not s:
         raise HTTPException(status_code=404, detail='warehouse not found')
+    if TRYIT_MODE:
+        raise HTTPException(status_code=400, detail='resize is disabled in try-it mode')
     if s['status'] != 'running':
         raise HTTPException(status_code=409, detail='warehouse is not running')
     if req.size not in SIZES:

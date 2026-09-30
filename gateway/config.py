@@ -41,6 +41,9 @@ SPARK_BUDGET_MARGIN_USD = float(os.environ.get('FLASHPOINT_SPARK_BUDGET_MARGIN_U
 MONTHLY_BUDGET_USD = float(os.environ.get('FLASHPOINT_MONTHLY_BUDGET', '20.0'))
 
 # Sync-query deadline (seconds) — a hung driver must not wedge the API forever.
-QUERY_TIMEOUT_S = int(os.environ.get('FLASHPOINT_QUERY_TIMEOUT_S', '300'))
+# Try-it mode defaults tighter (docs/try-it-design.md §4).
+TRYIT_MODE = os.environ.get('FLASHPOINT_TRYIT', '0') == '1'
+SESSION_MAX_S = int(os.environ.get('FLASHPOINT_SESSION_MAX_S', '600'))
+QUERY_TIMEOUT_S = int(os.environ.get('FLASHPOINT_QUERY_TIMEOUT_S', '60' if TRYIT_MODE else '300'))
 
 METERS_TABLE = os.environ.get('FLASHPOINT_METERS_TABLE', 'flashpoint-dev-meters')
