@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Flashpoint — serverless multi-node Apache Spark with a Snowflake-equivalent UI</title>
+<title>Flashpoint: serverless multi-node Apache Spark with a Snowflake-equivalent UI</title>
 <meta name="description" content="Flashpoint: serverless multi-node Apache Spark on AWS with a Snowflake-equivalent UI. Spark Connect (gRPC) client protocol, ECS Fargate compute, DynamoDB state.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
@@ -58,6 +58,8 @@
 <body>
 <nav>
   <a class="logo" href="index.html">FLASHPOINT<span>_</span></a>
+  <a class="nav-link" href="serverless-spark-connect.html">serverless spark</a>
+  <a class="nav-link" href="snowflake-alternative.html">snowflake alternative</a>
   <a class="nav-link" href="quickstart.html">quickstart</a>
   <a class="nav-link" href="deploy.html">deploy</a>
   <a class="nav-link" href="mockups.html">ui mockups</a>
@@ -73,7 +75,7 @@
   <div class="kicker">serverless · spark connect · aws</div>
   <h1>Serverless multi-node Apache Spark,<br>with a Snowflake-equivalent UI.</h1>
   <p>Flashpoint is a warehouse-shaped control plane for Apache Spark. Warehouses are clusters of ECS
-     Fargate tasks — an on-demand driver plus spot executors — exposed to SQL clients over the
+     Fargate tasks, an on-demand driver plus spot executors, exposed to SQL clients over the
      Spark Connect gRPC protocol, with query profiles rendered the way Snowflake taught us to expect.</p>
   <div class="cta">
     <a class="btn primary" href="quickstart.html">Run it on your laptop →</a>
@@ -89,7 +91,7 @@
     <div class="grid">
       <div class="card">
         <h3><span>↗</span>Spark Connect</h3>
-        <p>Stock Apache Spark Connect as the client protocol. No fork — plugin hooks only. gRPC from
+        <p>Stock Apache Spark Connect as the client protocol. No fork, plugin hooks only. gRPC from
            any language to a SQL engine.</p>
         <span class="tag">gRPC</span><span class="tag">stock spark</span>
       </div>
@@ -101,14 +103,14 @@
       </div>
       <div class="card">
         <h3><span>◫</span>Gateway</h3>
-        <p>A stateless control plane — all state in DynamoDB, never in-memory. Creates, suspends and
+        <p>A stateless control plane, all state in DynamoDB, never in-memory. Creates, suspends and
            resumes warehouses, routes queries, meters usage.</p>
         <span class="tag">fastapi</span><span class="tag">dynamodb</span>
       </div>
       <div class="card">
         <h3><span>◔</span>Query profiles</h3>
         <p>Every query renders as an operator tree: per-node duration, % of execution time, column
-           treatments — parsed from the stock Spark UI REST API.</p>
+           treatments, parsed from the stock Spark UI REST API.</p>
         <span class="tag">spark ui api</span><span class="tag">dag</span>
       </div>
     </div>
@@ -120,7 +122,7 @@
     <h2><span class="mono">02</span>architecture</h2>
     <figure>
       <img src="flashpoint-hld.svg" alt="Flashpoint high-level architecture diagram">
-      <figcaption>high-level design — client → gateway → driver (Fargate, on-demand) + executors (Fargate, spot); state in DynamoDB; tables on Iceberg with a Glue catalog.</figcaption>
+      <figcaption>high-level design, client → gateway → driver (Fargate, on-demand) + executors (Fargate, spot); state in DynamoDB; tables on Iceberg with a Glue catalog.</figcaption>
     </figure>
   </div>
 </section>
@@ -129,11 +131,11 @@
   <div class="wrap">
     <h2><span class="mono">03</span>the monitoring story</h2>
     <p>Snowflake's killer feature is the query profile: every operator shows what it did, how long it
-       took, and how it treated your columns. Flashpoint grew the same UI from the stock Spark UI —
+       took, and how it treated your columns. Flashpoint grew the same UI from the stock Spark UI,
        no fork, no agent. Every node is a card: operator name, % of execution time (color-heated),
        duration, rows in/out. Codegen stages render as slim chips; every profile has a reload-safe URL.</p>
     <figure>
-      <img src="profile-tree.png" alt="A flashpoint query profile — result-at-top operator tree with join fanning out side-by-side">
+      <img src="profile-tree.png" alt="A flashpoint query profile, result-at-top operator tree with join fanning out side-by-side">
       <figcaption>a real profile: result-at-top tree, join fans its inputs out side-by-side, WholeStageCodegen stages as slim chips.</figcaption>
     </figure>
   </div>
@@ -142,13 +144,13 @@
 <section id="cost-center">
   <div class="wrap">
     <h2><span class="mono">04</span>cost center</h2>
-    <p>Every resource with its state, uptime and monthly estimate — drivers and executors joined to
+    <p>Every resource with its state, uptime and monthly estimate, drivers and executors joined to
        the warehouse they serve, the always-on gateway EC2, and the tag-registry infra. Daily spend
        comes from Cost Explorer (tag-filtered, ~24h lag) fused with live per-warehouse meters for
        today, projected against a monthly budget with spike-day flags. Every row deep-links to the
        AWS console.</p>
     <figure>
-      <img src="cost-center.png" alt="Flashpoint Cost Center — stat strip, daily spend chart, resource inventory with monthly estimates, per-warehouse spend table">
+      <img src="cost-center.png" alt="Flashpoint Cost Center, stat strip, daily spend chart, resource inventory with monthly estimates, per-warehouse spend table">
       <figcaption>cost center: budget projection in the stat strip, spike days in red, console deep-links on every resource.</figcaption>
     </figure>
   </div>
@@ -194,8 +196,30 @@
   </div>
 </section>
 
+<section id="learn">
+  <div class="wrap">
+    <h2><span class="mono">07</span>learn more</h2>
+    <div class="grid">
+      <a class="card" href="serverless-spark-connect.html" style="text-decoration:none">
+        <h3><span>↗</span>Serverless Spark Connect on AWS</h3>
+        <p>How a warehouse is launched on demand, how Spark Connect and the query profile work, and
+           what the product is not yet.</p>
+        <span class="tag">technical</span>
+      </a>
+      <a class="card" href="snowflake-alternative.html" style="text-decoration:none">
+        <h3><span>$</span>A Snowflake alternative on AWS</h3>
+        <p>Why not cluster-managed Spark, what maps to what, the cost model, and the honest list of
+           limits.</p>
+        <span class="tag">commercial</span>
+      </a>
+    </div>
+  </div>
+</section>
+
 <footer class="wrap">
   <p>Flashpoint · MIT licensed ·
+    <a href="serverless-spark-connect.html">serverless spark</a> ·
+    <a href="snowflake-alternative.html">snowflake alternative</a> ·
     <a href="quickstart.html">quickstart</a> ·
     <a href="deploy.html">deploy</a> ·
     <a href="https://github.com/prabodh1194/flashpoint">github.com/prabodh1194/flashpoint</a></p>

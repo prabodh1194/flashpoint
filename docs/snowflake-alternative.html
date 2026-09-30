@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A Snowflake alternative on AWS, built on Spark | Flashpoint</title>
+<meta name="description" content="A Snowflake-shaped warehouse on AWS: create a warehouse, run SQL in a worksheet, read the query profile, and pay only while compute runs. Built on Apache Spark. Invite-only try-it.">
+<link rel="canonical" href="https://sparksql.dev/snowflake-alternative.html">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Flashpoint">
+<meta property="og:title" content="A Snowflake alternative on AWS, built on Spark | Flashpoint">
+<meta property="og:description" content="A Snowflake-shaped warehouse on AWS: SQL worksheet, query profile, per-second metering. Built on Apache Spark.">
+<meta property="og:url" content="https://sparksql.dev/snowflake-alternative.html">
+<meta property="og:image" content="https://sparksql.dev/cost-center.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="A Snowflake alternative on AWS, built on Spark | Flashpoint">
+<meta name="twitter:description" content="A Snowflake-shaped warehouse on AWS: SQL worksheet, query profile, per-second metering. Built on Apache Spark.">
+<meta name="twitter:image" content="https://sparksql.dev/cost-center.png">
+<meta name="robots" content="index, follow">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-base: #0d0e10; --bg-surface: #13151a; --bg-raised: #1c1f27; --bg-overlay: #242834;
+    --border: #2a2f3d; --border-dim: #1e2230;
+    --text-primary: #e8eaf0; --text-secondary: #8b93a8; --text-dim: #4e5568; --text-mono: #c8cfe0;
+    --amber: #f59e0b; --amber-glow: #fbbf24; --amber-dim: #78450a;
+    --amber-bg: rgba(245,158,11,0.08); --amber-border: rgba(245,158,11,0.2);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg-base); color: var(--text-primary); font-family: 'IBM Plex Sans', sans-serif; font-size: 15px; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 0 24px; }
+  nav { display: flex; align-items: center; gap: 24px; padding: 16px 24px; border-bottom: 1px solid var(--border-dim); position: sticky; top: 0; background: var(--bg-base); z-index: 10; flex-wrap: wrap; }
+  nav .logo { font-weight: 600; letter-spacing: 0.5px; color: var(--text-primary); text-decoration: none; }
+  nav .logo span { color: var(--amber); }
+  nav a.nav-link { color: var(--text-secondary); text-decoration: none; font-size: 13px; }
+  nav a.nav-link:hover { color: var(--amber); }
+  nav .spacer { flex: 1; }
+  header { padding: 72px 0 48px; }
+  header .kicker { color: var(--amber); font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 16px; }
+  header h1 { font-size: 44px; font-weight: 600; line-height: 1.15; letter-spacing: -0.5px; margin-bottom: 16px; }
+  header p { color: var(--text-secondary); font-size: 17px; max-width: 660px; }
+  .cta { display: flex; gap: 12px; margin-top: 28px; flex-wrap: wrap; }
+  .btn { display: inline-block; padding: 10px 18px; border-radius: 8px; font-size: 14px; font-weight: 500; text-decoration: none; border: 1px solid var(--border); color: var(--text-primary); background: var(--bg-raised); cursor: pointer; font-family: inherit; }
+  .btn:hover { border-color: var(--amber-border); color: var(--amber-glow); }
+  .btn.primary { background: var(--amber-bg); border-color: var(--amber-border); color: var(--amber-glow); }
+  .btn.primary:hover { background: rgba(245,158,11,0.14); }
+  section { padding: 40px 0; border-top: 1px solid var(--border-dim); }
+  h2 { font-size: 22px; font-weight: 600; margin-bottom: 20px; }
+  h2 .mono { color: var(--amber); font-family: 'IBM Plex Mono', monospace; font-size: 14px; margin-right: 10px; }
+  h3 { font-size: 17px; font-weight: 600; margin: 28px 0 10px; }
+  section p { color: var(--text-secondary); max-width: 720px; margin-bottom: 12px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+  .card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 10px; padding: 20px; }
+  .card h3 { font-size: 15px; margin: 0 0 8px; }
+  .card h3 span { color: var(--amber); font-family: 'IBM Plex Mono', monospace; font-size: 12px; margin-right: 8px; }
+  .card p { color: var(--text-secondary); font-size: 13.5px; }
+  .card .tag { display: inline-block; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--text-mono); background: var(--bg-overlay); border: 1px solid var(--border); border-radius: 4px; padding: 2px 8px; margin: 10px 4px 0 0; }
+  figure { margin: 24px 0; }
+  figure img { width: 100%; border: 1px solid var(--border); border-radius: 10px; display: block; }
+  figure figcaption { color: var(--text-dim); font-size: 13px; margin-top: 10px; font-family: 'IBM Plex Mono', monospace; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; margin-bottom: 12px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border-dim); }
+  th { color: var(--text-dim); font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
+  td.mono, .mono-sm { font-family: 'IBM Plex Mono', monospace; font-size: 13px; }
+  ul.plain { color: var(--text-secondary); margin: 0 0 16px 20px; }
+  ul.plain li { margin-bottom: 6px; }
+  .faq details { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; margin-bottom: 10px; }
+  .faq summary { cursor: pointer; font-weight: 500; list-style: none; }
+  .faq summary::-webkit-details-marker { display: none; }
+  .faq summary::before { content: "+ "; color: var(--amber); font-family: 'IBM Plex Mono', monospace; }
+  .faq details[open] summary::before { content: "\2212  "; }
+  .faq details p { margin: 10px 0 0; font-size: 14px; color: var(--text-secondary); }
+  .waitlist { display: flex; flex-wrap: wrap; gap: 10px; margin: 20px 0 8px; max-width: 560px; }
+  .waitlist input[type=email] { flex: 1 1 260px; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-raised); color: var(--text-primary); font-size: 14px; font-family: inherit; }
+  .waitlist input[type=email]:focus { outline: none; border-color: var(--amber-border); }
+  .note { color: var(--text-dim); font-size: 13px; max-width: 620px; }
+  .crumb { color: var(--text-dim); font-size: 12px; font-family: 'IBM Plex Mono', monospace; padding: 20px 0 0; }
+  .crumb a { color: var(--text-secondary); text-decoration: none; }
+  .crumb a:hover { color: var(--amber); }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  footer { padding: 40px 0 64px; color: var(--text-dim); font-size: 13px; border-top: 1px solid var(--border-dim); }
+  footer a { color: var(--text-secondary); text-decoration: none; }
+  footer a:hover { color: var(--amber); }
+</style>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Flashpoint",
+  "applicationCategory": "DeveloperApplication",
+  "operatingSystem": "Cloud (AWS)",
+  "url": "https://sparksql.dev/",
+  "description": "A Snowflake-shaped warehouse on AWS built on Apache Spark: SQL worksheet, query profile, warehouse manager, and cost center, billed only while compute runs.",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    { "@type": "ListItem", "position": 1, "name": "Flashpoint", "item": "https://sparksql.dev/" },
+    { "@type": "ListItem", "position": 2, "name": "A Snowflake alternative on AWS", "item": "https://sparksql.dev/snowflake-alternative.html" }
+  ]
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Is this a drop-in Snowflake replacement?",
+      "acceptedAnswer": { "@type": "Answer", "text": "No. Flashpoint copies the shape of the product (warehouses, worksheets, query profiles, per-second billing), not the SQL dialect or a migration guarantee. It is an early project for teams who want that shape on their own AWS account and are willing to run it themselves." }
+    },
+    {
+      "@type": "Question",
+      "name": "How is Flashpoint different from Databricks?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Databricks is a full managed platform with notebooks, governance and a large surface. Flashpoint is a small, open control plane for one loop: create a warehouse, run SQL, read the query profile, pay for the compute you used. It is self-hosted on your AWS account and MIT licensed." }
+    },
+    {
+      "@type": "Question",
+      "name": "Can I run it myself?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Yes. The quickstart runs the whole stack locally with AWS mocked, and the deploy guide brings up the real thing in your own account with OpenTofu. There is no hosted free tier yet; the hosted try-it is invite-only and budget-capped." }
+    },
+    {
+      "@type": "Question",
+      "name": "How is it priced?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Per compute-second, and only while a warehouse is running. Suspending a warehouse drops it to zero. There are no credits, no contracts and no per-seat fees; the Cost Center shows daily spend, live meters and a projection against a monthly budget." }
+    },
+    {
+      "@type": "Question",
+      "name": "What is missing?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Identity and multi-tenancy are the current milestone, so per-user quotas and isolation are not real yet. Scheduling, saved worksheets, team sharing and a stable API guarantee are also out of scope for now. It is early software." }
+    },
+    {
+      "@type": "Question",
+      "name": "Is my data portable?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Tables are Apache Iceberg on S3 with a Glue catalog, and query results are Parquet on S3. Both are open formats you can read with any compatible engine, so leaving does not mean exporting from a proprietary store." }
+    }
+  ]
+}
+</script>
+</head>
+<body>
+<nav>
+  <a class="logo" href="index.html">FLASHPOINT<span>_</span></a>
+  <a class="nav-link" href="serverless-spark-connect.html">serverless spark</a>
+  <a class="nav-link" href="snowflake-alternative.html">snowflake alternative</a>
+  <a class="nav-link" href="quickstart.html">quickstart</a>
+  <a class="nav-link" href="https://github.com/prabodh1194/flashpoint">github</a>
+  <span class="spacer"></span>
+  <a class="nav-link" href="#why">why</a>
+  <a class="nav-link" href="#mapping">what maps</a>
+  <a class="nav-link" href="#cost">cost</a>
+  <a class="nav-link" href="#faq">faq</a>
+  <a class="nav-link" href="#waitlist">waitlist</a>
+</nav>
+
+<div class="wrap"><p class="crumb"><a href="index.html">flashpoint</a> / a snowflake alternative on aws</p></div>
+
+<header class="wrap">
+  <div class="kicker">snowflake alternative · aws · self-hosted</div>
+  <h1>A Snowflake alternative on AWS, built on Apache Spark</h1>
+  <p>Flashpoint gives you the Snowflake shape on your own AWS account: create a warehouse, run SQL in a
+     worksheet, read the query profile, and pay only while compute runs. It is built on Apache Spark, so
+     your tables and queries stay portable. It is early software, the hosted try-it is invite-only.</p>
+  <div class="cta">
+    <a class="btn primary" href="#waitlist">Join the waitlist →</a>
+    <a class="btn" href="https://github.com/prabodh1194/flashpoint">GitHub</a>
+    <a class="btn" href="serverless-spark-connect.html">The technical deep dive</a>
+  </div>
+</header>
+
+<section id="why">
+  <div class="wrap">
+    <h2><span class="mono">01</span>Why not cluster-managed Spark</h2>
+    <p>If you already run Apache Spark on AWS, you have probably chosen between a long-lived EMR cluster
+       and a Databricks workspace. Both are powerful and both are cluster-shaped: you think in clusters,
+       you tune clusters, and idle capacity is a line on a bill you monitor.</p>
+    <p>Flashpoint starts from the other direction. It is warehouse-shaped. You do not size or babysit a
+       cluster; you pick a T-shirt size, run SQL, and read the profile. When the warehouse is idle it
+       suspends and the meter stops.</p>
+    <h3>Three ways to run Spark on AWS</h3>
+    <table>
+      <thead><tr><th>Approach</th><th>What you manage</th><th>Unit you think in</th></tr></thead>
+      <tbody>
+        <tr><td>EMR cluster</td><td>Cluster lifecycle, nodes, scaling, idle cost</td><td>Nodes and hours</td></tr>
+        <tr><td>EMR Serverless</td><td>Job submissions and worker config</td><td>Applications and jobs</td></tr>
+        <tr><td class="mono">Flashpoint</td><td>Nothing, you create a warehouse and run SQL</td><td>Warehouses and queries</td></tr>
+      </tbody>
+    </table>
+    <p>That last row is the whole bet: the managed-Spark decision should be about the query, not the
+       cluster.</p>
+  </div>
+</section>
+
+<section id="databricks">
+  <div class="wrap">
+    <h2><span class="mono">02</span>A Databricks alternative, without the platform</h2>
+    <p>Databricks is a platform: notebooks, a workspace, governance, a catalog, and a large surface to
+       learn and pay for. If you want all of that, use it. Flashpoint is a Databricks alternative only in
+       the narrow sense, it gives you managed Spark compute and a SQL warehouse UX without adopting a
+       platform.</p>
+    <div class="grid">
+      <div class="card">
+        <h3><span>small</span>One loop</h3>
+        <p>Create a warehouse, run SQL, read the profile, pay for compute. No workspace to administer and
+           no notebook product to adopt.</p>
+      </div>
+      <div class="card">
+        <h3><span>open</span>MIT licensed</h3>
+        <p>The whole control plane is in a public repository and deploys to your account with OpenTofu.
+           There is nothing to procure and no vendor account to create.</p>
+      </div>
+      <div class="card">
+        <h3><span>aws</span>Native services</h3>
+        <p>ECS Fargate for compute, S3 for tables and results, DynamoDB for state, Glue for the catalog.
+           All standard services your account already has.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="serverless-sql">
+  <div class="wrap">
+    <h2><span class="mono">03</span>A serverless SQL warehouse on AWS</h2>
+    <p>A serverless SQL warehouse normally means someone else's cluster behind a SQL endpoint. Here it is
+       your cluster, launched on demand in your account and suspended when idle, with the warehouse
+       abstraction kept in front of it.</p>
+    <ul class="plain">
+      <li><strong>No cluster to size.</strong> Sizes are T-shirt sizes over executor count, and resizing a
+          running warehouse adds or removes executors without a rebuild.</li>
+      <li><strong>No idle bill.</strong> A suspended warehouse costs nothing. A reaper suspends warehouses
+          past their idle TTL, so a forgotten tab cannot quietly run up a bill.</li>
+      <li><strong>No credits to decode.</strong> Compute is metered per second and shown next to the
+          resources it belongs to in the Cost Center.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="waitlist-mid">
+  <div class="wrap">
+    <h2><span class="mono">04</span>Try the hosted pilot</h2>
+    <p>The hosted try-it is invite-only and hard-capped: one short session, one size, one monthly budget.
+       Leave an email and you are in line for a slot.</p>
+    <form class="waitlist" method="post">
+      <label class="sr-only" for="email-mid">Email address</label>
+      <input id="email-mid" type="email" name="email" required placeholder="you@company.com" autocomplete="email">
+      <button type="submit" class="btn primary">Join the waitlist</button>
+    </form>
+    <p class="note">One email when a slot opens. No spam. Unsubscribe anytime. See the privacy note at the
+       bottom of this page.</p>
+  </div>
+</section>
+
+<section id="mapping">
+  <div class="wrap">
+    <h2><span class="mono">05</span>What maps to what</h2>
+    <p>The familiar objects have familiar names, so the product reads the way a warehouse user expects.</p>
+    <table>
+      <thead><tr><th>Snowflake</th><th>Flashpoint</th></tr></thead>
+      <tbody>
+        <tr><td>Warehouse</td><td>Warehouse, an on-demand driver plus spot executors, one size per T-shirt</td></tr>
+        <tr><td>Worksheet</td><td>Worksheet, a SQL editor with a results grid</td></tr>
+        <tr><td>Query Profile</td><td>Query profile, an operator tree with per-node time, rows and flags</td></tr>
+        <tr><td>Auto-suspend</td><td>Idle TTL, a reaper suspends the warehouse and the meter stops</td></tr>
+        <tr><td>Query History</td><td>Query history, results as Parquet on S3, expiring after seven days</td></tr>
+        <tr><td>Credits</td><td>Compute-seconds, metered directly, shown in the Cost Center</td></tr>
+      </tbody>
+    </table>
+    <figure>
+      <img src="cost-center.png" alt="Flashpoint Cost Center: budget projection, daily spend chart, resource inventory and per-warehouse spend">
+      <figcaption>the cost center, daily spend, resource inventory with monthly estimates, per-warehouse totals.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section id="cost">
+  <div class="wrap">
+    <h2><span class="mono">06</span>Cost model</h2>
+    <p>There are no credits, no contracts and no per-seat pricing. You pay AWS directly for what the
+       warehouse uses, and only while it is running.</p>
+    <ul class="plain">
+      <li><strong>Per compute-second.</strong> Metering starts when a warehouse is claimed and stops when
+          it suspends. A suspended warehouse adds nothing.</li>
+      <li><strong>Size sets the rate.</strong> Bigger sizes add executors, and the rate card lives in the
+          repository configuration, not in a vendor quote.</li>
+      <li><strong>The bill is visible in the product.</strong> The Cost Center fuses Cost Explorer daily
+          totals with live per-warehouse meters and projects the month against a budget.</li>
+      <li><strong>The hosted pilot is capped.</strong> The try-it has a hard monthly ceiling, so a demo
+          cannot become a surprise invoice.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="limits">
+  <div class="wrap">
+    <h2><span class="mono">07</span>Limits and what is missing</h2>
+    <p>This is early software and the honest list is short and unflattering.</p>
+    <ul class="plain">
+      <li><strong>No identity or isolation yet.</strong> Auth, per-user accounts and tenant isolation are
+          the current milestone. Until they land, a shared deployment is not safe for untrusted users.</li>
+      <li><strong>No per-user quotas yet.</strong> Until identity exists, usage caps are global, not
+          per-account.</li>
+      <li><strong>No scheduling or saved worksheets.</strong> The loop is interactive SQL, not a job
+          scheduler.</li>
+      <li><strong>No stability guarantee.</strong> The API and the UI will change. There is no SLA and no
+          support contract.</li>
+      <li><strong>Not affiliated with Apache.</strong> Flashpoint is an independent project built on
+          Apache Spark; it is not endorsed by the Apache Software Foundation.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="faq">
+  <div class="wrap">
+    <h2><span class="mono">08</span>FAQ</h2>
+    <div class="faq">
+      <details>
+        <summary>Is this a drop-in Snowflake replacement?</summary>
+        <p>No. Flashpoint copies the shape of the product (warehouses, worksheets, query profiles,
+           per-second billing), not the SQL dialect or a migration guarantee. It is an early project for
+           teams who want that shape on their own AWS account and are willing to run it themselves.</p>
+      </details>
+      <details>
+        <summary>How is Flashpoint different from Databricks?</summary>
+        <p>Databricks is a full managed platform with notebooks, governance and a large surface. Flashpoint
+           is a small, open control plane for one loop: create a warehouse, run SQL, read the query
+           profile, pay for the compute you used. It is self-hosted on your AWS account and MIT
+           licensed.</p>
+      </details>
+      <details>
+        <summary>Can I run it myself?</summary>
+        <p>Yes. The quickstart runs the whole stack locally with AWS mocked, and the deploy guide brings up
+           the real thing in your own account with OpenTofu. There is no hosted free tier yet; the hosted
+           try-it is invite-only and budget-capped.</p>
+      </details>
+      <details>
+        <summary>How is it priced?</summary>
+        <p>Per compute-second, and only while a warehouse is running. Suspending a warehouse drops it to
+           zero. There are no credits, no contracts and no per-seat fees; the Cost Center shows daily
+           spend, live meters and a projection against a monthly budget.</p>
+      </details>
+      <details>
+        <summary>What is missing?</summary>
+        <p>Identity and multi-tenancy are the current milestone, so per-user quotas and isolation are not
+           real yet. Scheduling, saved worksheets, team sharing and a stable API guarantee are also out of
+           scope for now. It is early software.</p>
+      </details>
+      <details>
+        <summary>Is my data portable?</summary>
+        <p>Tables are Apache Iceberg on S3 with a Glue catalog, and query results are Parquet on S3. Both
+           are open formats you can read with any compatible engine, so leaving does not mean exporting
+           from a proprietary store.</p>
+      </details>
+    </div>
+  </div>
+</section>
+
+<section id="waitlist">
+  <div class="wrap">
+    <h2><span class="mono">09</span>Join the waitlist</h2>
+    <p>One email, one line, no account. Slots are released in batches as the try-it budget allows.</p>
+    <form class="waitlist" method="post">
+      <label class="sr-only" for="email-end">Email address</label>
+      <input id="email-end" type="email" name="email" required placeholder="you@company.com" autocomplete="email">
+      <button type="submit" class="btn primary">Join the waitlist</button>
+    </form>
+    <p class="note">One email when a slot opens. No spam. Unsubscribe anytime.</p>
+    <p class="note" id="privacy"><strong>Privacy.</strong> Your email is stored by Buttondown, our
+       newsletter processor, and used only to send try-it invitations. No analytics cookies are set on
+       this page. Ask to be removed at any time and the address is deleted.</p>
+    <p class="note">Want the technical version? The
+       <a href="serverless-spark-connect.html" style="color:var(--amber)">serverless deep dive</a> covers
+       the architecture, and the
+       <a href="quickstart.html" style="color:var(--amber)">quickstart</a> runs on your laptop.</p>
+  </div>
+</section>
+
+<footer class="wrap">
+  <p>Flashpoint · MIT licensed ·
+    <a href="index.html">home</a> ·
+    <a href="serverless-spark-connect.html">serverless spark</a> ·
+    <a href="quickstart.html">quickstart</a> ·
+    <a href="deploy.html">deploy</a> ·
+    <a href="https://github.com/prabodh1194/flashpoint">github.com/prabodh1194/flashpoint</a></p>
+  <p style="margin-top:8px">Built on Apache Spark. Not affiliated with or endorsed by the Apache Software Foundation.</p>
+</footer>
+
+<!--
+  Analytics: Umami Cloud (cookieless, Hobby tier).
+  OWNER: create the site at cloud.umami.is, then uncomment this one line and paste the website id.
+  The funnel events below (scroll_75, cta_click, waitlist_signup, github_click, quickstart_click)
+  fire automatically once window.umami exists; page_view is tracked by the snippet itself.
+<script defer src="https://cloud.umami.is/script.js" data-website-id="REPLACE_WITH_UMAMI_WEBSITE_ID"></script>
+-->
+<script>
+  // ---------------------------------------------------------------------------
+  // OWNER: this is the single waitlist endpoint for the whole site. Flip it once
+  // to your Buttondown embed-subscribe URL. Every .waitlist form uses it.
+  //   e.g. https://buttondown.email/api/emails/embed-subscribe/<your-username>
+  // ---------------------------------------------------------------------------
+  var WAITLIST_ENDPOINT = 'https://buttondown.email/api/emails/embed-subscribe/REPLACE_WITH_BUTTONDOWN_USERNAME';
+
+  function track(name) {
+    if (window.umami && window.umami.track) window.umami.track(name, { path: location.pathname });
+  }
+  document.querySelectorAll('form.waitlist').forEach(function (form) {
+    form.action = WAITLIST_ENDPOINT;
+    form.addEventListener('submit', function () { track('waitlist_signup'); });
+  });
+  var fired75 = false;
+  addEventListener('scroll', function () {
+    if (fired75) return;
+    var h = document.documentElement;
+    if ((h.scrollTop + window.innerHeight) / h.scrollHeight >= 0.75) { fired75 = true; track('scroll_75'); }
+  }, { passive: true });
+  document.querySelectorAll('a[href*="quickstart.html"]').forEach(function (a) {
+    a.addEventListener('click', function () { track('quickstart_click'); });
+  });
+  document.querySelectorAll('a[href*="github.com"]').forEach(function (a) {
+    a.addEventListener('click', function () { track('github_click'); });
+  });
+  document.querySelectorAll('a[href*="#waitlist"]').forEach(function (a) {
+    a.addEventListener('click', function () { track('cta_click'); });
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Serverless Spark Connect on AWS | Flashpoint</title>
+<meta name="description" content="Run multi-node Apache Spark on AWS with no cluster to manage. Connect over Spark Connect, run SQL in a Snowflake-style worksheet, and read the query profile. Join the waitlist.">
+<link rel="canonical" href="https://sparksql.dev/serverless-spark-connect.html">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Flashpoint">
+<meta property="og:title" content="Serverless Spark Connect on AWS | Flashpoint">
+<meta property="og:description" content="Run multi-node Apache Spark on AWS with no cluster to manage. Connect over Spark Connect, run SQL in a worksheet, and read the query profile.">
+<meta property="og:url" content="https://sparksql.dev/serverless-spark-connect.html">
+<meta property="og:image" content="https://sparksql.dev/profile-tree.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Serverless Spark Connect on AWS | Flashpoint">
+<meta name="twitter:description" content="Run multi-node Apache Spark on AWS with no cluster to manage. Spark Connect, SQL worksheet, query profile.">
+<meta name="twitter:image" content="https://sparksql.dev/profile-tree.png">
+<meta name="robots" content="index, follow">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-base: #0d0e10; --bg-surface: #13151a; --bg-raised: #1c1f27; --bg-overlay: #242834;
+    --border: #2a2f3d; --border-dim: #1e2230;
+    --text-primary: #e8eaf0; --text-secondary: #8b93a8; --text-dim: #4e5568; --text-mono: #c8cfe0;
+    --amber: #f59e0b; --amber-glow: #fbbf24; --amber-dim: #78450a;
+    --amber-bg: rgba(245,158,11,0.08); --amber-border: rgba(245,158,11,0.2);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg-base); color: var(--text-primary); font-family: 'IBM Plex Sans', sans-serif; font-size: 15px; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 0 24px; }
+  nav { display: flex; align-items: center; gap: 24px; padding: 16px 24px; border-bottom: 1px solid var(--border-dim); position: sticky; top: 0; background: var(--bg-base); z-index: 10; flex-wrap: wrap; }
+  nav .logo { font-weight: 600; letter-spacing: 0.5px; color: var(--text-primary); text-decoration: none; }
+  nav .logo span { color: var(--amber); }
+  nav a.nav-link { color: var(--text-secondary); text-decoration: none; font-size: 13px; }
+  nav a.nav-link:hover { color: var(--amber); }
+  nav .spacer { flex: 1; }
+  header { padding: 72px 0 48px; }
+  header .kicker { color: var(--amber); font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 16px; }
+  header h1 { font-size: 44px; font-weight: 600; line-height: 1.15; letter-spacing: -0.5px; margin-bottom: 16px; }
+  header p { color: var(--text-secondary); font-size: 17px; max-width: 660px; }
+  .cta { display: flex; gap: 12px; margin-top: 28px; flex-wrap: wrap; }
+  .btn { display: inline-block; padding: 10px 18px; border-radius: 8px; font-size: 14px; font-weight: 500; text-decoration: none; border: 1px solid var(--border); color: var(--text-primary); background: var(--bg-raised); cursor: pointer; font-family: inherit; }
+  .btn:hover { border-color: var(--amber-border); color: var(--amber-glow); }
+  .btn.primary { background: var(--amber-bg); border-color: var(--amber-border); color: var(--amber-glow); }
+  .btn.primary:hover { background: rgba(245,158,11,0.14); }
+  section { padding: 40px 0; border-top: 1px solid var(--border-dim); }
+  h2 { font-size: 22px; font-weight: 600; margin-bottom: 20px; }
+  h2 .mono { color: var(--amber); font-family: 'IBM Plex Mono', monospace; font-size: 14px; margin-right: 10px; }
+  h3 { font-size: 17px; font-weight: 600; margin: 28px 0 10px; }
+  section p { color: var(--text-secondary); max-width: 720px; margin-bottom: 12px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+  .card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 10px; padding: 20px; }
+  .card h3 { font-size: 15px; margin: 0 0 8px; }
+  .card h3 span { color: var(--amber); font-family: 'IBM Plex Mono', monospace; font-size: 12px; margin-right: 8px; }
+  .card p { color: var(--text-secondary); font-size: 13.5px; }
+  .card .tag { display: inline-block; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--text-mono); background: var(--bg-overlay); border: 1px solid var(--border); border-radius: 4px; padding: 2px 8px; margin: 10px 4px 0 0; }
+  figure { margin: 24px 0; }
+  figure img { width: 100%; border: 1px solid var(--border); border-radius: 10px; display: block; }
+  figure figcaption { color: var(--text-dim); font-size: 13px; margin-top: 10px; font-family: 'IBM Plex Mono', monospace; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; margin-bottom: 12px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border-dim); }
+  th { color: var(--text-dim); font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
+  td.mono, .mono-sm { font-family: 'IBM Plex Mono', monospace; font-size: 13px; }
+  ul.plain { color: var(--text-secondary); margin: 0 0 16px 20px; }
+  ul.plain li { margin-bottom: 6px; }
+  .faq details { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; margin-bottom: 10px; }
+  .faq summary { cursor: pointer; font-weight: 500; list-style: none; }
+  .faq summary::-webkit-details-marker { display: none; }
+  .faq summary::before { content: "+ "; color: var(--amber); font-family: 'IBM Plex Mono', monospace; }
+  .faq details[open] summary::before { content: "\2212  "; }
+  .faq details p { margin: 10px 0 0; font-size: 14px; color: var(--text-secondary); }
+  .waitlist { display: flex; flex-wrap: wrap; gap: 10px; margin: 20px 0 8px; max-width: 560px; }
+  .waitlist input[type=email] { flex: 1 1 260px; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-raised); color: var(--text-primary); font-size: 14px; font-family: inherit; }
+  .waitlist input[type=email]:focus { outline: none; border-color: var(--amber-border); }
+  .note { color: var(--text-dim); font-size: 13px; max-width: 620px; }
+  .crumb { color: var(--text-dim); font-size: 12px; font-family: 'IBM Plex Mono', monospace; padding: 20px 0 0; }
+  .crumb a { color: var(--text-secondary); text-decoration: none; }
+  .crumb a:hover { color: var(--amber); }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  footer { padding: 40px 0 64px; color: var(--text-dim); font-size: 13px; border-top: 1px solid var(--border-dim); }
+  footer a { color: var(--text-secondary); text-decoration: none; }
+  footer a:hover { color: var(--amber); }
+</style>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Flashpoint",
+  "applicationCategory": "DeveloperApplication",
+  "operatingSystem": "Cloud (AWS)",
+  "url": "https://sparksql.dev/",
+  "description": "Serverless multi-node Apache Spark on AWS with a Snowflake-style warehouse UI: SQL worksheet, query profile, warehouse manager, and cost center.",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    { "@type": "ListItem", "position": 1, "name": "Flashpoint", "item": "https://sparksql.dev/" },
+    { "@type": "ListItem", "position": 2, "name": "Serverless Spark Connect on AWS", "item": "https://sparksql.dev/serverless-spark-connect.html" }
+  ]
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Is Spark Connect the same as Databricks Connect?",
+      "acceptedAnswer": { "@type": "Answer", "text": "No. Spark Connect is the upstream Apache Spark protocol, available in the Spark distribution. Databricks Connect is a client for Databricks. Flashpoint speaks stock Spark Connect, so a standard Spark Connect client can point at a warehouse endpoint." }
+    },
+    {
+      "@type": "Question",
+      "name": "Do I need a cluster?",
+      "acceptedAnswer": { "@type": "Answer", "text": "No. You create a warehouse; the gateway launches an on-demand driver and spot executors on ECS Fargate, waits for the driver to be ready, and returns a Spark Connect endpoint. When the warehouse is idle it suspends and costs nothing." }
+    },
+    {
+      "@type": "Question",
+      "name": "What does it cost?",
+      "acceptedAnswer": { "@type": "Answer", "text": "You pay only for compute while a warehouse is running. Suspending drops a warehouse to zero. Compute is metered per compute-second, and the Cost Center shows daily spend and a monthly projection. The hosted try-it pilot is budget-capped per session." }
+    },
+    {
+      "@type": "Question",
+      "name": "Does it work with pandas and notebooks?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Spark Connect has clients for PySpark and other languages, and the endpoint is a normal Spark Connect endpoint, so notebook and DataFrame code can connect directly. The gateway's REST API is the control plane and the SQL path." }
+    },
+    {
+      "@type": "Question",
+      "name": "Is there a free tier?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Not yet. The hosted try-it pilot is invite-only and hard-capped to a monthly budget. You can run the whole stack yourself on your laptop with the quickstart, or deploy it to your own AWS account." }
+    }
+  ]
+}
+</script>
+</head>
+<body>
+<nav>
+  <a class="logo" href="index.html">FLASHPOINT<span>_</span></a>
+  <a class="nav-link" href="serverless-spark-connect.html">serverless spark</a>
+  <a class="nav-link" href="snowflake-alternative.html">snowflake alternative</a>
+  <a class="nav-link" href="quickstart.html">quickstart</a>
+  <a class="nav-link" href="https://github.com/prabodh1194/flashpoint">github</a>
+  <span class="spacer"></span>
+  <a class="nav-link" href="#how-it-works">how it works</a>
+  <a class="nav-link" href="#ui">the ui</a>
+  <a class="nav-link" href="#faq">faq</a>
+  <a class="nav-link" href="#waitlist">waitlist</a>
+</nav>
+
+<div class="wrap"><p class="crumb"><a href="index.html">flashpoint</a> / serverless spark connect on aws</p></div>
+
+<header class="wrap">
+  <div class="kicker">serverless · spark connect · aws</div>
+  <h1>Serverless Spark Connect on AWS</h1>
+  <p>Flashpoint runs Apache Spark on AWS with no cluster to manage. A warehouse is a driver and its
+     executors on ECS Fargate, reached over Spark Connect; you run SQL in a worksheet and every query
+     renders as a profile, operator tree, per-node time, rows in and out. Tables live on Iceberg in S3.
+     It is early software: run the quickstart on your laptop, or join the waitlist for a hosted try-it.</p>
+  <div class="cta">
+    <a class="btn primary" href="#waitlist">Join the waitlist →</a>
+    <a class="btn" href="quickstart.html">Run it on your laptop</a>
+    <a class="btn" href="https://github.com/prabodh1194/flashpoint">GitHub</a>
+  </div>
+</header>
+
+<section id="how-it-works">
+  <div class="wrap">
+    <h2><span class="mono">01</span>How it works</h2>
+    <p>A warehouse is launched on demand, exposes one Spark Connect gRPC endpoint, and suspends itself
+       when idle. The gateway is stateless: every read and write goes through DynamoDB, so two gateway
+       instances agree on the same state and a restart changes nothing.</p>
+    <div class="grid">
+      <div class="card">
+        <h3><span>↗</span>Spark Connect</h3>
+        <p>Stock Apache Spark Connect as the client protocol, with no fork. A warehouse returns a
+           <span class="mono-sm">sc://</span> endpoint any Spark Connect client can reach. SQL clients go
+           through the gateway.</p>
+        <span class="tag">gRPC</span><span class="tag">no fork</span>
+      </div>
+      <div class="card">
+        <h3><span>▦</span>Driver + executors</h3>
+        <p>One on-demand driver (4 vCPU / 16 GB) plus n spot executors (2 vCPU / 8 GB each). T-shirt
+           sizes map to executor count, so XS is a driver and one executor.</p>
+        <span class="tag">ecs fargate</span><span class="tag">spot executors</span>
+      </div>
+      <div class="card">
+        <h3><span>◫</span>Tables on S3</h3>
+        <p>Iceberg tables on S3 with a Glue catalog. Query results are written as Parquet to S3 and expire
+           after seven days; query records live in DynamoDB with a TTL.</p>
+        <span class="tag">iceberg</span><span class="tag">glue</span>
+      </div>
+      <div class="card">
+        <h3><span>◔</span>Metered and reaped</h3>
+        <p>Compute-seconds are metered from the moment a name is claimed. A background reaper suspends
+           warehouses past their idle TTL, so an abandoned warehouse stops billing by itself.</p>
+        <span class="tag">per-second</span><span class="tag">auto-suspend</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="waitlist-mid">
+  <div class="wrap">
+    <h2><span class="mono">02</span>Try it without deploying</h2>
+    <p>The hosted try-it pilot is invite-only and hard-capped: one short session, one size, one budget.
+       Leave an email and you are put in line for a slot.</p>
+    <form class="waitlist" method="post">
+      <label class="sr-only" for="email-mid">Email address</label>
+      <input id="email-mid" type="email" name="email" required placeholder="you@company.com" autocomplete="email">
+      <button type="submit" class="btn primary">Join the waitlist</button>
+    </form>
+    <p class="note">One email when a slot opens. No spam. Unsubscribe anytime. See the privacy note at the
+       bottom of this page.</p>
+  </div>
+</section>
+
+<section id="ui">
+  <div class="wrap">
+    <h2><span class="mono">03</span>The UI</h2>
+    <p>Five views, each with a reload-safe URL: a SQL worksheet, the query-profile DAG, a warehouse
+       manager, a data explorer, and a cost center. They are one product, not a dashboard bolted onto a
+       notebook.</p>
+    <figure>
+      <img src="profile-tree.png" alt="A query profile: result-at-top operator tree with a join fanning its inputs out side-by-side">
+      <figcaption>a real query profile, result-at-top tree, join inputs fanned out, codegen stages as slim chips.</figcaption>
+    </figure>
+    <div class="grid">
+      <div class="card">
+        <h3><span>▤</span>Worksheet</h3>
+        <p>Type SQL, get columns and rows. Sync queries are deadline-bounded, and resubmitting the same
+           SQL on the same warehouse is a cache hit rather than a rerun.</p>
+      </div>
+      <div class="card">
+        <h3><span>◔</span>Query profile</h3>
+        <p>An operator tree parsed from the stock Spark UI REST API: per-node duration, share of
+           execution time, rows in and out, skew and spill flags.</p>
+      </div>
+      <div class="card">
+        <h3><span>▦</span>Warehouse manager</h3>
+        <p>Create, suspend, resume and resize. Sizes are T-shirt sizes over executor count, and a
+           suspended warehouse costs nothing.</p>
+      </div>
+      <div class="card">
+        <h3><span>$</span>Cost center</h3>
+        <p>Every resource with its state, uptime and monthly estimate, daily spend from Cost Explorer,
+           live per-warehouse meters, and a projection against a monthly budget.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="spark-sql-ui">
+  <div class="wrap">
+    <h2><span class="mono">04</span>Spark SQL UI, explained</h2>
+    <p>The stock Spark UI is a job tracker. It is built for a cluster operator: jobs, stages, tasks,
+       environment and executors, served on port 4040 for as long as the driver lives. It answers
+       "is the job running?" well, and "why was this query slow?" only indirectly.</p>
+    <p>A warehouse-shaped UI answers the second question first. The differences that matter:</p>
+    <ul class="plain">
+      <li><strong>SQL-centric, not task-centric.</strong> A query becomes an operator tree (scan, filter,
+          join, aggregate, exchange) instead of a stage list you have to translate.</li>
+      <li><strong>Per-node cost.</strong> Each operator shows its share of total execution time,
+          color-heated, so the expensive node is visible without reading a table.</li>
+      <li><strong>Column treatments.</strong> Filters and projections are summarized per node, so you can
+          see what happened to the columns you selected.</li>
+      <li><strong>Skew and spill flags.</strong> A node that spilled to disk or ran with one oversized
+          task is marked, not left for you to infer.</li>
+      <li><strong>A reload-safe URL.</strong> Every profile is addressable, so a query profile can be
+          pasted into a review or an issue.</li>
+    </ul>
+    <p>All of it is grown from the stock Spark UI REST API, with no fork and no agent inside the driver.</p>
+    <figure>
+      <img src="flashpoint-hld.svg" alt="Flashpoint high-level architecture: client to gateway to Fargate driver and executors, state in DynamoDB, tables on Iceberg">
+      <figcaption>client → gateway → driver (on-demand) + executors (spot); state in DynamoDB; tables on Iceberg in S3.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section id="not">
+  <div class="wrap">
+    <h2><span class="mono">05</span>What it is not</h2>
+    <ul class="plain">
+      <li><strong>Not finished.</strong> It is early software. Treat it as a working prototype of the
+          loop, create a warehouse, run SQL, read the profile, pay for compute.</li>
+      <li><strong>No auth or multi-tenancy yet.</strong> Identity, per-user isolation and per-user quotas
+          are the current milestone (Forge). Until they land, a hosted try-it is global and capped, not
+          per-account.</li>
+      <li><strong>Not a vendor cloud.</strong> Flashpoint is an independent project built on Apache Spark.
+          It is not affiliated with, or endorsed by, the Apache Software Foundation.</li>
+      <li><strong>No free tier and no SLA.</strong> Run it yourself for nothing, or join the waitlist for a
+          budgeted try-it slot.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="faq">
+  <div class="wrap">
+    <h2><span class="mono">06</span>FAQ</h2>
+    <div class="faq">
+      <details>
+        <summary>Is Spark Connect the same as Databricks Connect?</summary>
+        <p>No. Spark Connect is the upstream Apache Spark protocol, available in the Spark distribution.
+           Databricks Connect is a client for Databricks. Flashpoint speaks stock Spark Connect, so a
+           standard Spark Connect client can point at a warehouse endpoint.</p>
+      </details>
+      <details>
+        <summary>Do I need a cluster?</summary>
+        <p>No. You create a warehouse; the gateway launches an on-demand driver and spot executors on ECS
+           Fargate, waits for the driver to be ready, and returns a Spark Connect endpoint. When the
+           warehouse is idle it suspends and costs nothing.</p>
+      </details>
+      <details>
+        <summary>What does it cost?</summary>
+        <p>You pay only for compute while a warehouse is running. Suspending drops a warehouse to zero.
+           Compute is metered per compute-second, and the Cost Center shows daily spend and a monthly
+           projection. The hosted try-it pilot is budget-capped per session.</p>
+      </details>
+      <details>
+        <summary>Does it work with pandas and notebooks?</summary>
+        <p>Spark Connect has clients for PySpark and other languages, and the endpoint is a normal Spark
+           Connect endpoint, so notebook and DataFrame code can connect directly. The gateway's REST API
+           is the control plane and the SQL path.</p>
+      </details>
+      <details>
+        <summary>Is there a free tier?</summary>
+        <p>Not yet. The hosted try-it pilot is invite-only and hard-capped to a monthly budget. You can run
+           the whole stack yourself on your laptop with the quickstart, or deploy it to your own AWS
+           account.</p>
+      </details>
+    </div>
+  </div>
+</section>
+
+<section id="waitlist">
+  <div class="wrap">
+    <h2><span class="mono">07</span>Join the waitlist</h2>
+    <p>One email, one line, no account. Slots are released in batches as the try-it budget allows.</p>
+    <form class="waitlist" method="post">
+      <label class="sr-only" for="email-end">Email address</label>
+      <input id="email-end" type="email" name="email" required placeholder="you@company.com" autocomplete="email">
+      <button type="submit" class="btn primary">Join the waitlist</button>
+    </form>
+    <p class="note">One email when a slot opens. No spam. Unsubscribe anytime.</p>
+    <p class="note" id="privacy"><strong>Privacy.</strong> Your email is stored by Buttondown, our
+       newsletter processor, and used only to send try-it invitations. No analytics cookies are set on
+       this page. Ask to be removed at any time and the address is deleted.</p>
+    <p class="note">Prefer to read the plan first? The
+       <a href="quickstart.html" style="color:var(--amber)">quickstart</a> runs on your laptop, and the
+       <a href="deploy.html" style="color:var(--amber)">deploy guide</a> covers your own AWS account.</p>
+  </div>
+</section>
+
+<footer class="wrap">
+  <p>Flashpoint · MIT licensed ·
+    <a href="index.html">home</a> ·
+    <a href="snowflake-alternative.html">snowflake alternative</a> ·
+    <a href="quickstart.html">quickstart</a> ·
+    <a href="deploy.html">deploy</a> ·
+    <a href="https://github.com/prabodh1194/flashpoint">github.com/prabodh1194/flashpoint</a></p>
+  <p style="margin-top:8px">Built on Apache Spark. Not affiliated with or endorsed by the Apache Software Foundation.</p>
+</footer>
+
+<!--
+  Analytics: Umami Cloud (cookieless, Hobby tier).
+  OWNER: create the site at cloud.umami.is, then uncomment this one line and paste the website id.
+  The funnel events below (scroll_75, cta_click, waitlist_signup, github_click, quickstart_click)
+  fire automatically once window.umami exists; page_view is tracked by the snippet itself.
+<script defer src="https://cloud.umami.is/script.js" data-website-id="REPLACE_WITH_UMAMI_WEBSITE_ID"></script>
+-->
+<script>
+  // ---------------------------------------------------------------------------
+  // OWNER: this is the single waitlist endpoint for the whole site. Flip it once
+  // to your Buttondown embed-subscribe URL. Every .waitlist form uses it.
+  //   e.g. https://buttondown.email/api/emails/embed-subscribe/<your-username>
+  // ---------------------------------------------------------------------------
+  var WAITLIST_ENDPOINT = 'https://buttondown.email/api/emails/embed-subscribe/REPLACE_WITH_BUTTONDOWN_USERNAME';
+
+  function track(name) {
+    if (window.umami && window.umami.track) window.umami.track(name, { path: location.pathname });
+  }
+  document.querySelectorAll('form.waitlist').forEach(function (form) {
+    form.action = WAITLIST_ENDPOINT;
+    form.addEventListener('submit', function () { track('waitlist_signup'); });
+  });
+  var fired75 = false;
+  addEventListener('scroll', function () {
+    if (fired75) return;
+    var h = document.documentElement;
+    if ((h.scrollTop + window.innerHeight) / h.scrollHeight >= 0.75) { fired75 = true; track('scroll_75'); }
+  }, { passive: true });
+  document.querySelectorAll('a[href*="quickstart.html"]').forEach(function (a) {
+    a.addEventListener('click', function () { track('quickstart_click'); });
+  });
+  document.querySelectorAll('a[href*="github.com"]').forEach(function (a) {
+    a.addEventListener('click', function () { track('github_click'); });
+  });
+  document.querySelectorAll('a[href*="#waitlist"]').forEach(function (a) {
+    a.addEventListener('click', function () { track('cta_click'); });
+  });
+</script>
+</body>
+</html>
