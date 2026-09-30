@@ -28,17 +28,17 @@ Start here and follow the request path:
 
 | # | File | Why | Lines |
 |---|------|-----|-------|
-| 1 | `CLAUDE.md` | Project overview, milestones, conventions | 20 |
-| 2 | `web/src/api.js` | REST client — see what the UI asks the gateway to do | 67 |
-| 3 | `web/src/App.jsx` | Shell: routing, views, how the UI works | 71 |
-| 4 | `web/src/views/Worksheet.jsx` | Core feature: SQL editor → run query → show results | 424 |
-| 5 | `gateway/main.py` | Heart of the system: all API routes, warehouse lifecycle, query execution | 717 |
-| 6 | `gateway/store.py` | DynamoDB helpers (called from main.py) | 88 |
-| 7 | `infra/ecs.tf` | How driver + executor tasks are defined on Fargate | 67 |
-| 8 | `driver/entrypoint.sh` | What happens when a driver container boots | 47 |
-| 9 | `driver/executor-entrypoint.sh` | What happens when an executor container boots | 20 |
-| 10 | `infra/gateway.tf` | How the gateway EC2 is provisioned | 34 |
-| 11 | `infra/gateway-init.sh` | Gateway boot script: install deps → clone → systemd | 3 |
+| 1 | `AGENTS.md` | Project overview, milestones, conventions; each component has its own `AGENTS.md` | 92 |
+| 2 | `web/src/api.js` | REST client — see what the UI asks the gateway to do | 76 |
+| 3 | `web/src/App.jsx` | Shell: routing, views, how the UI works | 107 |
+| 4 | `web/src/views/Worksheet.jsx` | Core feature: SQL editor → run query → show results | 591 |
+| 5 | `gateway/routes_warehouses.py` | Warehouse lifecycle: create, suspend, resume, resize, delete | 233 |
+| 6 | `gateway/routes_queries.py` | Query execution, async runner, cancel, history | 274 |
+| 7 | `gateway/store.py` | DynamoDB persistence — the single source of truth | 169 |
+| 8 | `infra/ecs.tf` | How driver + executor tasks are defined on Fargate | 198 |
+| 9 | `driver/entrypoint.sh` | Driver boot (master → SparkConnectServer) + executor boot (worker) | 54 |
+| 10 | `infra/gateway.tf` | How the gateway EC2 is provisioned | 159 |
+| 11 | `infra/gateway-init.sh` | Gateway boot script: install deps → clone → systemd | 57 |
 
 Then explore the rest at your own pace:
 
@@ -64,31 +64,35 @@ Then explore the rest at your own pace:
 ```
 flashpoint/
 ├── gateway/           EC2-hosted control plane (FastAPI)
-│   ├── main.py        ← all API routes + Spark Connect client + DAG fetcher
-│   └── store.py       ← DynamoDB warehouse persistence helpers
+│   ├── main.py        ← app wiring + startup reconcile + idle reaper
+│   ├── routes_*.py    ← warehouses, queries, costs + history routes
+│   ├── store.py       ← DynamoDB persistence — the single source of truth
+│   ├── dag.py         ← Spark UI REST → {nodes, edges} query profile
+│   └── local_dev.py   ← AWS-mocked local server entry point
 │
 ├── driver/            Spark container image
 │   ├── Dockerfile     ← Spark 4.0.2, JDK 17, ARM64
-│   ├── entrypoint.sh  ← driver: start master → launch SparkConnectServer
-│   └── executor-entrypoint.sh  ← executor: start worker → register with master
+│   ├── entrypoint.sh  ← SPARK_ROLE=driver: master → SparkConnectServer
+│   │                     SPARK_ROLE=executor: worker → join master
+│   └── smoke_test.py  ← spark.sql('select 1') over gRPC
 │
-├── web/               React + Vite UI (Tailwind, Lucide icons)
+├── web/               React + Vite UI (inline styles + CSS vars, Lucide icons)
 │   └── src/
-│       ├── App.jsx           ← root shell, client-side routing via state
+│       ├── App.jsx           ← root shell, view switch, gateway health
+│       ├── router.js         ← zero-dep hash routing (#/history/:queryId)
 │       ├── api.js            ← fetch() wrapper for gateway REST
-│       ├── views/            ← Worksheet, Warehouses, History, DataExplorer
-│       └── components/       ← Sidebar, Topbar, QueryDag
+│       ├── views/            ← Worksheet, Warehouses, History, QueryProfile, DataExplorer, Costs
+│       └── components/       ← Sidebar, Topbar, QueryDag, OfflineBanner
 │
 ├── infra/             OpenTofu IaC (VPC, ECS, ECR, DynamoDB, gateway EC2)
 │   ├── ecs.tf          ← driver + executor task defs
 │   ├── gateway.tf      ← EC2 instance + IAM + user-data
-│   ├── dynamodb.tf     ← warehouses + meters tables
+│   ├── dynamodb.tf     ← warehouses + meters + queries tables
 │   ├── vpc.tf          ← public subnets, IGW
 │   └── gateway-init.sh ← boot script: install deps → clone → systemd service
 │
-├── bench/             [planned] TPC-DS/TPC-H benchmarks
-├── metering/          [planned] cost accounting
-└── catalog/           [planned] Glue/Iceberg integration
+├── scripts/           e2e_demo.py (local end-to-end), teardown.sh (zero-spend destroy)
+└── docs/              ADRs, deep dives, static product pages
 ```
 
 ## Request Lifecycle
