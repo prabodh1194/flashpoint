@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spark Connect on ECS. Zero cluster management. | Flashpoint</title>
+<meta name="description" content="Run Spark Connect on AWS ECS with a Snowflake-like SQL workspace. No cluster management and no Spark version lock-in.">
+<link rel="canonical" href="https://flashpointdb.com/serverless-spark-connect.html">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Flashpoint">
+<meta property="og:title" content="Spark Connect on ECS. Zero cluster management.">
+<meta property="og:description" content="Run Spark Connect on AWS ECS with a Snowflake-like SQL workspace. No cluster management, no Spark version lock-in.">
+<meta property="og:url" content="https://flashpointdb.com/serverless-spark-connect.html">
+<meta property="og:image" content="https://flashpointdb.com/profile-tree.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Spark Connect on ECS. Zero cluster management.">
+<meta name="twitter:description" content="Run Spark Connect on AWS ECS with a Snowflake-like SQL workspace.">
+<meta name="twitter:image" content="https://flashpointdb.com/profile-tree.png">
+<meta name="robots" content="index, follow">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#080b0c; --surface:#0f1416; --raised:#151c1f; --line:#1f2a2e; --line-soft:#162022;
+    --ink:#e9f0ef; --ink-2:#93a7a6; --ink-3:#5a6d6d; --ink-mono:#c3d3d1;
+    --amber:#f59e0b; --amber-deep:#b45309; --amber-glow:#fbbf24; --amber-bg:rgba(245,158,11,.09); --amber-line:rgba(245,158,11,.3);
+    --r:6px; --r-lg:10px;
+    --ui:'IBM Plex Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    --serif:'Newsreader',Georgia,serif;
+    --mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;
+    --s2:8px;--s3:12px;--s4:16px;--s6:24px;--s8:32px;--s12:48px;--s16:64px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--ui);font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased}
+  img{max-width:100%;display:block;height:auto}
+  a{color:var(--amber-glow);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+  .mono{font-family:var(--mono)}
+  .skip{position:absolute;left:-9999px;background:var(--amber);color:#1a1204;padding:10px 16px;z-index:50}
+  .skip:focus{left:12px;top:12px}
+  :focus-visible{outline:2px solid var(--amber-glow);outline-offset:2px;border-radius:var(--r)}
+  .eyebrow{font-family:var(--mono);font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--amber);margin:0}
+
+  header.nav{position:sticky;top:0;z-index:20;background:rgba(8,11,12,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line-soft)}
+  .nav-in{display:flex;align-items:center;gap:var(--s8);height:60px}
+  .logo{font-family:var(--mono);font-weight:600;font-size:14px;letter-spacing:.04em;color:var(--ink)}
+  .logo .cursor{color:var(--amber)}
+  nav.links{display:flex;gap:var(--s6);font-size:13.5px}
+  nav.links a{color:var(--ink-2)} nav.links a:hover{color:var(--ink)}
+  .nav-right{margin-left:auto;display:flex;align-items:center;gap:var(--s4);font-size:13.5px}
+  .nav-right a.ghost{color:var(--ink-2)}
+  @media(max-width:880px){nav.links{display:none}}
+
+  .btn{display:inline-flex;align-items:center;gap:8px;font:600 15px/1 var(--ui);padding:14px 22px;border-radius:var(--r);
+       border:1px solid var(--amber);background:var(--amber);color:#1a1204;cursor:pointer}
+  .btn:hover{background:var(--amber-glow);border-color:var(--amber-glow);color:#1a1204;text-decoration:none}
+
+  .hero{padding:var(--s16) 0 var(--s12)}
+  .hero-in{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:var(--s12);align-items:center}
+  h1{font-family:var(--ui);font-size:clamp(30px,4.6vw,50px);line-height:1.06;letter-spacing:-.03em;font-weight:600;margin:var(--s4) 0 0}
+  h1 em{font-style:normal;color:var(--amber-glow)}
+  .sub{margin:var(--s6) 0 0;font-size:18px;color:var(--ink-2);max-width:52ch}
+  .hero-cta{margin-top:var(--s8);display:flex;align-items:center;gap:var(--s6);flex-wrap:wrap}
+  .hero-cta .alt{font-size:14px;color:var(--ink-3)}
+  .shot{border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden;background:#050708}
+  .shot img{width:100%}
+  .shot figcaption{border-top:1px solid var(--line-soft);padding:9px 14px;font-family:var(--mono);font-size:11.5px;color:var(--ink-3);background:var(--surface)}
+  figure{margin:0}
+  @media(max-width:960px){.hero-in{grid-template-columns:minmax(0,1fr);gap:var(--s8)}}
+
+  section{padding:var(--s16) 0;border-top:1px solid var(--line-soft)}
+  h2{font-size:clamp(23px,3vw,31px);letter-spacing:-.02em;font-weight:600;margin:0 0 var(--s3)}
+  .lede{margin-top:var(--s3);font-size:16.5px;color:var(--ink-2);max-width:62ch}
+  .step{display:flex;align-items:baseline;gap:var(--s3);margin-bottom:var(--s4)}
+  .step .n{font-family:var(--mono);font-size:12px;color:var(--amber);border:1px solid var(--amber-line);background:var(--amber-bg);border-radius:var(--r);padding:2px 8px}
+
+  .diagram{margin-top:var(--s8);border:1px solid var(--line);border-radius:var(--r-lg);background:var(--surface);padding:var(--s6)}
+  .diagram svg{width:100%;height:auto;display:block}
+  .diagram figcaption{margin-top:var(--s4);font-family:var(--mono);font-size:12px;color:var(--ink-3)}
+
+  pre.code{margin:var(--s8) 0 0;background:#050708;border:1px solid var(--line);border-radius:var(--r-lg);
+           padding:var(--s6);overflow:auto}
+  pre.code code{font-family:var(--mono);font-size:13.5px;line-height:1.7;color:var(--ink-mono)}
+  .k{color:var(--amber-glow)} .s{color:#f0c674} .c{color:var(--ink-3)}
+
+  .grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--s6);margin-top:var(--s8)}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);padding:var(--s6);min-width:0}
+  .card .ic{font-family:var(--mono);color:var(--amber);font-size:13px}
+  .card h3{font-size:16.5px;margin:var(--s3) 0 var(--s2)}
+  .card p{margin:0;font-size:14.5px;color:var(--ink-2)}
+  @media(max-width:820px){.grid3{grid-template-columns:minmax(0,1fr)}}
+
+  .split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:var(--s12);align-items:center;margin-top:var(--s8)}
+  @media(max-width:900px){.split{grid-template-columns:minmax(0,1fr);gap:var(--s6)}}
+  ul.ticks{list-style:none;margin:0;padding:0}
+  ul.ticks li{position:relative;padding-left:24px;margin:12px 0;color:var(--ink-2);font-size:15px}
+  ul.ticks li::before{content:"→";position:absolute;left:0;color:var(--amber);font-family:var(--mono)}
+  ul.ticks li strong{color:var(--ink)}
+
+  details.faq{border:1px solid var(--line);border-radius:var(--r);background:var(--surface);margin:10px 0;padding:16px 18px}
+  details.faq summary{cursor:pointer;font-weight:600;font-size:15.5px;list-style:none;display:flex;gap:10px}
+  details.faq summary::-webkit-details-marker{display:none}
+  details.faq summary::before{content:"+";color:var(--amber);font-family:var(--mono)}
+  details.faq[open] summary::before{content:"−"}
+  details.faq p{margin:12px 0 0;color:var(--ink-2);font-size:14.5px}
+
+  .waitlist{background:var(--surface)}
+  .wl{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--s12);align-items:center}
+  form.cta{display:flex;flex-wrap:wrap;gap:var(--s3);align-items:flex-start}
+  form.cta input[type=email]{flex:1 1 240px;padding:14px 16px;border-radius:var(--r);border:1px solid var(--line);
+    background:var(--bg);color:var(--ink);font:inherit;font-size:15px}
+  form.cta input[type=email]:invalid:not(:placeholder-shown){border-color:#f87171}
+  .hp{position:absolute;left:-9999px}
+  .note{font-size:12.5px;color:var(--ink-3);margin-top:var(--s3)}
+  @media(max-width:860px){.wl{grid-template-columns:minmax(0,1fr);gap:var(--s6)}}
+
+  footer{border-top:1px solid var(--line-soft);padding:var(--s12) 0;font-size:13px;color:var(--ink-3)}
+  .foot-in{display:flex;flex-wrap:wrap;gap:var(--s6);align-items:center;justify-content:space-between}
+  footer a{color:var(--ink-2)}
+  @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{animation:none!important;transition:none!important}}
+</style>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Flashpoint",
+  "applicationCategory": "DeveloperApplication",
+  "operatingSystem": "Cloud (AWS)",
+  "url": "https://flashpointdb.com/",
+  "description": "Spark Connect on AWS ECS with a Snowflake-like SQL workspace, query profile and cost center. No cluster management, no version lock-in.",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    { "@type": "ListItem", "position": 1, "name": "Flashpoint", "item": "https://flashpointdb.com/" },
+    { "@type": "ListItem", "position": 2, "name": "Spark Connect on ECS", "item": "https://flashpointdb.com/serverless-spark-connect.html" }
+  ]
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    { "@type": "Question", "name": "What is Spark Connect on ECS?", "acceptedAnswer": { "@type": "Answer", "text": "Spark Connect is Apache Spark's client-server protocol. Flashpoint runs the server side as an ECS Fargate task: one on-demand driver plus spot executors, addressed over gRPC, created and suspended on demand." } },
+    { "@type": "Question", "name": "Do I manage the cluster?", "acceptedAnswer": { "@type": "Answer", "text": "No. The gateway launches the driver and executors, waits for gRPC to answer, returns the endpoint, and suspends the warehouse on an idle TTL. Suspended warehouses bill nothing." } },
+    { "@type": "Question", "name": "Am I locked to a Spark version?", "acceptedAnswer": { "@type": "Answer", "text": "No. The driver image pins its own Spark version and the gateway's client pin tracks it, and the protocol is stock Spark Connect, so any compatible client can attach." } },
+    { "@type": "Question", "name": "What does it cost?", "acceptedAnswer": { "@type": "Answer", "text": "Per compute-second while a warehouse runs, on your own AWS bill. Suspended warehouses bill nothing, and the Cost Center shows live meters beside Cost Explorer." } }
+  ]
+}
+</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="nav">
+  <div class="wrap nav-in">
+    <a class="logo" href="https://flashpointdb.com/">FLASHPOINT<span class="cursor" aria-hidden="true">_</span></a>
+    <nav class="links" aria-label="Sections">
+      <a href="#architecture">Architecture</a>
+      <a href="#code">Connect</a>
+      <a href="#why">Why</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+    <div class="nav-right">
+      <a class="ghost" href="https://github.com/prabodh1194/flashpoint">GitHub</a>
+      <a class="ghost" href="#cta">Waitlist</a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+  <section class="hero">
+    <div class="wrap hero-in">
+      <div>
+        <p class="eyebrow">Spark Connect · AWS ECS · SQL</p>
+        <h1>Spark Connect on ECS. <em>Zero cluster management.</em></h1>
+        <p class="sub">A Snowflake-like SQL workspace on your own AWS infrastructure, in front of stock
+           Apache Spark.</p>
+        <div class="hero-cta">
+          <a class="btn" href="#cta">Deploy your first Spark Connect cluster</a>
+          <a class="alt" href="quickstart.html">or run it locally</a>
+        </div>
+      </div>
+      <figure class="shot">
+        <img src="profile-tree.png" width="2000" height="1333"
+             alt="A Flashpoint query profile: result-at-top operator tree with per-node duration and share of execution time.">
+        <figcaption>every query renders as an operator tree, not a stage list</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section id="architecture">
+    <div class="wrap">
+      <div class="step"><span class="n">01</span><span class="eyebrow" style="color:var(--ink-3)">Architecture</span></div>
+      <h2>The client is decoupled from the cluster.</h2>
+      <p class="lede">Spark Connect splits the client from the server. Your notebook, DataFrame code or SQL
+         client holds a thin gRPC connection; the engine lives in its own ECS task, launched on demand.</p>
+      <figure class="diagram">
+        <svg viewBox="0 0 900 300" role="img" aria-label="Client to gateway to an ECS Spark driver and executors, state in DynamoDB, tables on S3.">
+          <defs>
+            <marker id="arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+              <path d="M0 0 L10 5 L0 10 z" fill="#f59e0b"/>
+            </marker>
+            <marker id="arwd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+              <path d="M0 0 L10 5 L0 10 z" fill="#5a6d6d"/>
+            </marker>
+          </defs>
+          <rect x="16" y="96" width="150" height="86" rx="8" fill="#0f1416" stroke="#1f2a2e"/>
+          <text x="91" y="128" text-anchor="middle" fill="#e9f0ef" font-family="IBM Plex Sans" font-size="14" font-weight="600">Client</text>
+          <text x="91" y="148" text-anchor="middle" fill="#93a7a6" font-family="IBM Plex Mono" font-size="11">notebook · dataframe</text>
+          <text x="91" y="164" text-anchor="middle" fill="#93a7a6" font-family="IBM Plex Mono" font-size="11">sql · any gRPC client</text>
+
+          <line x1="170" y1="139" x2="236" y2="139" stroke="#f59e0b" stroke-width="1.6" marker-end="url(#arw)"/>
+          <text x="203" y="128" text-anchor="middle" fill="#fbbf24" font-family="IBM Plex Mono" font-size="10.5">gRPC :15002</text>
+
+          <rect x="240" y="86" width="170" height="106" rx="8" fill="#0f1416" stroke="#f59e0b" stroke-opacity=".4"/>
+          <text x="325" y="118" text-anchor="middle" fill="#e9f0ef" font-family="IBM Plex Sans" font-size="14" font-weight="600">Gateway</text>
+          <text x="325" y="138" text-anchor="middle" fill="#93a7a6" font-family="IBM Plex Mono" font-size="11">stateless · REST</text>
+          <text x="325" y="154" text-anchor="middle" fill="#93a7a6" font-family="IBM Plex Mono" font-size="11">launch · suspend · meter</text>
+          <text x="325" y="176" text-anchor="middle" fill="#fbbf24" font-family="IBM Plex Mono" font-size="10.5">running on EC2</text>
+
+          <line x1="414" y1="139" x2="478" y2="139" stroke="#f59e0b" stroke-width="1.6" marker-end="url(#arw)"/>
+          <text x="446" y="128" text-anchor="middle" fill="#fbbf24" font-family="IBM Plex Mono" font-size="10.5">RunTask</text>
+
+          <rect x="482" y="56" width="230" height="166" rx="8" fill="#0f1416" stroke="#1f2a2e" stroke-dasharray="4 4"/>
+          <text x="597" y="80" text-anchor="middle" fill="#93a7a6" font-family="IBM Plex Mono" font-size="11">ECS Fargate</text>
+          <rect x="500" y="94" width="194" height="46" rx="6" fill="#151c1f" stroke="#1f2a2e"/>
+          <text x="597" y="115" text-anchor="middle" fill="#e9f0ef" font-family="IBM Plex Sans" font-size="12.5">Driver · on-demand</text>
+          <text x="597" y="131" text-anchor="middle" fill="#93a7a6" font-family="IBM Plex Mono" font-size="10.5">Spark Connect server</text>
+          <rect x="500" y="152" width="194" height="46" rx="6" fill="#151c1f" stroke="#1f2a2e"/>
+          <text x="597" y="173" text-anchor="middle" fill="#e9f0ef" font-family="IBM Plex Sans" font-size="12.5">Executors × N · spot</text>
+          <text x="597" y="189" text-anchor="middle" fill="#93a7a6" font-family="IBM Plex Mono" font-size="10.5">2 vCPU / 8 GB each</text>
+
+          <line x1="716" y1="139" x2="782" y2="139" stroke="#f59e0b" stroke-width="1.6" marker-end="url(#arw)"/>
+          <rect x="786" y="96" width="100" height="86" rx="8" fill="#0f1416" stroke="#1f2a2e"/>
+          <text x="836" y="128" text-anchor="middle" fill="#e9f0ef" font-family="IBM Plex Sans" font-size="13" font-weight="600">Amazon S3</text>
+          <text x="836" y="148" text-anchor="middle" fill="#93a7a6" font-family="IBM Plex Mono" font-size="10.5">query results</text>
+          <text x="836" y="164" text-anchor="middle" fill="#93a7a6" font-family="IBM Plex Mono" font-size="10.5">7-day expiry</text>
+
+          <line x1="325" y1="196" x2="325" y2="246" stroke="#5a6d6d" stroke-width="1.4" marker-end="url(#arwd)"/>
+          <rect x="250" y="250" width="150" height="40" rx="8" fill="#0f1416" stroke="#1f2a2e"/>
+          <text x="325" y="275" text-anchor="middle" fill="#93a7a6" font-family="IBM Plex Mono" font-size="11">DynamoDB state</text>
+        </svg>
+        <figcaption>client → gateway → ECS driver + spot executors → Amazon S3; state in DynamoDB</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section id="code">
+    <div class="wrap">
+      <div class="step"><span class="n">02</span><span class="eyebrow" style="color:var(--ink-3)">Connect</span></div>
+      <h2>Two lines to a remote Spark session.</h2>
+      <p class="lede">Create a warehouse, copy the endpoint, point a stock Spark Connect client at it. No
+         cluster to size, no Spark install to reconcile.</p>
+      <pre class="code"><code><span class="c"># launch a warehouse with the REST gateway, then attach a stock client</span>
+<span class="k">from</span> pyspark.sql <span class="k">import</span> SparkSession
+
+spark = (SparkSession.builder
+         .remote(<span class="s">"sc://flashpoint-driver.internal:15002"</span>)
+         .getOrCreate())
+
+spark.sql(<span class="s">"SELECT region, sum(amount) FROM orders GROUP BY region"</span>).show()</code></pre>
+      <p class="note">The REST gateway owns lifecycle and SQL; the gRPC endpoint is the engine. Both speak to
+         the same warehouse.</p>
+    </div>
+  </section>
+
+  <section id="why">
+    <div class="wrap">
+      <div class="step"><span class="n">03</span><span class="eyebrow" style="color:var(--ink-3)">Why</span></div>
+      <h2>Three things you stop doing.</h2>
+      <div class="grid3">
+        <div class="card">
+          <div class="ic">01</div>
+          <h3>Managed ECS orchestration</h3>
+          <p>The gateway runs the driver and spot executors, waits for gRPC, returns the endpoint, and
+             suspends on an idle TTL. You never open the ECS console.</p>
+        </div>
+        <div class="card">
+          <div class="ic">02</div>
+          <h3>Snowflake-like SQL workspace</h3>
+          <p>Worksheet, query profiles, history and a cost center in the box, on your own AWS bill, metered
+             per compute-second.</p>
+        </div>
+        <div class="card">
+          <div class="ic">03</div>
+          <h3>No Spark version lock-in</h3>
+          <p>Stock Spark Connect over gRPC. The driver image pins its Spark, the protocol stays standard, and
+             any compatible client can attach.</p>
+        </div>
+      </div>
+
+      <div class="split">
+        <div>
+          <h3 style="font-size:17px;margin:0 0 var(--s3)">Ships today</h3>
+          <ul class="ticks">
+            <li><strong>Warehouse lifecycle:</strong> create, suspend, resume and resize on demand.</li>
+            <li><strong>SQL worksheet</strong> with results in the grid, and history you can reload.</li>
+            <li><strong>Query profiles</strong> as an operator tree, straight from the Spark UI.</li>
+            <li><strong>Per-second metering</strong> and a cost center beside AWS Cost Explorer.</li>
+            <li><strong>Spark Connect</strong> endpoints for notebooks and DataFrame code.</li>
+          </ul>
+        </div>
+        <figure class="shot">
+          <img src="hld-dark.svg" loading="lazy" alt="Flashpoint high-level architecture diagram.">
+          <figcaption>one control plane, on-demand compute, state in DynamoDB</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section id="faq">
+    <div class="wrap">
+      <div class="step"><span class="n">04</span><span class="eyebrow" style="color:var(--ink-3)">FAQ</span></div>
+      <h2>Questions, answered flatly.</h2>
+      <div style="margin-top:var(--s6)">
+        <details class="faq"><summary>What is Spark Connect on ECS?</summary>
+          <p>Spark Connect is Apache Spark's client-server protocol. Flashpoint runs the server side as an
+             ECS Fargate task: one on-demand driver plus spot executors, addressed over gRPC, created and
+             suspended on demand.</p></details>
+        <details class="faq"><summary>Do I manage the cluster?</summary>
+          <p>No. The gateway launches the driver and executors, waits for gRPC to answer, returns the
+             endpoint, and suspends the warehouse on an idle TTL. Suspended warehouses bill nothing.</p></details>
+        <details class="faq"><summary>Am I locked to a Spark version?</summary>
+          <p>No. The driver image pins its own Spark version and the gateway's client pin tracks it, and the
+             protocol is stock Spark Connect, so any compatible client can attach.</p></details>
+        <details class="faq"><summary>What does it cost?</summary>
+          <p>Per compute-second while a warehouse runs, on your own AWS bill. Suspended warehouses bill
+             nothing, and the Cost Center shows live meters beside Cost Explorer.</p></details>
+      </div>
+    </div>
+  </section>
+
+  <section class="waitlist" id="cta">
+    <div class="wrap wl">
+      <div>
+        <p class="eyebrow">Waitlist</p>
+        <h2 style="margin-top:var(--s3)">Deploy your first Spark Connect cluster.</h2>
+        <p class="lede">Early access opens in batches. Leave an address and you get one email when a batch
+           opens, nothing else. Or run the whole stack locally tonight.</p>
+      </div>
+      <div>
+        <form class="cta" action="#cta" method="post" aria-label="Join the waitlist">
+          <label class="hp" for="hp">Leave this field empty</label>
+          <input class="hp" id="hp" type="text" name="_gotcha" tabindex="-1" autocomplete="off">
+          <label class="hp" for="email">Email address</label>
+          <input id="email" type="email" name="email" required placeholder="you@company.com" autocomplete="email">
+          <button class="btn" type="submit">Join the waitlist</button>
+        </form>
+        <p class="note">One email when signup opens. Stored with the mailing-list provider, never sold or shared.</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap foot-in">
+    <span class="mono">FLASHPOINT_</span>
+    <div style="display:flex;gap:var(--s6);flex-wrap:wrap">
+      <a href="quickstart.html">quickstart</a>
+      <a href="deploy.html">deploy</a>
+      <a href="snowflake-alternative.html">snowflake alternative</a>
+      <a href="https://github.com/prabodh1194/flashpoint">github</a>
+    </div>
+    <span>MIT licensed · built on Apache Spark · not affiliated with the Apache Software Foundation</span>
+  </div>
+</footer>
+
+<!--
+  Analytics: Umami Cloud (cookieless). OWNER: create the site, then uncomment and paste the id.
+  Funnel events below fire once window.umami exists; page_view comes from the snippet.
+<script defer src="https://cloud.umami.is/script.js" data-website-id="REPLACE_WITH_UMAMI_WEBSITE_ID"></script>
+-->
+<script>
+  // OWNER: the single waitlist endpoint. Flip it once to your Buttondown embed-subscribe URL.
+  var WAITLIST_ENDPOINT = 'https://buttondown.email/api/emails/embed-subscribe/REPLACE_WITH_BUTTONDOWN_USERNAME';
+  function track(name){ if (window.umami && window.umami.track) window.umami.track(name, { path: location.pathname }); }
+  document.querySelectorAll('form.cta').forEach(function(f){
+    f.action = WAITLIST_ENDPOINT;
+    f.addEventListener('submit', function(){ track('waitlist_signup'); });
+  });
+  var f75 = false;
+  addEventListener('scroll', function(){
+    if (f75) return;
+    var h = document.documentElement;
+    if ((h.scrollTop + innerHeight) / h.scrollHeight >= 0.75) { f75 = true; track('scroll_75'); }
+  }, { passive: true });
+  document.querySelectorAll('a[href*="quickstart.html"]').forEach(function(a){ a.addEventListener('click', function(){ track('quickstart_click'); }); });
+  document.querySelectorAll('a[href*="github.com"]').forEach(function(a){ a.addEventListener('click', function(){ track('github_click'); }); });
+  document.querySelectorAll('a[href^="#cta"]').forEach(function(a){ a.addEventListener('click', function(){ track('cta_click'); }); });
+</script>
+</body>
+</html>
