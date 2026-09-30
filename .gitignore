@@ -36,3 +36,6 @@ infra/*.tfstate.backup
 infra/*.tfstate.*.backup
 infra/*.tfplan
 infra/dev.tfvars
+
+# IP working notes — keep out of the public repo until a filing decision
+docs/ip-*.md

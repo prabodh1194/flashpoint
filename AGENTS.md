@@ -92,4 +92,6 @@ are first-class; TDD where practical.
 
 `docs/code-flow.md` traces a request end to end. `docs/adr-*.md` record resolved
 decisions. `docs/quickstart.html` and `docs/deploy.html` are the local-run and AWS deploy
-guides. Update docs when a decision or flow changes.
+guides. Update docs when a decision or flow changes. IP working notes (`docs/ip-*.md`) stay
+uncommitted and gitignored: this repo is public, and publishing a mechanism before a filing
+decision is self-disclosed prior art.
