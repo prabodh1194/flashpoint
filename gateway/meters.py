@@ -8,7 +8,7 @@ Schema (table provisioned in infra/dynamodb.tf):
   sk = day:{YYYY-MM-DD}
   attrs: compute_seconds (N), cost_usd (N)
 
-Costs derive from HOURLY_RATE x elapsed wall-clock per warehouse session.
+Costs derive from REAL_HOURLY_RATE x elapsed wall-clock per warehouse session.
 The gateway only bills for the time a warehouse is actually running —
 suspended warehouses cost $0, matching the Snowflake pricing model.
 """
@@ -19,7 +19,7 @@ from decimal import Decimal
 
 import boto3
 
-from config import HOURLY_RATE, METERS_TABLE
+from config import METERS_TABLE, REAL_HOURLY_RATE
 
 log = logging.getLogger(__name__)
 
@@ -65,7 +65,7 @@ def accrue_session(record: dict, now: float | None = None) -> float:
     if now <= checkpoint:
         return 0
     seconds = now - checkpoint
-    rate = HOURLY_RATE.get(record.get('size', 'XS'), HOURLY_RATE['XS'])
+    rate = REAL_HOURLY_RATE.get(record.get('size', 'XS'), REAL_HOURLY_RATE['XS'])
     accrue(record['name'], seconds, seconds / 3600 * rate)
     return seconds
 

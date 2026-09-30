@@ -5,6 +5,7 @@ import time
 
 from fastapi import APIRouter, HTTPException
 
+import budget
 import ecs_tasks
 import meters
 import spark_client
@@ -22,6 +23,8 @@ def create_warehouse(req: CreateWarehouseRequest):
         raise HTTPException(status_code=400, detail=f'unknown size {req.size!r}')
     if store.count_running_warehouses() >= MAX_WAREHOUSES:
         raise HTTPException(status_code=429, detail=f'warehouse cap reached ({MAX_WAREHOUSES} max)')
+    if not budget.can_launch():
+        raise HTTPException(status_code=429, detail='spark budget exhausted for this month')
     name = req.name
     executor_count = SIZES[req.size]
     log.info('Creating warehouse %s (size=%s, executors=%d)', name, req.size, executor_count)
@@ -156,6 +159,8 @@ def resume_warehouse(name: str):
 
     size = s['size']
     executor_count = SIZES[size]
+    if not budget.can_launch():
+        raise HTTPException(status_code=429, detail='spark budget exhausted for this month')
     log.info('Resuming warehouse %s (size=%s)', name, size)
 
     task_arn, task_ip, endpoint, executor_arns = ecs_tasks.launch_driver_with_executors(

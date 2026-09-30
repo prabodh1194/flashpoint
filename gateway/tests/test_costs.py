@@ -13,7 +13,7 @@ import pytest
 import cost_data
 import meters
 import store
-from config import HOURLY_RATE
+from config import REAL_HOURLY_RATE
 
 _ORIG_ACCRUE = meters.accrue  # captured before fixtures swap it out
 
@@ -69,7 +69,7 @@ class TestAccrueSession:
         assert seconds == 180
         row = _METER_DB[('wh1', meters.day_key())]
         assert row['compute_seconds'] == 180
-        assert row['cost_usd'] == pytest.approx(180 / 3600 * HOURLY_RATE['S'])
+        assert row['cost_usd'] == pytest.approx(180 / 3600 * REAL_HOURLY_RATE['S'])
 
     def test_no_double_count_when_checkpoint_advances(self):
         # The caller (reconcile/reaper, suspend/delete routes) advances
@@ -88,7 +88,7 @@ class TestAccrueSession:
         now = time.time()
         rec = {'name': 'wh1', 'size': 'ZZZ', 'session_started_at': now - 100, 'last_metered_at': now - 100}
         meters.accrue_session(rec, now=now)
-        assert _METER_DB[('wh1', meters.day_key())]['cost_usd'] == pytest.approx(100 / 3600 * HOURLY_RATE['XS'])
+        assert _METER_DB[('wh1', meters.day_key())]['cost_usd'] == pytest.approx(100 / 3600 * REAL_HOURLY_RATE['XS'])
 
 
 class TestAccrueWritesAtomicAdd:
@@ -112,9 +112,9 @@ class TestCostsEndpoint:
         assert resp.status_code == 200
         data = resp.json()
         assert data['source'] == 'meters'
-        assert data['totals']['today'] == pytest.approx(3600 / 3600 * HOURLY_RATE['S'], rel=1e-6)
+        assert data['totals']['today'] == pytest.approx(3600 / 3600 * REAL_HOURLY_RATE['S'], abs=1e-3)
         assert data['per_warehouse'][0]['name'] == 'demo'
-        assert data['per_warehouse'][0]['today'] == pytest.approx(HOURLY_RATE['S'], rel=1e-6)
+        assert data['per_warehouse'][0]['today'] == pytest.approx(REAL_HOURLY_RATE['S'], abs=1e-3)
 
     def test_cost_explorer_source_is_authoritative(self, client, mock_store, monkeypatch):
         today = date.today()

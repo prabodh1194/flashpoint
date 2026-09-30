@@ -12,6 +12,7 @@ import asyncio
 import logging
 import time
 
+import budget
 import ecs_tasks
 import meters
 import store
@@ -130,3 +131,47 @@ async def reap_idle_warehouses(spark_client, warehouse_ttl_s: int, cluster: str)
                     )
                 except Exception as exc:
                     log.error('Failed to update reaped warehouse %s in DynamoDB: %s', wid, exc)
+
+
+def enforce_budget(spark_client, cluster: str) -> int:
+    """Suspend every running warehouse once the Spark budget is exhausted.
+
+    Runs as one pass so guard_budget() stays a thin loop. Sets the durable
+    kill switch, so launches stay denied even if the monthly meter lags.
+    Returns how many warehouses were stopped.
+    """
+    if budget.can_launch():
+        return 0
+
+    budget.set_kill_switch(True)
+    spent = budget.month_spend_usd()
+    stopped = 0
+    for record in store.list_warehouses():
+        if record.get('status') != 'running':
+            continue
+        wid = record['name']
+        log.warning('Budget guard: stopping %s (month spend $%.2f)', wid, spent)
+        spark_client.drop(wid)
+        meters.accrue_session(record)
+        for arn in ([record['task_arn']] if record.get('task_arn') else []) + (
+            record.get('executor_arns') or []
+        ):
+            try:
+                ecs_tasks.ecs.stop_task(cluster=cluster, task=arn)
+            except Exception as exc:
+                log.error('Budget guard: failed to stop %s: %s', arn, exc)
+        store.update_warehouse_status(
+            wid, 'suspended', task_arn=None, executor_arns=[], task_ip=None
+        )
+        stopped += 1
+    return stopped
+
+
+async def guard_budget(spark_client, cluster: str):
+    """Background task — enforce the Spark ceiling every 60s."""
+    while True:
+        await asyncio.sleep(60)
+        try:
+            enforce_budget(spark_client, cluster)
+        except Exception as exc:
+            log.error('Budget guard failed: %s', exc)

@@ -20,9 +20,22 @@ QUERY_RESULT_TTL_DAYS = int(os.environ.get('FLASHPOINT_QUERY_RESULT_TTL_DAYS', '
 
 SIZES: dict[str, int] = {'XS': 1, 'S': 2, 'M': 4, 'L': 8, 'XL': 16}
 
-# Hourly rate per warehouse size (USD) — driver + executors, on-demand ceiling.
-# Single source of truth; the web UI reads it from the gateway.
-HOURLY_RATE: dict[str, float] = {'XS': 0.08, 'S': 0.16, 'M': 0.32, 'L': 0.64, 'XL': 1.28}
+# Verified us-east-1 ARM on-demand Fargate rates (Price List API, 2026-09-30).
+# Driver task: 4 vCPU / 16 GB; executor task: 2 vCPU / 8 GB (infra/ecs.tf).
+FARGATE_VCPU_H = 0.03238
+FARGATE_GB_H = 0.00356
+DRIVER_HOURLY_USD = 4 * FARGATE_VCPU_H + 16 * FARGATE_GB_H
+EXECUTOR_HOURLY_USD = 2 * FARGATE_VCPU_H + 8 * FARGATE_GB_H
+
+# Worst-case (executor on-demand) hourly cost per size — used by meters and the guard.
+REAL_HOURLY_RATE: dict[str, float] = {
+    size: DRIVER_HOURLY_USD + count * EXECUTOR_HOURLY_USD for size, count in SIZES.items()
+}
+
+# Spark-only monthly ceiling for the try-it deployment (docs/try-it-design.md §2.6).
+# Fixed idle infra (~$16.50) is assumed spent before this envelope.
+SPARK_BUDGET_USD = float(os.environ.get('FLASHPOINT_SPARK_BUDGET_USD', '3.00'))
+SPARK_BUDGET_MARGIN_USD = float(os.environ.get('FLASHPOINT_SPARK_BUDGET_MARGIN_USD', '0.10'))
 
 # Monthly spend budget (USD) for the Cost Center projection warning.
 MONTHLY_BUDGET_USD = float(os.environ.get('FLASHPOINT_MONTHLY_BUDGET', '20.0'))

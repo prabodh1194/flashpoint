@@ -32,8 +32,10 @@ async def lifespan(app: FastAPI):
     reaper = asyncio.create_task(
         _reconcile_mod.reap_idle_warehouses(spark_client, WAREHOUSE_TTL_S, CLUSTER)
     )
+    budget_guard = asyncio.create_task(_reconcile_mod.guard_budget(spark_client, CLUSTER))
     yield
     reaper.cancel()
+    budget_guard.cancel()
     log.info('Flashpoint gateway shutting down')
 
 
