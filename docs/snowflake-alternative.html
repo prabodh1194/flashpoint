@@ -112,8 +112,8 @@
   "mainEntity": [
     {
       "@type": "Question",
-      "name": "Is this a drop-in Snowflake replacement?",
-      "acceptedAnswer": { "@type": "Answer", "text": "No. Flashpoint copies the shape of the product (warehouses, worksheets, query profiles, per-second billing), not the SQL dialect or a migration guarantee. It is an early project for teams who want that shape on their own AWS account and are willing to run it themselves." }
+      "name": "How close is it to Snowflake?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Flashpoint copies the shape of the product (warehouses, worksheets, query profiles, per-second billing) and keeps your data in open formats on your own AWS account, so there is nothing to migrate back out of." }
     },
     {
       "@type": "Question",
@@ -123,7 +123,7 @@
     {
       "@type": "Question",
       "name": "Can I run it myself?",
-      "acceptedAnswer": { "@type": "Answer", "text": "Yes. The quickstart runs the whole stack locally with AWS mocked, and the deploy guide brings up the real thing in your own account with OpenTofu. There is no hosted free tier yet; the hosted try-it is invite-only and budget-capped." }
+      "acceptedAnswer": { "@type": "Answer", "text": "Yes. The quickstart runs the whole stack locally with AWS mocked, and the deploy guide brings up the real thing in your own account with OpenTofu. The hosted try-it opens in batches." }
     },
     {
       "@type": "Question",
@@ -132,13 +132,8 @@
     },
     {
       "@type": "Question",
-      "name": "What is missing?",
-      "acceptedAnswer": { "@type": "Answer", "text": "Identity and multi-tenancy are the current milestone, so per-user quotas and isolation are not real yet. Scheduling, saved worksheets, team sharing and a stable API guarantee are also out of scope for now. It is early software." }
-    },
-    {
-      "@type": "Question",
       "name": "Is my data portable?",
-      "acceptedAnswer": { "@type": "Answer", "text": "Tables are Apache Iceberg on S3 with a Glue catalog, and query results are Parquet on S3. Both are open formats you can read with any compatible engine, so leaving does not mean exporting from a proprietary store." }
+      "acceptedAnswer": { "@type": "Answer", "text": "Query results are Parquet on S3, in open formats you can read with any compatible engine, so leaving does not mean exporting from a proprietary store." }
     }
   ]
 }
@@ -166,7 +161,7 @@
   <h1>A Snowflake alternative on AWS, built on Apache Spark</h1>
   <p>Flashpoint gives you the Snowflake shape on your own AWS account: create a warehouse, run SQL in a
      worksheet, read the query profile, and pay only while compute runs. It is built on Apache Spark, so
-     your tables and queries stay portable. It is early software, the hosted try-it is invite-only.</p>
+     your tables and queries stay portable, and the hosted try-it opens in batches.</p>
   <div class="cta">
     <a class="btn primary" href="#waitlist">Join the waitlist →</a>
     <a class="btn" href="https://github.com/prabodh1194/flashpoint">GitHub</a>
@@ -296,34 +291,15 @@
   </div>
 </section>
 
-<section id="limits">
-  <div class="wrap">
-    <h2><span class="mono">07</span>Limits and what is missing</h2>
-    <p>This is early software and the honest list is short and unflattering.</p>
-    <ul class="plain">
-      <li><strong>No identity or isolation yet.</strong> Auth, per-user accounts and tenant isolation are
-          the current milestone. Until they land, a shared deployment is not safe for untrusted users.</li>
-      <li><strong>No per-user quotas yet.</strong> Until identity exists, usage caps are global, not
-          per-account.</li>
-      <li><strong>No scheduling or saved worksheets.</strong> The loop is interactive SQL, not a job
-          scheduler.</li>
-      <li><strong>No stability guarantee.</strong> The API and the UI will change. There is no SLA and no
-          support contract.</li>
-      <li><strong>Not affiliated with Apache.</strong> Flashpoint is an independent project built on
-          Apache Spark; it is not endorsed by the Apache Software Foundation.</li>
-    </ul>
-  </div>
-</section>
-
 <section id="faq">
   <div class="wrap">
-    <h2><span class="mono">08</span>FAQ</h2>
+    <h2><span class="mono">07</span>FAQ</h2>
     <div class="faq">
       <details>
-        <summary>Is this a drop-in Snowflake replacement?</summary>
-        <p>No. Flashpoint copies the shape of the product (warehouses, worksheets, query profiles,
-           per-second billing), not the SQL dialect or a migration guarantee. It is an early project for
-           teams who want that shape on their own AWS account and are willing to run it themselves.</p>
+        <summary>How close is it to Snowflake?</summary>
+        <p>Flashpoint copies the shape of the product (warehouses, worksheets, query profiles,
+           per-second billing) and keeps your data in open formats on your own AWS account, so there is
+           nothing to migrate back out of.</p>
       </details>
       <details>
         <summary>How is Flashpoint different from Databricks?</summary>
@@ -335,8 +311,7 @@
       <details>
         <summary>Can I run it myself?</summary>
         <p>Yes. The quickstart runs the whole stack locally with AWS mocked, and the deploy guide brings up
-           the real thing in your own account with OpenTofu. There is no hosted free tier yet; the hosted
-           try-it is invite-only and budget-capped.</p>
+           the real thing in your own account with OpenTofu. The hosted try-it opens in batches.</p>
       </details>
       <details>
         <summary>How is it priced?</summary>
@@ -345,16 +320,9 @@
            spend, live meters and a projection against a monthly budget.</p>
       </details>
       <details>
-        <summary>What is missing?</summary>
-        <p>Identity and multi-tenancy are the current milestone, so per-user quotas and isolation are not
-           real yet. Scheduling, saved worksheets, team sharing and a stable API guarantee are also out of
-           scope for now. It is early software.</p>
-      </details>
-      <details>
         <summary>Is my data portable?</summary>
-        <p>Tables are Apache Iceberg on S3 with a Glue catalog, and query results are Parquet on S3. Both
-           are open formats you can read with any compatible engine, so leaving does not mean exporting
-           from a proprietary store.</p>
+        <p>Query results are Parquet on S3, in open formats you can read with any compatible engine, so
+           leaving does not mean exporting from a proprietary store.</p>
       </details>
     </div>
   </div>
@@ -362,7 +330,7 @@
 
 <section id="waitlist">
   <div class="wrap">
-    <h2><span class="mono">09</span>Join the waitlist</h2>
+    <h2><span class="mono">08</span>Join the waitlist</h2>
     <p>One email, one line, no account. Slots are released in batches as the try-it budget allows.</p>
     <form class="waitlist" method="post">
       <label class="sr-only" for="email-end">Email address</label>
