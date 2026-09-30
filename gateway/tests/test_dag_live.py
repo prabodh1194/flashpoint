@@ -5,6 +5,7 @@ Requires: JAVA_HOME pointing to Java 17, and a local Spark Connect server on
   JAVA_HOME=/opt/homebrew/opt/openjdk@17 uv run pytest tests/test_dag_live.py -v -s
 """
 
+import socket
 import time
 
 import pyspark
@@ -13,8 +14,18 @@ import pytest
 import dag
 
 
+def _spark_connect_up(host: str = '127.0.0.1', port: int = 15002) -> bool:
+    try:
+        with socket.create_connection((host, port), timeout=1):
+            return True
+    except OSError:
+        return False
+
+
 @pytest.fixture(scope='module')
 def spark():
+    if not _spark_connect_up():
+        pytest.skip('Spark Connect not running on :15002')
     spark = pyspark.sql.SparkSession.builder.remote(  # ty: ignore
         'sc://127.0.0.1:15002'
     ).getOrCreate()
