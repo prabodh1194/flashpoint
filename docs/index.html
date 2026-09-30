@@ -3,226 +3,507 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Flashpoint: serverless multi-node Apache Spark with a Snowflake-equivalent UI</title>
-<meta name="description" content="Flashpoint: serverless multi-node Apache Spark on AWS with a Snowflake-equivalent UI. Spark Connect (gRPC) client protocol, ECS Fargate compute, DynamoDB state.">
+<title>Flashpoint DB: a Snowflake-grade warehouse on Apache Spark, in your AWS</title>
+<meta name="description" content="Flashpoint DB is a warehouse experience on stock Apache Spark: SQL worksheet, query profile, cost center. Per-second metering, suspended bills nothing, MIT licensed, runs in your own AWS account.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
-  :root {
-    --bg-base: #0d0e10; --bg-surface: #13151a; --bg-raised: #1c1f27; --bg-overlay: #242834;
-    --border: #2a2f3d; --border-dim: #1e2230;
-    --text-primary: #e8eaf0; --text-secondary: #8b93a8; --text-dim: #4e5568; --text-mono: #c8cfe0;
-    --amber: #f59e0b; --amber-glow: #fbbf24; --amber-dim: #78450a;
-    --amber-bg: rgba(245,158,11,0.08); --amber-border: rgba(245,158,11,0.2);
+  :root{
+    --bg-base:#0d0e10; --bg-surface:#13151a; --bg-raised:#1c1f27; --bg-overlay:#242834;
+    --border:#2a2f3d; --border-dim:#1e2230;
+    --text-primary:#e8eaf0; --text-secondary:#8b93a8; --text-dim:#5c6478; --text-mono:#c8cfe0;
+    --amber:#f59e0b; --amber-glow:#fbbf24; --amber-bg:rgba(245,158,11,.09); --amber-border:rgba(245,158,11,.28);
+    --red:#ef4444; --red-bg:rgba(239,68,68,.08);
+    --r-sm:3px; --r:6px; --r-lg:10px;
+    --ui:'IBM Plex Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    --mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;
+    --s2:8px;--s3:12px;--s4:16px;--s6:24px;--s8:32px;--s12:48px;--s16:64px;--s24:112px;
   }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: var(--bg-base); color: var(--text-primary); font-family: 'IBM Plex Sans', sans-serif; font-size: 15px; line-height: 1.6; -webkit-font-smoothing: antialiased; }
-  .wrap { max-width: 880px; margin: 0 auto; padding: 0 24px; }
-  nav { display: flex; align-items: center; gap: 24px; padding: 16px 24px; border-bottom: 1px solid var(--border-dim); position: sticky; top: 0; background: var(--bg-base); z-index: 10; }
-  nav .logo { font-weight: 600; letter-spacing: 0.5px; color: var(--text-primary); text-decoration: none; }
-  nav .logo span { color: var(--amber); }
-  nav a.nav-link { color: var(--text-secondary); text-decoration: none; font-size: 13px; }
-  nav a.nav-link:hover { color: var(--amber); }
-  nav .spacer { flex: 1; }
-  header { padding: 72px 0 48px; }
-  header .kicker { color: var(--amber); font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 16px; }
-  header h1 { font-size: 44px; font-weight: 600; line-height: 1.15; letter-spacing: -0.5px; margin-bottom: 16px; }
-  header p { color: var(--text-secondary); font-size: 17px; max-width: 620px; }
-  .cta { display: flex; gap: 12px; margin-top: 28px; }
-  .btn { display: inline-block; padding: 10px 18px; border-radius: 8px; font-size: 14px; font-weight: 500; text-decoration: none; border: 1px solid var(--border); color: var(--text-primary); background: var(--bg-raised); }
-  .btn:hover { border-color: var(--amber-border); color: var(--amber-glow); }
-  .btn.primary { background: var(--amber-bg); border-color: var(--amber-border); color: var(--amber-glow); }
-  .btn.primary:hover { background: rgba(245,158,11,0.14); }
-  section { padding: 40px 0; border-top: 1px solid var(--border-dim); }
-  h2 { font-size: 22px; font-weight: 600; margin-bottom: 20px; }
-  h2 .mono { color: var(--amber); font-family: 'IBM Plex Mono', monospace; font-size: 14px; margin-right: 10px; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
-  .card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 10px; padding: 20px; }
-  .card h3 { font-size: 15px; margin-bottom: 8px; }
-  .card h3 span { color: var(--amber); font-family: 'IBM Plex Mono', monospace; font-size: 12px; margin-right: 8px; }
-  .card p { color: var(--text-secondary); font-size: 13.5px; }
-  .card .tag { display: inline-block; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--text-mono); background: var(--bg-overlay); border: 1px solid var(--border); border-radius: 4px; padding: 2px 8px; margin: 10px 4px 0 0; }
-  figure { margin: 24px 0; }
-  figure img { width: 100%; border: 1px solid var(--border); border-radius: 10px; display: block; }
-  figure figcaption { color: var(--text-dim); font-size: 13px; margin-top: 10px; font-family: 'IBM Plex Mono', monospace; }
-  table { width: 100%; border-collapse: collapse; font-size: 14px; }
-  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border-dim); }
-  th { color: var(--text-dim); font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
-  td.mono { font-family: 'IBM Plex Mono', monospace; font-size: 13px; }
-  td.mono em { color: var(--amber); font-style: normal; }
-  footer { padding: 40px 0 64px; color: var(--text-dim); font-size: 13px; border-top: 1px solid var(--border-dim); }
-  footer a { color: var(--text-secondary); text-decoration: none; }
-  footer a:hover { color: var(--amber); }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg-base);color:var(--text-primary);font-family:var(--ui);
+       font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased}
+  img{max-width:100%;display:block;height:auto}
+  a{color:var(--amber-glow);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{max-width:1120px;margin:0 auto;padding:0 24px}
+  .mono{font-family:var(--mono)}
+  .skip{position:absolute;left:-9999px;top:0;background:var(--amber);color:#000;padding:10px 16px;z-index:100}
+  .skip:focus{left:12px;top:12px}
+  :focus-visible{outline:2px solid var(--amber-glow);outline-offset:2px;border-radius:var(--r-sm)}
+  .eyebrow{font-family:var(--mono);font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--amber);margin:0}
+
+  /* nav */
+  header.nav{position:sticky;top:0;z-index:20;background:rgba(13,14,16,.92);backdrop-filter:blur(8px);
+             border-bottom:1px solid var(--border-dim)}
+  .nav-in{display:flex;align-items:center;gap:var(--s8);height:60px}
+  .logo{font-family:var(--mono);font-weight:600;font-size:14px;letter-spacing:.04em;color:var(--text-primary)}
+  .logo .cursor{color:var(--amber)}
+  nav.links{display:flex;gap:var(--s6);font-size:13.5px}
+  nav.links a{color:var(--text-secondary)}
+  nav.links a:hover{color:var(--text-primary)}
+  .nav-right{margin-left:auto;display:flex;align-items:center;gap:var(--s4);font-size:13.5px}
+  .nav-right a.ghost{color:var(--text-secondary)}
+  @media(max-width:900px){nav.links{display:none}}
+
+  /* buttons */
+  .btn{display:inline-flex;align-items:center;gap:8px;font:500 14px/1 var(--ui);padding:12px 18px;
+       border-radius:var(--r);border:1px solid var(--border);background:var(--bg-raised);color:var(--text-primary);cursor:pointer}
+  .btn:hover{border-color:var(--amber-border);color:var(--amber-glow);text-decoration:none}
+  .btn-primary{background:var(--amber);border-color:var(--amber);color:#1a1204;font-weight:600}
+  .btn-primary:hover{background:var(--amber-glow);border-color:var(--amber-glow);color:#1a1204}
+
+  /* hero */
+  .hero{padding:var(--s24) 0 var(--s16)}
+  .hero-in{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:var(--s12);align-items:center}
+  .hero h1{font-size:clamp(30px,4.4vw,52px);line-height:1.08;letter-spacing:-.025em;font-weight:600;margin:var(--s4) 0 0}
+  .hero h1 em{font-style:normal;color:var(--amber)}
+  .hero p.lede{margin:var(--s6) 0 0;font-size:17.5px;color:var(--text-secondary);max-width:56ch}
+  .hero .cta{display:flex;flex-wrap:wrap;gap:var(--s3);margin-top:var(--s8)}
+  .hero .cta .note{font-size:13px;color:var(--text-dim);align-self:center}
+  .shot{border:1px solid var(--border);border-radius:var(--r-lg);overflow:hidden;background:#08090b}
+  .shot img{width:100%}
+  .shot figcaption{border-top:1px solid var(--border-dim);padding:9px 14px;font-family:var(--mono);
+                   font-size:11.5px;color:var(--text-dim);background:var(--bg-surface)}
+  figure{margin:0}
+  @media(max-width:960px){.hero-in{grid-template-columns:minmax(0,1fr)}}
+
+  /* facts */
+  .facts{border-top:1px solid var(--border-dim);border-bottom:1px solid var(--border-dim);background:var(--bg-surface)}
+  .facts-in{display:grid;grid-template-columns:repeat(4,minmax(0,1fr))}
+  .fact{padding:var(--s6) var(--s6);border-left:1px solid var(--border-dim);min-width:0}
+  .fact:first-child{border-left:0;padding-left:0}
+  .fact .n{font-family:var(--mono);font-size:26px;font-weight:500;color:var(--amber-glow);letter-spacing:-.02em}
+  .fact .n em{font-style:normal;font-size:14px;color:var(--text-dim);margin-left:2px}
+  .fact .l{margin-top:2px;font-size:13px;color:var(--text-secondary)}
+  @media(max-width:820px){.facts-in{grid-template-columns:repeat(2,minmax(0,1fr))}.fact{padding:var(--s4) var(--s4)}
+    .fact:nth-child(odd){border-left:0;padding-left:0}}
+  @media(max-width:480px){.facts-in{grid-template-columns:minmax(0,1fr)}
+    .fact{border-left:0;padding-left:0;border-top:1px solid var(--border-dim)}.fact:first-child{border-top:0}}
+
+  /* sections */
+  section.band{padding:var(--s24) 0}
+  section.band + section.band{border-top:1px solid var(--border-dim)}
+  .sec-head{display:flex;align-items:baseline;gap:var(--s3);margin-bottom:var(--s6)}
+  .sec-num{font-family:var(--mono);font-size:12px;color:var(--amber);border:1px solid var(--amber-border);
+           background:var(--amber-bg);border-radius:var(--r-sm);padding:2px 8px}
+  h2{font-size:clamp(24px,3vw,34px);letter-spacing:-.02em;font-weight:600;margin:0;line-height:1.15}
+  h3{font-size:16px;font-weight:600;margin:0 0 var(--s2)}
+  .sec-lede{margin-top:var(--s4);font-size:17px;color:var(--text-secondary);max-width:64ch}
+  .split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:var(--s16);align-items:center;margin-top:var(--s12)}
+  .split.rev{grid-template-columns:minmax(0,1.1fr) minmax(0,1fr)}
+  @media(max-width:960px){.split,.split.rev{grid-template-columns:minmax(0,1fr);gap:var(--s8)}}
+  ul.ticks{list-style:none;margin:0;padding:0}
+  ul.ticks li{position:relative;padding-left:26px;margin:12px 0;color:var(--text-secondary);font-size:15px}
+  ul.ticks li::before{content:"→";position:absolute;left:0;color:var(--amber);font-family:var(--mono)}
+  ul.ticks li strong{color:var(--text-primary);font-weight:600}
+
+  /* bar chart */
+  .chart{margin-top:var(--s12);max-width:820px}
+  .bar{display:grid;grid-template-columns:132px minmax(0,1fr) auto;gap:6px var(--s6);align-items:center;margin-top:var(--s6)}
+  .bar-name{font-size:14.5px;color:var(--text-secondary)}
+  .bar-name.ours{color:var(--text-primary);font-weight:600}
+  .bar-track{height:34px;background:var(--bg-raised);border:1px solid var(--border);border-radius:4px;overflow:hidden;min-width:0}
+  .bar-fill{display:block;height:100%;width:var(--w);min-width:6px;background:#f87171;border-radius:3px;transform-origin:left center}
+  .bar-fill.ours{background:var(--amber)}
+  .bar-val{font-family:var(--mono);font-size:15px;color:var(--text-secondary);white-space:nowrap}
+  .bar-val.ours{color:var(--amber-glow);font-weight:600}
+  .bar-note{grid-column:2 / 4;font-family:var(--mono);font-size:11.5px;color:var(--text-dim);margin:0}
+  .chart.in .bar-fill{animation:grow 1.2s cubic-bezier(.2,.8,.2,1) both}
+  .chart.in .bar:nth-of-type(2) .bar-fill{animation-delay:.2s}
+  @keyframes grow{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+  @media(max-width:600px){.bar{grid-template-columns:minmax(0,1fr) auto;gap:4px var(--s4)}.bar-track{grid-column:1 / -1}.bar-note{grid-column:1 / -1}}
+  /* cards + vpc */
+  .ba{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--s4);margin-top:var(--s12)}
+  .ba-col{background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:var(--s8);min-width:0}
+  .ba-col h3{font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);margin:0 0 var(--s4)}
+  .ba-col ul{list-style:none;margin:0;padding:0}
+  .ba-col li{position:relative;padding-left:22px;margin:12px 0;font-size:15px;color:var(--text-secondary)}
+  .ba-col li::before{position:absolute;left:0;font-family:var(--mono);content:"·";color:var(--text-dim)}
+  .ba-col.after{border-color:var(--amber-border);background:var(--amber-bg)}
+  .ba-col.after h3{color:var(--amber)}
+  .ba-col.after li{color:var(--text-primary)}
+  .ba-col.after li::before{content:"→";color:var(--amber)}
+  @media(max-width:760px){.ba{grid-template-columns:minmax(0,1fr)}}
+  .chart-cap{font-family:var(--mono);font-size:12px;color:var(--text-dim);margin:var(--s4) 0 0;max-width:60ch}
+  .info{margin:var(--s8) 0 0}
+  .info svg{width:100%;height:auto;display:block}
+  .info figcaption{margin-top:var(--s2);font-size:12px;color:var(--text-dim);font-family:var(--mono)}
+  .info.wide{margin-top:var(--s12)}
+  .picks{display:flex;flex-wrap:wrap;gap:var(--s3);list-style:none;margin:var(--s6) 0 0;padding:0}
+  .picks li{font-size:14.5px;color:var(--text-secondary);background:var(--bg-surface);border:1px solid var(--border);border-radius:999px;padding:8px 16px}
+  .picks li strong{color:var(--amber-glow)}
+  .profile{border:1px solid var(--border);border-radius:var(--r-lg);background:var(--bg-surface);overflow:hidden;margin-top:var(--s12)}
+  .prow{display:grid;grid-template-columns:220px minmax(0,1fr) 92px;gap:var(--s6);align-items:center;padding:15px var(--s6);border-top:1px solid var(--border-dim)}
+  .prow:first-child{border-top:0}
+  .pname{font-size:14.5px;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pname.hot{color:var(--text-primary);font-weight:600}
+  .pbar{height:8px;background:var(--bg-raised);border-radius:4px;overflow:hidden;min-width:0}
+  .pbar i{display:block;height:100%;width:var(--w);background:var(--c);border-radius:4px}
+  .pval{font-family:var(--mono);font-size:14px;color:var(--text-primary);text-align:right;white-space:nowrap}
+  @media(max-width:700px){.prow{grid-template-columns:minmax(0,1fr) 72px;gap:6px var(--s4)}.pbar{grid-column:1 / -1}}
+  .vpc{margin:0}
+  .vpc svg{width:100%;height:auto;display:block}
+
+  /* faq */
+  details.faq{border:1px solid var(--border);border-radius:var(--r);background:var(--bg-surface);margin:10px 0;padding:16px 18px}
+  details.faq summary{cursor:pointer;font-weight:600;font-size:15.5px;list-style:none;display:flex;gap:10px}
+  details.faq summary::-webkit-details-marker{display:none}
+  details.faq summary::before{content:"+";color:var(--amber);font-family:var(--mono)}
+  details.faq[open] summary::before{content:"−"}
+  details.faq p{margin:12px 0 0;color:var(--text-secondary);font-size:14.5px}
+
+  /* waitlist */
+  .waitlist{background:var(--bg-surface);border-top:1px solid var(--border-dim)}
+  .wl-in{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--s12);align-items:center}
+  form.wl{display:flex;flex-wrap:wrap;gap:var(--s3);align-items:flex-start}
+  form.wl input[type=email]{flex:1 1 260px;padding:13px 16px;border-radius:var(--r);border:1px solid var(--border);
+    background:var(--bg-base);color:var(--text-primary);font:inherit;font-size:15px}
+  form.wl input[type=email]:invalid:not(:placeholder-shown){border-color:var(--red)}
+  .hp{position:absolute;left:-9999px}
+  .form-note{font-size:12.5px;color:var(--text-dim);margin-top:var(--s3)}
+  @media(max-width:900px){.wl-in{grid-template-columns:minmax(0,1fr);gap:var(--s8)}}
+
+  /* footer */
+  footer.band{border-top:1px solid var(--border-dim);padding:var(--s12) 0;font-size:13.5px;color:var(--text-dim)}
+  .foot-in{display:flex;flex-wrap:wrap;gap:var(--s6);align-items:center;justify-content:space-between}
+  .foot-links{display:flex;flex-wrap:wrap;gap:var(--s6)}
+  footer a{color:var(--text-secondary)}
+  footer a:hover{color:var(--text-primary)}
+  @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{animation:none!important;transition:none!important}}
 </style>
 </head>
 <body>
-<nav>
-  <a class="logo" href="index.html">FLASHPOINT<span>_</span></a>
-  <a class="nav-link" href="serverless-spark-connect.html">serverless spark</a>
-  <a class="nav-link" href="snowflake-alternative.html">snowflake alternative</a>
-  <a class="nav-link" href="quickstart.html">quickstart</a>
-  <a class="nav-link" href="deploy.html">deploy</a>
-  <a class="nav-link" href="mockups.html">ui mockups</a>
-  <a class="nav-link" href="https://github.com/prabodh1194/flashpoint">github</a>
-  <span class="spacer"></span>
-  <a class="nav-link" href="#architecture">architecture</a>
-  <a class="nav-link" href="#monitoring">monitoring</a>
-  <a class="nav-link" href="#cost-center">cost center</a>
-  <a class="nav-link" href="#roadmap">roadmap</a>
-</nav>
+<a class="skip" href="#main">Skip to content</a>
 
-<header class="wrap">
-  <div class="kicker">serverless · spark connect · aws</div>
-  <h1>Serverless multi-node Apache Spark,<br>with a Snowflake-equivalent UI.</h1>
-  <p>Flashpoint is a warehouse-shaped control plane for Apache Spark. Warehouses are clusters of ECS
-     Fargate tasks, an on-demand driver plus spot executors, exposed to SQL clients over the
-     Spark Connect gRPC protocol, with query profiles rendered the way Snowflake taught us to expect.</p>
-  <div class="cta">
-    <a class="btn primary" href="quickstart.html">Run it on your laptop →</a>
-    <a class="btn primary" href="deploy.html">Deploy on AWS →</a>
-    <a class="btn" href="mockups.html">See the UI mockups</a>
-    <a class="btn" href="https://github.com/prabodh1194/flashpoint">GitHub</a>
+<header class="nav">
+  <div class="wrap nav-in">
+    <a class="logo" href="#top">FLASHPOINT&nbsp;DB<span class="cursor" aria-hidden="true">_</span></a>
+    <nav class="links" aria-label="Sections">
+      <a href="#what">What changes</a>
+      <a href="#pricing">What it costs</a>
+      <a href="#vpc">Your VPC</a>
+      <a href="#profile">Query profile</a>
+      <a href="#cost">Cost</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+    <div class="nav-right">
+      <a class="ghost" href="https://github.com/prabodh1194/flashpoint">GitHub</a>
+      <a class="btn btn-primary" href="#waitlist">Join the waitlist</a>
+    </div>
   </div>
 </header>
 
-<section id="how-it-works">
-  <div class="wrap">
-    <h2><span class="mono">01</span>what it is</h2>
-    <div class="grid">
-      <div class="card">
-        <h3><span>↗</span>Spark Connect</h3>
-        <p>Stock Apache Spark Connect as the client protocol. No fork, plugin hooks only. gRPC from
-           any language to a SQL engine.</p>
-        <span class="tag">gRPC</span><span class="tag">stock spark</span>
+<main id="main">
+  <section class="hero" id="top">
+    <div class="wrap hero-in">
+      <div>
+        <p class="eyebrow">Warehouse UX · open engine · your AWS</p>
+        <h1>A Snowflake-grade warehouse. On stock Spark. <em>In your account.</em></h1>
+        <p class="lede">Warehouse UX on stock Apache Spark. Metered by the second. In your own AWS account.</p>
+        <div class="cta">
+          <a class="btn btn-primary" href="#waitlist">Join the waitlist</a>
+          <a class="btn" href="quickstart.html">Run it locally in 2 minutes</a>
+        </div>
       </div>
-      <div class="card">
-        <h3><span>▦</span>Warehouses</h3>
-        <p>A warehouse is a cluster of ECS Fargate tasks: one on-demand driver, n spot executors.
-           T-shirt sizing maps to vCPU / memory / node count.</p>
-        <span class="tag">on-demand driver</span><span class="tag">spot executors</span>
-      </div>
-      <div class="card">
-        <h3><span>◫</span>Gateway</h3>
-        <p>A stateless control plane, all state in DynamoDB, never in-memory. Creates, suspends and
-           resumes warehouses, routes queries, meters usage.</p>
-        <span class="tag">fastapi</span><span class="tag">dynamodb</span>
-      </div>
-      <div class="card">
-        <h3><span>◔</span>Query profiles</h3>
-        <p>Every query renders as an operator tree: per-node duration, % of execution time, column
-           treatments, parsed from the stock Spark UI REST API.</p>
-        <span class="tag">spark ui api</span><span class="tag">dag</span>
-      </div>
+      <figure class="shot">
+        <img src="mock-worksheet.png" width="3360" height="1864"
+             alt="The Flashpoint DB worksheet: SQL editor beside a results grid, with a running warehouse shown in the header.">
+        <figcaption>worksheet: SQL on the left, results on the right, compute metered underneath</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <div class="facts">
+    <div class="wrap facts-in">
+      <div class="fact"><div class="n">~30<em>s</em></div><div class="l">cold start in our tests</div></div>
+      <div class="fact"><div class="n">in-VPC</div><div class="l">compute, state and results stay in your account</div></div>
+      <div class="fact"><div class="n">per-second</div><div class="l">metering, no minimum, $0 compute when suspended</div></div>
+      <div class="fact"><div class="n">MIT</div><div class="l">read the code, own the deployment</div></div>
     </div>
   </div>
-</section>
 
-<section id="architecture">
-  <div class="wrap">
-    <h2><span class="mono">02</span>architecture</h2>
-    <figure>
-      <img src="flashpoint-hld.svg" alt="Flashpoint high-level architecture diagram">
-      <figcaption>high-level design, client → gateway → driver (Fargate, on-demand) + executors (Fargate, spot); state in DynamoDB; tables on Iceberg with a Glue catalog.</figcaption>
-    </figure>
-  </div>
-</section>
-
-<section id="monitoring">
-  <div class="wrap">
-    <h2><span class="mono">03</span>the monitoring story</h2>
-    <p>Snowflake's killer feature is the query profile: every operator shows what it did, how long it
-       took, and how it treated your columns. Flashpoint grew the same UI from the stock Spark UI,
-       no fork, no agent. Every node is a card: operator name, % of execution time (color-heated),
-       duration, rows in/out. Codegen stages render as slim chips; every profile has a reload-safe URL.</p>
-    <figure>
-      <img src="profile-tree.png" alt="A flashpoint query profile, result-at-top operator tree with join fanning out side-by-side">
-      <figcaption>a real profile: result-at-top tree, join fans its inputs out side-by-side, WholeStageCodegen stages as slim chips.</figcaption>
-    </figure>
-  </div>
-</section>
-
-<section id="cost-center">
-  <div class="wrap">
-    <h2><span class="mono">04</span>cost center</h2>
-    <p>Every resource with its state, uptime and monthly estimate, drivers and executors joined to
-       the warehouse they serve, the always-on gateway EC2, and the tag-registry infra. Daily spend
-       comes from Cost Explorer (tag-filtered, ~24h lag) fused with live per-warehouse meters for
-       today, projected against a monthly budget with spike-day flags. Every row deep-links to the
-       AWS console.</p>
-    <figure>
-      <img src="cost-center.png" alt="Flashpoint Cost Center, stat strip, daily spend chart, resource inventory with monthly estimates, per-warehouse spend table">
-      <figcaption>cost center: budget projection in the stat strip, spike days in red, console deep-links on every resource.</figcaption>
-    </figure>
-  </div>
-</section>
-
-<section id="deploy">
-  <div class="wrap">
-    <h2><span class="mono">05</span>deploy on aws</h2>
-    <div class="grid">
-      <div class="card">
-        <h3><span>▲</span>One apply</h3>
-        <p>OpenTofu brings up the whole production shape: t4g.small EC2 gateway (self-boots via
-           user-data), Spark Connect drivers on Fargate with spot executors, DynamoDB state. The
-           gateway clones <code>main</code>, so every deploy ships the current UI and API.</p>
-        <span class="tag">tofu</span><span class="tag">~15 min</span>
-      </div>
-      <div class="card">
-        <h3><span>$</span>What it costs</h3>
-        <p>~$14/mo baseline while idle (gateway + EBS + pennies), warehouses bill only while
-           running (~$0.08/h for XS). Real Cost Center numbers from Cost Explorer, tag-filtered.</p>
-        <span class="tag">~$14/mo idle</span><span class="tag">$0.08/h XS</span>
+  <section class="band" id="what">
+    <div class="wrap">
+      <div class="sec-head"><span class="sec-num">01</span><span class="eyebrow" style="color:var(--text-dim)">What changes</span></div>
+      <h2>You already run Spark. This gives it a warehouse face.</h2>
+      <p class="sec-lede">The engine stays Apache Spark. What changes is the layer your team works in.</p>
+      <div class="ba">
+        <div class="ba-col">
+          <h3>Spark today</h3>
+          <ul>
+            <li>Notebooks stapled to a long-lived cluster</li>
+            <li>Job logs instead of a query profile</li>
+            <li>A cluster bill you cannot attribute per query</li>
+          </ul>
+        </div>
+        <div class="ba-col after">
+          <h3>Spark with Flashpoint</h3>
+          <ul>
+            <li>A worksheet, and warehouses you create, suspend and resize</li>
+            <li>An operator-tree query profile for every query</li>
+            <li>Per-second metering, and a cost center beside the AWS bill</li>
+          </ul>
+        </div>
       </div>
     </div>
-    <p style="margin-top:16px">
-      <a class="btn primary" href="deploy.html">Step-by-step deploy guide →</a>
-    </p>
-  </div>
-</section>
+  </section>
 
-<section id="roadmap">
-  <div class="wrap">
-    <h2><span class="mono">06</span>roadmap</h2>
-    <table>
-      <tr><th>milestone</th><th>layer</th><th>scope</th></tr>
-      <tr><td class="mono">Ember</td><td>storage + compute</td><td>driver, executors, shuffle, benchmarks</td></tr>
-      <tr><td class="mono">Kindle</td><td>warehouse</td><td>manager, router, metering, sizing</td></tr>
-      <tr><td class="mono">Forge</td><td>catalog</td><td>Iceberg, Glue, IAM isolation</td></tr>
-      <tr><td class="mono">Beacon</td><td>ui</td><td>worksheet, profile DAG, warehouse manager, data explorer</td></tr>
-    </table>
-    <p style="margin-top:16px;color:var(--text-dim);font-size:13.5px">Status, issues and milestones are tracked on the
-      <a href="https://github.com/users/prabodh1194/projects/3" style="color:var(--amber)">GitHub project board</a>.
-      Architecture decisions live in <span style="font-family:'IBM Plex Mono',monospace;font-size:12px">docs/adr-*.md</span>.</p>
-  </div>
-</section>
-
-<section id="learn">
-  <div class="wrap">
-    <h2><span class="mono">07</span>learn more</h2>
-    <div class="grid">
-      <a class="card" href="serverless-spark-connect.html" style="text-decoration:none">
-        <h3><span>↗</span>Serverless Spark Connect on AWS</h3>
-        <p>How a warehouse is launched on demand, how Spark Connect and the query profile work, and
-           what the product is not yet.</p>
-        <span class="tag">technical</span>
-      </a>
-      <a class="card" href="snowflake-alternative.html" style="text-decoration:none">
-        <h3><span>$</span>A Snowflake alternative on AWS</h3>
-        <p>Why not cluster-managed Spark, what maps to what, the cost model, and the honest list of
-           limits.</p>
-        <span class="tag">commercial</span>
-      </a>
+  <section class="band" id="pricing">
+    <div class="wrap">
+      <div class="sec-head"><span class="sec-num">02</span><span class="eyebrow" style="color:var(--text-dim)">What it costs</span></div>
+      <h2>An hour of the smallest size.</h2>
+      <p class="sec-lede">Per compute-second, and only while a warehouse runs. A suspended warehouse bills nothing.</p>
+      <div class="chart">
+        <div class="bar">
+          <span class="bar-name">Snowflake</span>
+          <span class="bar-track"><span class="bar-fill" style="--w:100%"></span></span>
+          <span class="bar-val">$2.00 / hour</span>
+          <span class="bar-note">1 credit/hour at list, 60-second minimum each start</span>
+        </div>
+        <div class="bar">
+          <span class="bar-name ours">Flashpoint DB</span>
+          <span class="bar-track"><span class="bar-fill ours" style="--w:4%"></span></span>
+          <span class="bar-val ours">$0.08 / hour</span>
+          <span class="bar-note">one executor on the rate card, no minimum; the driver meters separately</span>
+        </div>
+      </div>
     </div>
-  </div>
-</section>
+  </section>
 
-<footer class="wrap">
-  <p>Flashpoint · MIT licensed ·
-    <a href="serverless-spark-connect.html">serverless spark</a> ·
-    <a href="snowflake-alternative.html">snowflake alternative</a> ·
-    <a href="quickstart.html">quickstart</a> ·
-    <a href="deploy.html">deploy</a> ·
-    <a href="https://github.com/prabodh1194/flashpoint">github.com/prabodh1194/flashpoint</a></p>
+  <section class="band" id="vpc">
+    <div class="wrap">
+      <div class="sec-head"><span class="sec-num">03</span><span class="eyebrow" style="color:var(--text-dim)">Your VPC</span></div>
+      <h2>Data never leaves your account.</h2>
+      <p class="sec-lede">Gateway, driver, executors and results all run inside your VPC, on your IAM and your S3, reached over an endpoint you open.</p>
+      <figure class="vpc">
+            <svg viewBox="0 0 540 300" role="img" aria-label="A notebook connects over gRPC into your own AWS VPC, which holds the gateway, the Spark driver and executors, and S3.">
+              <title>Data stays in your VPC</title>
+              <defs><marker id="va" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#f59e0b"/></marker></defs>
+              <rect x="140" y="10" width="390" height="244" rx="12" fill="none" stroke="#f59e0b" stroke-opacity=".45" stroke-dasharray="6 5"/>
+              <text x="164" y="32" fill="#5c6478" font-family="IBM Plex Mono" font-size="10.5" letter-spacing="1">YOUR AWS ACCOUNT · VPC</text>
+              <rect x="6" y="120" width="112" height="60" rx="8" fill="#13151a" stroke="#2a2f3d"/>
+              <text x="62" y="145" text-anchor="middle" fill="#e8eaf0" font-family="IBM Plex Sans" font-size="12.5">notebook</text>
+              <text x="62" y="162" text-anchor="middle" fill="#8b93a8" font-family="IBM Plex Mono" font-size="10">SQL client</text>
+              <line x1="118" y1="150" x2="158" y2="150" stroke="#f59e0b" stroke-width="1.6" marker-end="url(#va)"/>
+              <text x="138" y="138" text-anchor="middle" fill="#fbbf24" font-family="IBM Plex Mono" font-size="10">gRPC</text>
+              <rect x="170" y="118" width="130" height="64" rx="8" fill="#13151a" stroke="#f59e0b" stroke-opacity=".4"/>
+              <text x="235" y="143" text-anchor="middle" fill="#e8eaf0" font-family="IBM Plex Sans" font-size="12.5">Gateway</text>
+              <text x="235" y="160" text-anchor="middle" fill="#8b93a8" font-family="IBM Plex Mono" font-size="10">stateless REST</text>
+              <line x1="300" y1="150" x2="328" y2="150" stroke="#f59e0b" stroke-width="1.6" marker-end="url(#va)"/>
+              <rect x="334" y="52" width="182" height="122" rx="10" fill="#0f1416" stroke="#2a2f3d" stroke-dasharray="4 4"/>
+              <text x="425" y="72" text-anchor="middle" fill="#8b93a8" font-family="IBM Plex Mono" font-size="10">ECS Fargate</text>
+              <rect x="346" y="82" width="158" height="38" rx="6" fill="#151c1f" stroke="#60a5fa" stroke-opacity=".5"/>
+              <text x="425" y="106" text-anchor="middle" fill="#e8eaf0" font-family="IBM Plex Sans" font-size="12">Driver · on-demand</text>
+              <rect x="346" y="126" width="158" height="38" rx="6" fill="#151c1f" stroke="#60a5fa" stroke-opacity=".5"/>
+              <text x="425" y="150" text-anchor="middle" fill="#e8eaf0" font-family="IBM Plex Sans" font-size="12">Executors · spot</text>
+              <line x1="425" y1="174" x2="425" y2="198" stroke="#2a2f3d" stroke-width="1.4"/>
+              <rect x="346" y="200" width="158" height="40" rx="6" fill="#13151a" stroke="#34d399" stroke-opacity=".5"/>
+              <text x="425" y="225" text-anchor="middle" fill="#a7f3d0" font-family="IBM Plex Sans" font-size="12">S3 · results</text>
+            </svg>
+          </figure>
+    </div>
+  </section>
+
+  <section class="band" id="profile">
+    <div class="wrap">
+      <div class="sec-head"><span class="sec-num">04</span><span class="eyebrow" style="color:var(--text-dim)">The proof</span></div>
+      <h2>Where the query spent its time.</h2>
+      <p class="sec-lede">Not a job log. The operators ranked by duration, the slow one first.</p>
+      <div class="profile">
+        <div class="prow">
+          <span class="pname hot">HashAggregate</span>
+          <span class="pbar"><i style="--w:100%;--c:#f59e0b"></i></span>
+          <span class="pval">4.8 s</span>
+        </div>
+        <div class="prow">
+          <span class="pname">BroadcastHashJoin</span>
+          <span class="pbar"><i style="--w:63%;--c:#fb923c"></i></span>
+          <span class="pval">3.0 s</span>
+        </div>
+        <div class="prow">
+          <span class="pname">Scan parquet · orders</span>
+          <span class="pbar"><i style="--w:7%;--c:#34d399"></i></span>
+          <span class="pval">318 ms</span>
+        </div>
+        <div class="prow">
+          <span class="pname">Scan parquet · customers</span>
+          <span class="pbar"><i style="--w:6%;--c:#34d399"></i></span>
+          <span class="pval">301 ms</span>
+        </div>
+        <div class="prow">
+          <span class="pname">Exchange</span>
+          <span class="pbar"><i style="--w:3%;--c:#60a5fa"></i></span>
+          <span class="pval">155 ms</span>
+        </div>
+        <div class="prow">
+          <span class="pname">AdaptiveSparkPlan</span>
+          <span class="pbar"><i style="--w:1%;--c:#8b93a8"></i></span>
+          <span class="pval">29 ms</span>
+        </div>
+      </div>
+      <ul class="picks">
+        <li>Find the slow step, not the slow job</li>
+        <li>Share any query as a link</li>
+        <li>See what the query cost</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="band" id="cost">
+    <div class="wrap">
+      <div class="sec-head"><span class="sec-num">05</span><span class="eyebrow" style="color:var(--text-dim)">The bill</span></div>
+      <h2>You pay for the seconds it runs.</h2>
+      <p class="sec-lede">Metered per compute-second while a warehouse is up. Suspended warehouses bill nothing.</p>
+      <figure class="info wide">
+        <svg viewBox="0 0 1080 300" role="img" aria-label="Chart: metered spend sits at the running rate while a warehouse runs, drops to zero while it is suspended, and resumes when it starts again.">
+          <title>You pay only while it runs</title>
+          <line x1="120" y1="70" x2="1040" y2="70" stroke="#1e2230" stroke-dasharray="3 5"/>
+          <line x1="120" y1="240" x2="1040" y2="240" stroke="#2a2f3d"/>
+          <text x="106" y="76" text-anchor="end" fill="#8b93a8" font-family="IBM Plex Mono" font-size="14">$0.08/h</text>
+          <text x="106" y="246" text-anchor="end" fill="#8b93a8" font-family="IBM Plex Mono" font-size="14">$0</text>
+          <polyline points="120,240 190,70 430,70 430,240 710,240 780,70 1000,70 1000,240 1040,240" fill="none" stroke="#f59e0b" stroke-width="3" stroke-linejoin="round"/>
+          <text x="310" y="52" text-anchor="middle" fill="#fbbf24" font-family="IBM Plex Mono" font-size="14">running</text>
+          <text x="570" y="222" text-anchor="middle" fill="#8b93a8" font-family="IBM Plex Mono" font-size="14">suspended · $0</text>
+          <text x="890" y="52" text-anchor="middle" fill="#fbbf24" font-family="IBM Plex Mono" font-size="14">running</text>
+          <text x="1040" y="282" text-anchor="end" fill="#5c6478" font-family="IBM Plex Mono" font-size="12">time</text>
+        </svg>
+      </figure>
+      <ul class="picks">
+        <li>Per compute-second, no minimum</li>
+        <li>Suspended is <strong>$0 compute</strong></li>
+        <li>Live meters beside the AWS bill</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="band" id="lifecycle">
+    <div class="wrap">
+      <div class="sec-head"><span class="sec-num">06</span><span class="eyebrow" style="color:var(--text-dim)">Lifecycle</span></div>
+      <h2>Create it, run it, suspend it.</h2>
+      <p class="sec-lede">A warehouse starts on demand and stops when idle. You never manage a node.</p>
+      <figure class="info wide">
+        <svg viewBox="0 0 1080 260" role="img" aria-label="A warehouse is created in about 30 seconds, runs metered per second, suspends to zero cost when idle, and resumes on activity.">
+          <title>Warehouse lifecycle</title>
+          <defs><marker id="la" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#f59e0b"/></marker></defs>
+
+          <rect x="40" y="60" width="280" height="96" rx="10" fill="#13151a" stroke="#2a2f3d"/>
+          <text x="180" y="100" text-anchor="middle" fill="#e8eaf0" font-family="IBM Plex Sans" font-size="17" font-weight="600">Create</text>
+          <text x="180" y="124" text-anchor="middle" fill="#8b93a8" font-family="IBM Plex Mono" font-size="12.5">tens of seconds on AWS</text>
+
+          <line x1="320" y1="108" x2="392" y2="108" stroke="#f59e0b" stroke-width="1.8" marker-end="url(#la)"/>
+
+          <rect x="400" y="60" width="280" height="96" rx="10" fill="#1b1407" stroke="#f59e0b"/>
+          <text x="540" y="100" text-anchor="middle" fill="#fbbf24" font-family="IBM Plex Sans" font-size="17" font-weight="600">Run</text>
+          <text x="540" y="124" text-anchor="middle" fill="#fbbf24" font-family="IBM Plex Mono" font-size="12.5">metered per compute-second</text>
+
+          <line x1="680" y1="108" x2="752" y2="108" stroke="#f59e0b" stroke-width="1.8" marker-end="url(#la)"/>
+
+          <rect x="760" y="60" width="280" height="96" rx="10" fill="#13151a" stroke="#2a2f3d"/>
+          <text x="900" y="100" text-anchor="middle" fill="#e8eaf0" font-family="IBM Plex Sans" font-size="17" font-weight="600">Suspend</text>
+          <text x="900" y="124" text-anchor="middle" fill="#8b93a8" font-family="IBM Plex Mono" font-size="12.5">$0 compute while idle</text>
+
+          <path d="M900 156 V196 H540 V160" fill="none" stroke="#5a6d6d" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#la)"/>
+          <text x="720" y="216" text-anchor="middle" fill="#5c6478" font-family="IBM Plex Mono" font-size="12">resume on activity</text>
+        </svg>
+      </figure>
+    </div>
+  </section>
+
+  <section class="band" id="faq">
+    <div class="wrap">
+      <div class="sec-head"><span class="sec-num">07</span><span class="eyebrow" style="color:var(--text-dim)">Questions</span></div>
+      <h2>Straight answers.</h2>
+      <div style="margin-top:var(--s8)">
+        <details class="faq"><summary>How close is it to Snowflake?</summary>
+          <p>It copies the shape of the product: the warehouse, the worksheet, the query profile, the
+             per-second billing. Your data stays in open formats, so there is nothing to migrate back out of.</p></details>
+        <details class="faq"><summary>What does it cost?</summary>
+          <p>Per compute-second on a running warehouse. Suspended warehouses bill nothing. Sizes run on a
+             published rate card from $0.08/h for one executor. There are no credits and no per-seat fees.</p></details>
+        <details class="faq"><summary>Where does my data live?</summary>
+          <p>In your AWS account: Iceberg tables and Parquet results on your S3, catalog in your Glue, state
+             in your DynamoDB. Nothing leaves the account.</p></details>
+        <details class="faq"><summary>Can I use it from a notebook or pandas?</summary>
+          <p>Yes, anything that speaks Spark Connect can attach to a warehouse's gRPC endpoint. The REST
+             gateway is there for SQL and lifecycle calls.</p></details>
+      </div>
+    </div>
+  </section>
+
+  <section class="waitlist" id="waitlist">
+    <div class="wrap wl-in">
+      <div>
+        <p class="eyebrow">Waitlist</p>
+        <h2 style="margin-top:var(--s3)">Be there when signup opens.</h2>
+        <p class="sec-lede" style="margin-top:var(--s4)">Early access opens in batches.
+           Leave an address and you will get one email when a batch opens, nothing else, and no newsletter.</p>
+      </div>
+      <div>
+        <form class="wl" action="#waitlist" method="post" aria-label="Join the waitlist">
+          <label class="hp" for="hp">Leave this field empty</label>
+          <input class="hp" id="hp" type="text" name="_gotcha" tabindex="-1" autocomplete="off">
+          <label class="hp" for="wl-email">Email address</label>
+          <input id="wl-email" type="email" name="email" required placeholder="you@company.com" autocomplete="email">
+          <button class="btn btn-primary" type="submit">Join the waitlist</button>
+        </form>
+        <p class="form-note">One email when signup opens. Addresses are stored with the mailing-list provider
+           and never sold or shared.</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="band">
+  <div class="wrap foot-in">
+    <span class="mono">FLASHPOINT&nbsp;DB_</span>
+    <div class="foot-links">
+      <a href="quickstart.html">quickstart</a>
+      <a href="deploy.html">deploy</a>
+      <a href="mockups.html">ui mockups</a>
+      <a href="serverless-spark-connect.html">serverless spark</a>
+      <a href="snowflake-alternative.html">snowflake alternative</a>
+      <a href="https://github.com/prabodh1194/flashpoint">github</a>
+    </div>
+    <span>MIT licensed · built on Apache Spark · not affiliated with the Apache Software Foundation</span>
+  </div>
 </footer>
+<!-- Analytics: Umami Cloud (cookieless, free Hobby tier). OWNER: create the site, then uncomment
+     this one line and paste the website id. Funnel events below no-op until window.umami exists.
+<script defer src="https://cloud.umami.is/script.js" data-website-id="REPLACE_WITH_UMAMI_WEBSITE_ID"></script>
+-->
+<script>
+  // OWNER: the single waitlist endpoint. Flip it once to your Buttondown embed-subscribe URL,
+  // e.g. https://buttondown.email/api/emails/embed-subscribe/<your-username>
+  var WAITLIST_ENDPOINT = 'https://buttondown.email/api/emails/embed-subscribe/REPLACE_WITH_BUTTONDOWN_USERNAME';
+  function track(name) { if (window.umami && window.umami.track) window.umami.track(name, { path: location.pathname }); }
+  document.querySelectorAll('form.wl').forEach(function (f) {
+    f.action = WAITLIST_ENDPOINT;
+    f.addEventListener('submit', function () { track('waitlist_signup'); });
+  });
+  var f75 = false;
+  addEventListener('scroll', function () {
+    if (f75) return;
+    var h = document.documentElement;
+    if ((h.scrollTop + innerHeight) / h.scrollHeight >= 0.75) { f75 = true; track('scroll_75'); }
+  }, { passive: true });
+  document.querySelectorAll('a[href*="quickstart.html"]').forEach(function (a) { a.addEventListener('click', function () { track('quickstart_click'); }); });
+  document.querySelectorAll('a[href*="github.com"]').forEach(function (a) { a.addEventListener('click', function () { track('github_click'); }); });
+  document.querySelectorAll('a[href*="#waitlist"]').forEach(function (a) { a.addEventListener('click', function () { track('cta_click'); }); });
+  (function () {
+    var charts = document.querySelectorAll('.chart');
+    var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce || !('IntersectionObserver' in window)) {
+      charts.forEach(function (c) { c.classList.add('in'); });
+      return;
+    }
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+      });
+    }, { threshold: 0.35 });
+    charts.forEach(function (c) { io.observe(c); });
+  })();
+</script>
 </body>
 </html>
