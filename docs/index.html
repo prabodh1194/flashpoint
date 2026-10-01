@@ -498,13 +498,35 @@
 <script defer src="https://cloud.umami.is/script.js" data-website-id="REPLACE_WITH_UMAMI_WEBSITE_ID"></script>
 -->
 <script>
-  // OWNER: the single waitlist endpoint. Flip it once to your Buttondown embed-subscribe URL,
-  // e.g. https://buttondown.email/api/emails/embed-subscribe/<your-username>
-  var WAITLIST_ENDPOINT = 'https://buttondown.email/api/emails/embed-subscribe/REPLACE_WITH_BUTTONDOWN_USERNAME';
+  // Waitlist endpoint: a Cloudflare Worker on our own account, backed by KV.
+  // It accepts JSON or form-encoded POSTs and dedupes by email.
+  var WAITLIST_ENDPOINT = 'https://waitlist.flashpointdb.com';
   function track(name) { if (window.umami && window.umami.track) window.umami.track(name, { path: location.pathname }); }
   document.querySelectorAll('form.wl').forEach(function (f) {
     f.action = WAITLIST_ENDPOINT;
-    f.addEventListener('submit', function () { track('waitlist_signup'); });
+    f.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var input = f.querySelector('input[type=email]');
+      var button = f.querySelector('button');
+      var note = f.parentNode.querySelector('.form-note');
+      var email = (input.value || '').trim();
+      if (!email) return;
+      button.disabled = true;
+      if (note) note.textContent = 'Adding you to the list...';
+      fetch(WAITLIST_ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email }) })
+        .then(function (r) { return r.json().catch(function () { return {}; }); })
+        .then(function (d) {
+          if (d && d.ok) {
+            if (note) note.textContent = d.already ? 'You are already on the list.' : 'You are on the list. One email when signup opens.';
+            input.value = '';
+            track('waitlist_signup');
+          } else if (note) {
+            note.textContent = 'That address did not look right. Try again.';
+          }
+        })
+        .catch(function () { if (note) note.textContent = 'Could not reach the waitlist. Try again in a moment.'; })
+        .then(function () { button.disabled = false; });
+    });
   });
   var f75 = false;
   addEventListener('scroll', function () {
