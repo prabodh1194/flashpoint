@@ -313,21 +313,7 @@ aws s3 ls</pre>
      <a href="quickstart.html">quickstart</a> ·
      <a href="https://github.com/prabodh1194/flashpoint">github.com/prabodh1194/flashpoint</a></p>
 </footer>
-<script>
-  // First-party pageview beacon: our own Worker, no third party, no cookies.
-  // fetch + keepalive, not sendBeacon: a JSON Blob is not a CORS-safelisted type.
-  (function () {
-    try {
-      var h = location.hostname;
-      if (h !== 'flashpointdb.com' && h !== 'www.flashpointdb.com') return;
-      fetch('https://waitlist.flashpointdb.com/p', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: location.pathname, ref: document.referrer || '' }),
-        keepalive: true
-      });
-    } catch (e) {}
-  })();
-</script>
+<!-- Cloudflare Web Analytics: cookieless, no banner, first-party provider. -->
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "bd7e87646c024b2aae6d5b8db9255ec0"}'></script>
 </body>
 </html>
