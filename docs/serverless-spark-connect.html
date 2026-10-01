@@ -206,45 +206,52 @@
       <p class="lede">Spark Connect splits the client from the server. Your notebook, DataFrame code or SQL
          client holds a thin gRPC connection; the engine lives in its own ECS task, launched on demand.</p>
       <figure class="diagram">
-        <svg viewBox="0 0 900 340" role="img" aria-label="Blueprint of the request path: a client over gRPC to a stateless gateway, then RunTask into ECS Fargate where the driver and executors run, with results in S3 and state in DynamoDB, all inside your AWS account.">
+        <svg viewBox="0 0 900 300" role="img" aria-label="Client to gateway to an ECS Spark driver and executors, state in DynamoDB, tables on S3.">
           <defs>
-            <pattern id="bp-grid" width="20" height="20" patternUnits="userSpaceOnUse">
-              <path d="M20 0H0V20" fill="none" stroke="#1a1f27" stroke-width="1"/>
-            </pattern>
-            <marker id="bp-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#f59e0b"/></marker>
+            <marker id="arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+              <path d="M0 0 L10 5 L0 10 z" fill="#f59e0b"/>
+            </marker>
+            <marker id="arwd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+              <path d="M0 0 L10 5 L0 10 z" fill="#5a6d6d"/>
+            </marker>
           </defs>
-          <rect width="900" height="340" fill="url(#bp-grid)"/>
-          <g stroke="#f59e0b" fill="none" stroke-width="1.2" stroke-opacity=".85">
-            <path d="M40 110H180M40 110V220M180 110V220M40 220H180M180 220V110"/>
-            <path d="M330 110H480M330 110V220M480 110V220M330 220H480M480 220V110"/>
-            <path d="M630 84H866M630 84V246M866 84V246M630 246H866M866 246V84"/>
-            <path d="M180 165H322M480 165H622"/>
-          </g>
-          <g font-family="IBM Plex Mono, monospace">
-            <text x="40" y="98" fill="#8b93a8" font-size="11">01 / CLIENT</text>
-            <text x="52" y="160" fill="#e8eaf0" font-family="IBM Plex Sans, sans-serif" font-size="14">notebook</text>
-            <text x="52" y="180" fill="#5c6478" font-size="11">DataFrame, SQL</text>
+          <rect x="16" y="96" width="150" height="86" rx="8" fill="#0f1416" stroke="#1f2a2e"/>
+          <text x="91" y="128" text-anchor="middle" fill="#e9f0ef" font-family="IBM Plex Sans" font-size="14" font-weight="600">Client</text>
+          <text x="91" y="148" text-anchor="middle" fill="#93a7a6" font-family="IBM Plex Mono" font-size="11">notebook · dataframe</text>
+          <text x="91" y="164" text-anchor="middle" fill="#93a7a6" font-family="IBM Plex Mono" font-size="11">sql · any gRPC client</text>
 
-            <text x="330" y="98" fill="#fbbf24" font-size="11">02 / GATEWAY</text>
-            <text x="342" y="160" fill="#e8eaf0" font-family="IBM Plex Sans, sans-serif" font-size="14">stateless REST</text>
-            <text x="342" y="180" fill="#5c6478" font-size="11">launch, suspend, meter</text>
+          <line x1="170" y1="139" x2="236" y2="139" stroke="#f59e0b" stroke-width="1.6" marker-end="url(#arw)"/>
+          <text x="203" y="128" text-anchor="middle" fill="#fbbf24" font-family="IBM Plex Mono" font-size="10.5">gRPC :15002</text>
 
-            <text x="630" y="72" fill="#8b93a8" font-size="11">03 / ECS FARGATE</text>
-            <text x="642" y="126" fill="#e8eaf0" font-family="IBM Plex Sans, sans-serif" font-size="14">driver</text>
-            <text x="642" y="144" fill="#5c6478" font-size="11">on-demand, Spark Connect</text>
-            <text x="642" y="184" fill="#e8eaf0" font-family="IBM Plex Sans, sans-serif" font-size="14">executors</text>
-            <text x="642" y="202" fill="#5c6478" font-size="11">spot, 2 vCPU / 8 GB</text>
+          <rect x="240" y="86" width="170" height="106" rx="8" fill="#0f1416" stroke="#f59e0b" stroke-opacity=".4"/>
+          <text x="325" y="118" text-anchor="middle" fill="#e9f0ef" font-family="IBM Plex Sans" font-size="14" font-weight="600">Gateway</text>
+          <text x="325" y="138" text-anchor="middle" fill="#93a7a6" font-family="IBM Plex Mono" font-size="11">stateless · REST</text>
+          <text x="325" y="154" text-anchor="middle" fill="#93a7a6" font-family="IBM Plex Mono" font-size="11">launch · suspend · meter</text>
+          <text x="325" y="176" text-anchor="middle" fill="#fbbf24" font-family="IBM Plex Mono" font-size="10.5">running on EC2</text>
 
-            <text x="248" y="152" fill="#fbbf24" font-size="11">gRPC :15002</text>
-            <text x="548" y="152" fill="#fbbf24" font-size="11">RunTask</text>
+          <line x1="414" y1="139" x2="478" y2="139" stroke="#f59e0b" stroke-width="1.6" marker-end="url(#arw)"/>
+          <text x="446" y="128" text-anchor="middle" fill="#fbbf24" font-family="IBM Plex Mono" font-size="10.5">RunTask</text>
 
-            <text x="630" y="274" fill="#8b93a8" font-size="11">04 / RESULTS + STATE</text>
-            <text x="630" y="296" fill="#5c6478" font-size="11">S3, Parquet, 7-day expiry</text>
-            <text x="630" y="314" fill="#5c6478" font-size="11">DynamoDB, warehouse state</text>
+          <rect x="482" y="56" width="230" height="166" rx="8" fill="#0f1416" stroke="#1f2a2e" stroke-dasharray="4 4"/>
+          <text x="597" y="80" text-anchor="middle" fill="#93a7a6" font-family="IBM Plex Mono" font-size="11">ECS Fargate</text>
+          <rect x="500" y="94" width="194" height="46" rx="6" fill="#151c1f" stroke="#1f2a2e"/>
+          <text x="597" y="115" text-anchor="middle" fill="#e9f0ef" font-family="IBM Plex Sans" font-size="12.5">Driver · on-demand</text>
+          <text x="597" y="131" text-anchor="middle" fill="#93a7a6" font-family="IBM Plex Mono" font-size="10.5">Spark Connect server</text>
+          <rect x="500" y="152" width="194" height="46" rx="6" fill="#151c1f" stroke="#1f2a2e"/>
+          <text x="597" y="173" text-anchor="middle" fill="#e9f0ef" font-family="IBM Plex Sans" font-size="12.5">Executors × N · spot</text>
+          <text x="597" y="189" text-anchor="middle" fill="#93a7a6" font-family="IBM Plex Mono" font-size="10.5">2 vCPU / 8 GB each</text>
 
-            <text x="40" y="300" fill="#5c6478" font-size="11">all of it runs inside your AWS account and VPC</text>
-          </g>
+          <line x1="716" y1="139" x2="782" y2="139" stroke="#f59e0b" stroke-width="1.6" marker-end="url(#arw)"/>
+          <rect x="786" y="96" width="100" height="86" rx="8" fill="#0f1416" stroke="#1f2a2e"/>
+          <text x="836" y="128" text-anchor="middle" fill="#e9f0ef" font-family="IBM Plex Sans" font-size="13" font-weight="600">Amazon S3</text>
+          <text x="836" y="148" text-anchor="middle" fill="#93a7a6" font-family="IBM Plex Mono" font-size="10.5">query results</text>
+          <text x="836" y="164" text-anchor="middle" fill="#93a7a6" font-family="IBM Plex Mono" font-size="10.5">7-day expiry</text>
+
+          <line x1="325" y1="196" x2="325" y2="246" stroke="#5a6d6d" stroke-width="1.4" marker-end="url(#arwd)"/>
+          <rect x="250" y="250" width="150" height="40" rx="8" fill="#0f1416" stroke="#1f2a2e"/>
+          <text x="325" y="275" text-anchor="middle" fill="#93a7a6" font-family="IBM Plex Mono" font-size="11">DynamoDB state</text>
         </svg>
+        <figcaption>client → gateway → ECS driver + spot executors → Amazon S3; state in DynamoDB</figcaption>
       </figure>
     </div>
   </section>
