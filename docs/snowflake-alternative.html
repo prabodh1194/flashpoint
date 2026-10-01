@@ -399,18 +399,17 @@
 </script>
 <script>
   // First-party pageview beacon: our own Worker, no third party, no cookies.
-  // Only fires on the production domain, so local previews do not count.
+  // fetch + keepalive, not sendBeacon: a JSON Blob is not a CORS-safelisted type.
   (function () {
     try {
       var h = location.hostname;
       if (h !== 'flashpointdb.com' && h !== 'www.flashpointdb.com') return;
-      var url = 'https://waitlist.flashpointdb.com/p';
-      var payload = JSON.stringify({ path: location.pathname, ref: document.referrer || '' });
-      if (navigator.sendBeacon) {
-        navigator.sendBeacon(url, new Blob([payload], { type: 'application/json' }));
-      } else {
-        fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload, keepalive: true });
-      }
+      fetch('https://waitlist.flashpointdb.com/p', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: location.pathname, ref: document.referrer || '' }),
+        keepalive: true
+      });
     } catch (e) {}
   })();
 </script>
