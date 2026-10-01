@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Warehouse UX for teams that already run Spark on AWS | Flashpoint DB</title>
+<meta name="description" content="Turn an existing Spark footprint on AWS into a warehouse your team can use: SQL worksheet, query profiles and a cost center, no data migration and no rewrite.">
+<link rel="canonical" href="https://flashpointdb.com/for/platform-engineers.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Flashpoint DB">
+<meta property="og:title" content="Warehouse UX for teams that already run Spark on AWS | Flashpoint DB">
+<meta property="og:description" content="Turn an existing Spark footprint on AWS into a warehouse your team can use: SQL worksheet, query profiles and a cost center, no data migration and no rewrite.">
+<meta property="og:url" content="https://flashpointdb.com/for/platform-engineers.html">
+<meta property="og:image" content="https://flashpointdb.com/mock-worksheet.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="robots" content="index, follow">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/persona.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I have to move my data?", "acceptedAnswer": {"@type": "Answer", "text": "No. The warehouse reads what your Spark deployment already reads. There is nothing to migrate to use the control plane."}}, {"@type": "Question", "name": "Do I have to change my jobs?", "acceptedAnswer": {"@type": "Answer", "text": "No. The client protocol is stock Spark Connect. Your DataFrame and Spark SQL code is not rewritten."}}, {"@type": "Question", "name": "Does it replace my cluster?", "acceptedAnswer": {"@type": "Answer", "text": "No. It gives you warehouses on demand next to what you run. You can adopt it one workload at a time."}}, {"@type": "Question", "name": "What do I actually run?", "acceptedAnswer": {"@type": "Answer", "text": "A stateless gateway, an on-demand driver and spot executors, in your own account. Suspend a warehouse and compute stops."}}]}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Flashpoint", "item": "https://flashpointdb.com/"}, {"@type": "ListItem", "position": 2, "name": "for Spark teams", "item": "https://flashpointdb.com/for/platform-engineers.html"}]}</script>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/">FLASHPOINT<span>_</span></a>
+  <span class="sp"></span>
+  <a class="n" href="/serverless-spark-connect.html">technical</a>
+  <a href="cost.html">for cost</a> &middot; <a href="security.html">for security</a>
+  <a class="n" href="https://github.com/prabodh1194/flashpoint">github</a>
+</nav>
+
+<header class="wrap">
+  <p class="kicker">For platform and data infra engineers</p>
+  <h1>You already run Spark. <em>Here is the warehouse.</em></h1>
+  <p class="sub">Keep the engine and the cluster you have. Add the worksheet, the per-query profile and the cost view your team keeps asking for.</p>
+  <div class="cta">
+    <a class="btn" href="#waitlist">Join the waitlist</a>
+    <a class="alt" href="/quickstart.html">or run it locally</a>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <h2><span>01 / the problem</span>The engine is not the problem. The surface is.</h2>
+    <p class="lede">You have clusters, jobs and notebooks. What you do not have is a worksheet, a profile for each query, or a way to see what a query cost. So engineers read job logs, and the bill is a single line item nobody can attribute.</p>
+    <figure class="info"><svg viewBox="0 0 640 260" role="img" aria-label="A Spark cluster and job logs on the left, an empty dashed panel labelled worksheet, query profile and cost per query on the right.">
+<g font-family="IBM Plex Mono, monospace">
+<text x="0" y="16" fill="#5b6f6d" font-size="11" letter-spacing="1.5">TODAY</text>
+<rect x="0" y="38" width="240" height="70" rx="8" fill="#101416" stroke="#233032"/>
+<text x="18" y="68" fill="#e9f1ef" font-family="-apple-system,sans-serif" font-size="15">Your Spark</text>
+<text x="18" y="88" fill="#94a8a6" font-size="11">cluster, jobs, notebooks</text>
+<rect x="0" y="122" width="240" height="46" rx="8" fill="#101416" stroke="#233032"/>
+<text x="18" y="150" fill="#94a8a6" font-size="11">job logs</text>
+<line x1="240" y1="73" x2="330" y2="73" stroke="#f59e0b" stroke-width="1.6" stroke-dasharray="4 4"/>
+<rect x="330" y="38" width="310" height="130" rx="8" fill="none" stroke="#233032" stroke-dasharray="6 5"/>
+<text x="350" y="72" fill="#5b6f6d" font-size="11">WORKSHEET</text>
+<text x="350" y="104" fill="#5b6f6d" font-size="11">QUERY PROFILE</text>
+<text x="350" y="136" fill="#5b6f6d" font-size="11">COST PER QUERY</text>
+</g></svg></figure>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2><span>02 / what changes</span>Same facts, better surface</h2>
+    <div class="ba">
+      <div class="ba-col"><h3>Today</h3><ul><li>Notebooks stapled to a long-lived cluster</li><li>Job logs instead of a query profile</li><li>A cluster bill you cannot attribute per query</li></ul></div>
+      <div class="ba-col after"><h3>With Flashpoint</h3><ul><li>A worksheet your analysts can open</li><li>An operator-tree profile per query</li><li>Per-second metering and a cost center</li></ul></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2><span>03 / how it works</span>Three steps</h2>
+    <div class="grid2"><div class="card"><h3>Create a warehouse</h3><p>One REST call, or the UI. XS is driver plus one executor.</p></div><div class="card"><h3>Attach your client</h3><p>Any Spark Connect client, including PySpark and notebooks. Existing DataFrame and Spark SQL code runs unchanged.</p></div><div class="card"><h3>Read the profile</h3><p>Every query gets an operator tree with duration and share of time, at a URL you can paste into a ticket.</p></div></div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2><span>04 / questions</span>Straight answers</h2>
+    <details class="faq"><summary>Do I have to move my data?</summary><p>No. The warehouse reads what your Spark deployment already reads. There is nothing to migrate to use the control plane.</p></details><details class="faq"><summary>Do I have to change my jobs?</summary><p>No. The client protocol is stock Spark Connect. Your DataFrame and Spark SQL code is not rewritten.</p></details><details class="faq"><summary>Does it replace my cluster?</summary><p>No. It gives you warehouses on demand next to what you run. You can adopt it one workload at a time.</p></details><details class="faq"><summary>What do I actually run?</summary><p>A stateless gateway, an on-demand driver and spot executors, in your own account. Suspend a warehouse and compute stops.</p></details>
+  </div>
+</section>
+
+<section class="waitlist" id="waitlist">
+  <div class="wrap wl">
+    <div>
+      <h2><span></span>Join the waitlist</h2>
+      <p class="lede">Early access opens in batches. One email when a batch opens, nothing else. Or run the whole stack locally tonight.</p>
+    </div>
+    <div>
+      <form class="wlform" action="https://waitlist.flashpointdb.com" method="post" aria-label="Join the waitlist">
+        <label class="hp" for="hp">Leave this field empty</label>
+        <input class="hp" id="hp" type="text" name="_gotcha" tabindex="-1" autocomplete="off">
+        <label class="hp" for="em">Email address</label>
+        <input id="em" type="email" name="email" required placeholder="you@company.com" autocomplete="email">
+        <button class="btn" type="submit">Join</button>
+      </form>
+      <p class="note">One email when signup opens. Stored with our mailing provider, never sold or shared.</p>
+    </div>
+  </div>
+</section>
+
+<footer class="wrap">
+  <p>Flashpoint DB &middot; MIT licensed &middot; built on Apache Spark &middot; not affiliated with the Apache Software Foundation.
+     Independent personal project, not affiliated with, endorsed by or supported by any employer or vendor.</p>
+  <p style="margin-top:8px"><a href="cost.html">for cost</a> &middot; <a href="security.html">for security</a> &middot; <a href="/">home</a> &middot; <a href="/quickstart.html">quickstart</a> &middot; <a href="/serverless-spark-connect.html">technical</a></p>
+</footer>
+
+<script>
+  (function () {
+    var f = document.querySelector('form.wlform');
+    if (!f) return;
+    f.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var input = f.querySelector('input[type=email]');
+      var note = f.parentNode.querySelector('.note');
+      var email = (input.value || '').trim();
+      if (!email) return;
+      fetch('https://waitlist.flashpointdb.com', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email })
+      }).then(function (r) { return r.json(); }).then(function (d) {
+        note.textContent = d && d.ok ? (d.already ? 'You are already on the list.' : 'You are on the list.') : 'That address did not look right.';
+        if (d && d.ok) input.value = '';
+      }).catch(function () { note.textContent = 'Could not reach the waitlist. Try again.'; });
+    });
+  })();
+</script>
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "bd7e87646c024b2aae6d5b8db9255ec0"}'></script>
+</body>
+</html>

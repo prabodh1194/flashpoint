@@ -1,0 +1,59 @@
+:root{--bg:#0a0c0d;--surf:#101416;--raised:#171d1f;--line:#233032;--line2:#182123;
+--ink:#e9f1ef;--ink2:#94a8a6;--dim:#5b6f6d;--amber:#f59e0b;--glow:#fbbf24;--bg2:rgba(245,158,11,.08);--ab:rgba(245,158,11,.3);
+--red:#f87171;--green:#34d399;--blue:#60a5fa;--mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;
+--ui:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.65 var(--ui);-webkit-font-smoothing:antialiased}
+a{color:var(--glow);text-decoration:none}a:hover{text-decoration:underline}
+.wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+nav{display:flex;align-items:center;gap:24px;padding:16px 24px;border-bottom:1px solid var(--line2)}
+nav .logo{font:600 14px var(--mono);color:var(--ink);letter-spacing:.04em}
+nav .logo span{color:var(--amber)}
+nav .sp{flex:1}
+nav a.n{color:var(--ink2);font-size:13.5px}
+header{padding:72px 0 40px}
+.kicker{font:12px var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--amber);margin:0}
+h1{font-size:clamp(30px,4.4vw,46px);line-height:1.08;letter-spacing:-.025em;margin:14px 0 0}
+h1 em{font-style:normal;color:var(--glow)}
+.sub{color:var(--ink2);font-size:18px;max-width:60ch;margin:18px 0 0}
+.btn{display:inline-block;padding:13px 20px;border-radius:6px;font:600 15px var(--ui);background:var(--amber);color:#1a1204;border:1px solid var(--amber)}
+.btn:hover{background:var(--glow);border-color:var(--glow);text-decoration:none}
+.cta{margin-top:28px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.cta .alt{color:var(--ink2);font-size:14px}
+section{padding:56px 0;border-top:1px solid var(--line2)}
+h2{font-size:clamp(23px,3vw,30px);letter-spacing:-.02em;margin:0 0 12px}
+h2 span{font:12px var(--mono);color:var(--dim);display:block;margin-bottom:8px;letter-spacing:.14em}
+.lede{color:var(--ink2);max-width:64ch;margin:0 0 28px}
+.grid2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+.card{background:var(--surf);border:1px solid var(--line);border-radius:10px;padding:20px;min-width:0}
+.card h3{font-size:16px;margin:0 0 8px}
+.card p{margin:0;color:var(--ink2);font-size:14.5px}
+ul.ticks{list-style:none;margin:0;padding:0}
+ul.ticks li{position:relative;padding-left:24px;margin:12px 0;color:var(--ink2)}
+ul.ticks li::before{content:"\2192";position:absolute;left:0;color:var(--amber);font-family:var(--mono)}
+ul.ticks li strong{color:var(--ink)}
+.ba{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+.ba-col{background:var(--surf);border:1px solid var(--line);border-radius:10px;padding:24px;min-width:0}
+.ba-col h3{font:12px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--dim);margin:0 0 12px}
+.ba-col ul{list-style:none;margin:0;padding:0}
+.ba-col li{position:relative;padding-left:22px;margin:12px 0;color:var(--ink2)}
+.ba-col.after{border-color:var(--ab);background:var(--bg2)}
+.ba-col.after h3{color:var(--amber)}
+.ba-col.after li{color:var(--ink)}
+.ba-col.after li::before{content:"\2192";position:absolute;left:0;color:var(--amber);font-family:var(--mono)}
+figure.info{margin:0;background:var(--surf);border:1px solid var(--line);border-radius:10px;padding:18px}
+figure.info svg{display:block;width:100%;height:auto}
+details.faq{border:1px solid var(--line);border-radius:6px;background:var(--surf);margin:10px 0;padding:16px 18px}
+details.faq summary{cursor:pointer;font-weight:600;list-style:none}
+details.faq summary::-webkit-details-marker{display:none}
+details.faq summary::before{content:"+ ";color:var(--amber);font-family:var(--mono)}
+details.faq p{margin:12px 0 0;color:var(--ink2)}
+.waitlist{background:var(--surf)}
+.wl{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:32px;align-items:center}
+form.wlform{display:flex;flex-wrap:wrap;gap:12px}
+form.wlform input[type=email]{flex:1 1 240px;padding:13px 16px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:inherit}
+.hp{position:absolute;left:-9999px}
+.note{color:var(--dim);font-size:12.5px;margin-top:12px}
+footer{padding:40px 0 64px;color:var(--dim);font-size:13px;border-top:1px solid var(--line2)}
+footer a{color:var(--ink2)}
+@media(max-width:820px){.grid2,.ba,.wl{grid-template-columns:minmax(0,1fr)}}

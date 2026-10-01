@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cut the warehouse bill without leaving SQL | Flashpoint DB</title>
+<meta name="description" content="Keep the SQL worksheet and query profiles. Move the compute to your own AWS account, metered per second, with a cost center that shows where the money went.">
+<link rel="canonical" href="https://flashpointdb.com/for/cost.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Flashpoint DB">
+<meta property="og:title" content="Cut the warehouse bill without leaving SQL | Flashpoint DB">
+<meta property="og:description" content="Keep the SQL worksheet and query profiles. Move the compute to your own AWS account, metered per second, with a cost center that shows where the money went.">
+<meta property="og:url" content="https://flashpointdb.com/for/cost.html">
+<meta property="og:image" content="https://flashpointdb.com/mock-worksheet.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="robots" content="index, follow">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/persona.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "How is it priced?", "acceptedAnswer": {"@type": "Answer", "text": "Per compute-second, on your own AWS bill, only while a warehouse is running. There are no credits and no per-seat fees."}}, {"@type": "Question", "name": "What am I actually paying for?", "acceptedAnswer": {"@type": "Answer", "text": "EC2 for the gateway, Fargate for the driver and executors when they run, and storage. All standard AWS line items."}}, {"@type": "Question", "name": "Does suspending really stop the cost?", "acceptedAnswer": {"@type": "Answer", "text": "Compute stops. Storage and the always-on pieces continue, and the cost center shows both."}}, {"@type": "Question", "name": "Can I see it before I commit?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Run it locally with the quickstart, or on your own account with the deploy guide."}}]}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Flashpoint", "item": "https://flashpointdb.com/"}, {"@type": "ListItem", "position": 2, "name": "for cost", "item": "https://flashpointdb.com/for/cost.html"}]}</script>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/">FLASHPOINT<span>_</span></a>
+  <span class="sp"></span>
+  <a class="n" href="/serverless-spark-connect.html">technical</a>
+  <a href="platform-engineers.html">for Spark teams</a> &middot; <a href="security.html">for security</a>
+  <a class="n" href="https://github.com/prabodh1194/flashpoint">github</a>
+</nav>
+
+<header class="wrap">
+  <p class="kicker">For teams with a warehouse bill</p>
+  <h1>Stop renting the shape. <em>Own the compute.</em></h1>
+  <p class="sub">The SQL surface is worth paying for. The compute is not. Run it in your own account, on your own terms, and see it per query.</p>
+  <div class="cta">
+    <a class="btn" href="#waitlist">Join the waitlist</a>
+    <a class="alt" href="/quickstart.html">or run it locally</a>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <h2><span>01 / the problem</span>You are paying for the shape, not the engine.</h2>
+    <p class="lede">A large part of a platform bill buys the SQL surface and the operational visibility, not the bytes scanned. The compute is the part you could run yourself, in your account, on spot capacity, metered by the second.</p>
+    <figure class="info"><svg viewBox="0 0 640 260" role="img" aria-label="A long red bar for managed platform credits above a short amber bar for the compute you actually use in your own account.">
+<g font-family="IBM Plex Mono, monospace">
+<text x="0" y="16" fill="#5b6f6d" font-size="11" letter-spacing="1.5">TODAY</text>
+<text x="0" y="62" fill="#94a8a6" font-size="12">Managed platform credits</text>
+<rect x="0" y="74" width="560" height="28" rx="4" fill="#f87171" fill-opacity=".85"/>
+<text x="0" y="146" fill="#94a8a6" font-size="12">Compute you actually use</text>
+<rect x="0" y="158" width="96" height="28" rx="4" fill="#f59e0b"/>
+<text x="112" y="178" fill="#5b6f6d" font-size="11">your own AWS account</text>
+</g></svg></figure>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2><span>02 / what changes</span>Same facts, better surface</h2>
+    <div class="ba">
+      <div class="ba-col"><h3>Today</h3><ul><li>Credits you have to forecast and explain</li><li>A bill that lags and cannot be attributed</li><li>Idle capacity you keep paying for</li></ul></div>
+      <div class="ba-col after"><h3>With Flashpoint</h3><ul><li>Your AWS bill, at per-second granularity</li><li>Live meters beside Cost Explorer</li><li>Suspend and compute stops</li></ul></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2><span>03 / how it works</span>Three steps</h2>
+    <div class="grid2"><div class="card"><h3>Size it</h3><p>XS is one executor. Grow when a query needs it, shrink when it does not.</p></div><div class="card"><h3>Run it</h3><p>Metering starts at creation and is written per running warehouse, not per credit.</p></div><div class="card"><h3>See it</h3><p>The cost center fuses live meters with Cost Explorer and projects the month against a budget.</p></div></div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2><span>04 / questions</span>Straight answers</h2>
+    <details class="faq"><summary>How is it priced?</summary><p>Per compute-second, on your own AWS bill, only while a warehouse is running. There are no credits and no per-seat fees.</p></details><details class="faq"><summary>What am I actually paying for?</summary><p>EC2 for the gateway, Fargate for the driver and executors when they run, and storage. All standard AWS line items.</p></details><details class="faq"><summary>Does suspending really stop the cost?</summary><p>Compute stops. Storage and the always-on pieces continue, and the cost center shows both.</p></details><details class="faq"><summary>Can I see it before I commit?</summary><p>Yes. Run it locally with the quickstart, or on your own account with the deploy guide.</p></details>
+  </div>
+</section>
+
+<section class="waitlist" id="waitlist">
+  <div class="wrap wl">
+    <div>
+      <h2><span></span>Join the waitlist</h2>
+      <p class="lede">Early access opens in batches. One email when a batch opens, nothing else. Or run the whole stack locally tonight.</p>
+    </div>
+    <div>
+      <form class="wlform" action="https://waitlist.flashpointdb.com" method="post" aria-label="Join the waitlist">
+        <label class="hp" for="hp">Leave this field empty</label>
+        <input class="hp" id="hp" type="text" name="_gotcha" tabindex="-1" autocomplete="off">
+        <label class="hp" for="em">Email address</label>
+        <input id="em" type="email" name="email" required placeholder="you@company.com" autocomplete="email">
+        <button class="btn" type="submit">Join</button>
+      </form>
+      <p class="note">One email when signup opens. Stored with our mailing provider, never sold or shared.</p>
+    </div>
+  </div>
+</section>
+
+<footer class="wrap">
+  <p>Flashpoint DB &middot; MIT licensed &middot; built on Apache Spark &middot; not affiliated with the Apache Software Foundation.
+     Independent personal project, not affiliated with, endorsed by or supported by any employer or vendor.</p>
+  <p style="margin-top:8px"><a href="platform-engineers.html">for Spark teams</a> &middot; <a href="security.html">for security</a> &middot; <a href="/">home</a> &middot; <a href="/quickstart.html">quickstart</a> &middot; <a href="/serverless-spark-connect.html">technical</a></p>
+</footer>
+
+<script>
+  (function () {
+    var f = document.querySelector('form.wlform');
+    if (!f) return;
+    f.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var input = f.querySelector('input[type=email]');
+      var note = f.parentNode.querySelector('.note');
+      var email = (input.value || '').trim();
+      if (!email) return;
+      fetch('https://waitlist.flashpointdb.com', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email })
+      }).then(function (r) { return r.json(); }).then(function (d) {
+        note.textContent = d && d.ok ? (d.already ? 'You are already on the list.' : 'You are on the list.') : 'That address did not look right.';
+        if (d && d.ok) input.value = '';
+      }).catch(function () { note.textContent = 'Could not reach the waitlist. Try again.'; });
+    });
+  })();
+</script>
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "bd7e87646c024b2aae6d5b8db9255ec0"}'></script>
+</body>
+</html>

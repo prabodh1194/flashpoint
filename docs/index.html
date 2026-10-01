@@ -196,6 +196,22 @@
   footer a{color:var(--text-secondary)}
   footer a:hover{color:var(--text-primary)}
   @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{animation:none!important;transition:none!important}}
+  /* persona carousel */
+  .carousel{margin-top:var(--s12);overflow:hidden}
+  .track{display:flex;transition:transform .45s cubic-bezier(.2,.8,.2,1)}
+  .slide{flex:0 0 100%;min-width:0}
+  .slide-in{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:var(--s12);align-items:center}
+  .persona h3{font-size:19px;margin:0 0 var(--s3)}
+  .persona p{color:var(--text-secondary);font-size:15px;margin:0 0 var(--s4);max-width:52ch}
+  .persona .out{font-family:var(--mono);font-size:13px;color:var(--amber-glow)}
+  .p-controls{display:flex;align-items:center;gap:var(--s3);margin-top:var(--s8)}
+  .p-nav{background:var(--bg-raised);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--r);
+         width:36px;height:36px;cursor:pointer;font-size:15px;line-height:1}
+  .p-nav:hover{border-color:var(--amber-border);color:var(--amber-glow)}
+  .dot{width:9px;height:9px;padding:0;border-radius:50%;background:var(--bg-overlay);
+       border:1px solid var(--border);cursor:pointer}
+  .dot.on{background:var(--amber);border-color:var(--amber)}
+  @media(max-width:900px){.slide-in{grid-template-columns:minmax(0,1fr);gap:var(--s6)}}
 </style>
 </head>
 <body>
@@ -248,9 +264,117 @@
     </div>
   </div>
 
+  <section class="band" id="who">
+    <div class="wrap">
+      <div class="sec-head"><span class="sec-num">01</span><span class="eyebrow" style="color:var(--text-dim)">Who this is for</span></div>
+      <h2>Three teams, one product.</h2>
+      <p class="sec-lede">Flashpoint is for people who already run Spark, or already pay for the shape Snowflake
+         taught everyone to expect. Step through them.</p>
+
+      <div class="carousel" tabindex="0" role="region" aria-label="Buyer personas">
+        <div class="track">
+
+          <div class="slide" role="group" aria-label="Persona 1: you already run Spark">
+            <div class="slide-in">
+              <figure class="info">
+                <svg viewBox="0 0 640 300" role="img" aria-label="A Spark cluster and job logs on the left, a dashed empty panel labelled worksheet, query profile and cost per query on the right.">
+                  <g font-family="IBM Plex Mono, monospace">
+                    <text x="0" y="16" fill="#5c6478" font-size="11" letter-spacing="1.5">TODAY</text>
+                    <rect x="0" y="40" width="240" height="74" rx="8" fill="#13151a" stroke="#2a2f3d"/>
+                    <text x="18" y="72" fill="#e8eaf0" font-family="IBM Plex Sans, sans-serif" font-size="15">Your Spark</text>
+                    <text x="18" y="92" fill="#8b93a8" font-size="11">cluster, jobs, notebooks</text>
+                    <rect x="0" y="128" width="240" height="48" rx="8" fill="#13151a" stroke="#2a2f3d"/>
+                    <text x="18" y="157" fill="#8b93a8" font-size="11">job logs</text>
+                    <line x1="240" y1="77" x2="330" y2="77" stroke="#f59e0b" stroke-width="1.6" stroke-dasharray="4 4"/>
+                    <rect x="330" y="40" width="310" height="136" rx="8" fill="none" stroke="#2a2f3d" stroke-dasharray="6 5"/>
+                    <text x="350" y="74" fill="#5c6478" font-size="11">WORKSHEET</text>
+                    <text x="350" y="108" fill="#5c6478" font-size="11">QUERY PROFILE</text>
+                    <text x="350" y="142" fill="#5c6478" font-size="11">COST PER QUERY</text>
+                    <text x="0" y="232" fill="#8b93a8" font-family="IBM Plex Sans, sans-serif" font-size="15">You have the engine. You are missing the warehouse.</text>
+                  </g>
+                </svg>
+              </figure>
+              <div class="persona">
+                <h3>You already run Spark</h3>
+                <p>You have a cluster, jobs and notebooks. What you do not have is a worksheet, a query profile
+                   per query, or a way to see what each query cost.</p>
+                <p class="out">A warehouse face on the Spark you already run.</p>
+                <p style="margin-top:14px"><a href="/for/platform-engineers.html">Read the full breakdown &rarr;</a></p>
+              </div>
+            </div>
+          </div>
+
+          <div class="slide" role="group" aria-label="Persona 2: the bill is the problem">
+            <div class="slide-in">
+              <figure class="info">
+                <svg viewBox="0 0 640 300" role="img" aria-label="Two bars: a long red bar for managed platform credits, and a short amber bar for the compute you actually use in your own AWS account.">
+                  <g font-family="IBM Plex Mono, monospace">
+                    <text x="0" y="16" fill="#5c6478" font-size="11" letter-spacing="1.5">TODAY</text>
+                    <text x="0" y="64" fill="#8b93a8" font-size="12">Managed platform</text>
+                    <rect x="0" y="76" width="560" height="28" rx="4" fill="#f87171" fill-opacity=".85"/>
+                    <text x="0" y="140" fill="#8b93a8" font-size="12">Your own AWS account</text>
+                    <rect x="0" y="152" width="96" height="28" rx="4" fill="#f59e0b"/>
+                    <text x="112" y="172" fill="#5c6478" font-size="11">what you actually use</text>
+                    <text x="0" y="240" fill="#8b93a8" font-family="IBM Plex Sans, sans-serif" font-size="15">Same shape. A different owner and a different bill.</text>
+                  </g>
+                </svg>
+              </figure>
+              <div class="persona">
+                <h3>The bill is the problem</h3>
+                <p>You pay a managed platform mostly to get the SQL surface and the profiles. The compute is the
+                   part you could run yourself, in your account, on spot capacity.</p>
+                <p class="out">Same shape, metered on your AWS bill.</p>
+                <p style="margin-top:14px"><a href="/for/cost.html">Read the full breakdown &rarr;</a></p>
+              </div>
+            </div>
+          </div>
+
+          <div class="slide" role="group" aria-label="Persona 3: data cannot leave the account">
+            <div class="slide-in">
+              <figure class="info">
+                <svg viewBox="0 0 640 300" role="img" aria-label="A client reaches into a dashed boundary labelled your AWS account VPC, which holds Spark and storage. No third party is involved.">
+                  <g font-family="IBM Plex Mono, monospace">
+                    <rect x="150" y="24" width="478" height="230" rx="12" fill="none" stroke="#f59e0b" stroke-opacity=".45" stroke-dasharray="6 5"/>
+                    <text x="168" y="50" fill="#5c6478" font-size="11" letter-spacing="1">YOUR AWS ACCOUNT · VPC</text>
+                    <rect x="180" y="76" width="220" height="66" rx="8" fill="#13151a" stroke="#2a2f3d"/>
+                    <text x="200" y="106" fill="#e8eaf0" font-family="IBM Plex Sans, sans-serif" font-size="14">Spark</text>
+                    <text x="200" y="126" fill="#8b93a8" font-size="11">your IAM, your S3</text>
+                    <rect x="180" y="158" width="220" height="66" rx="8" fill="#13151a" stroke="#34d399" stroke-opacity=".5"/>
+                    <text x="200" y="188" fill="#e8eaf0" font-family="IBM Plex Sans, sans-serif" font-size="14">Results</text>
+                    <text x="200" y="208" fill="#8b93a8" font-size="11">Parquet, your bucket</text>
+                    <rect x="18" y="112" width="110" height="54" rx="8" fill="#1c1f27" stroke="#2a2f3d"/>
+                    <text x="40" y="144" fill="#e8eaf0" font-family="IBM Plex Sans, sans-serif" font-size="13">analyst</text>
+                    <line x1="128" y1="139" x2="148" y2="139" stroke="#f59e0b" stroke-width="1.6"/>
+                    <text x="18" y="204" fill="#5c6478" font-size="11">no third party</text>
+                    <text x="18" y="222" fill="#5c6478" font-size="11">no data export</text>
+                  </g>
+                </svg>
+              </figure>
+              <div class="persona">
+                <h3>Data cannot leave the account</h3>
+                <p>Your security team treats a SaaS data platform as a third-party risk. A control plane in your
+                   own account removes the conversation entirely.</p>
+                <p class="out">Runs in your VPC, on your IAM and your S3.</p>
+                <p style="margin-top:14px"><a href="/for/security.html">Read the full breakdown &rarr;</a></p>
+              </div>
+            </div>
+          </div>
+
+        </div>
+        <div class="p-controls">
+          <button class="p-nav prev" type="button" aria-label="Previous persona">&larr;</button>
+          <button class="p-nav next" type="button" aria-label="Next persona">&rarr;</button>
+          <button class="dot on" type="button" role="tab" aria-label="Persona 1" aria-selected="true"></button>
+          <button class="dot" type="button" role="tab" aria-label="Persona 2" aria-selected="false"></button>
+          <button class="dot" type="button" role="tab" aria-label="Persona 3" aria-selected="false"></button>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <section class="band" id="what">
     <div class="wrap">
-      <div class="sec-head"><span class="sec-num">01</span><span class="eyebrow" style="color:var(--text-dim)">What changes</span></div>
+      <div class="sec-head"><span class="sec-num">02</span><span class="eyebrow" style="color:var(--text-dim)">What changes</span></div>
       <h2>You already run Spark. This gives it a warehouse face.</h2>
       <p class="sec-lede">The engine stays Apache Spark. What changes is the layer your team works in.</p>
       <div class="ba">
@@ -274,9 +398,36 @@
     </div>
   </section>
 
+  <section class="band" id="stack">
+    <div class="wrap">
+      <div class="sec-head"><span class="sec-num">03</span><span class="eyebrow" style="color:var(--text-dim)">Your stack</span></div>
+      <h2>It plugs into what you already run.</h2>
+      <p class="sec-lede">No new engine to learn and no rewrite. A warehouse exposes one Spark Connect endpoint and
+         one REST control plane, and everything else in your stack already speaks those.</p>
+      <div class="ba">
+        <div class="ba-col after">
+          <h3>Clients</h3>
+          <ul>
+            <li>Any Spark Connect client, including PySpark and notebooks</li>
+            <li>SQL through the REST gateway, or straight to the endpoint</li>
+            <li>Existing DataFrame and Spark SQL code, unchanged</li>
+          </ul>
+        </div>
+        <div class="ba-col">
+          <h3>Automation</h3>
+          <ul>
+            <li>Airflow, CI or a script drives lifecycle and queries over the REST API</li>
+            <li>Every query profile is a stable URL you can paste into a PR or a ticket</li>
+            <li>Metering per warehouse, readable next to the AWS bill</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <section class="band" id="pricing">
     <div class="wrap">
-      <div class="sec-head"><span class="sec-num">02</span><span class="eyebrow" style="color:var(--text-dim)">What it costs</span></div>
+      <div class="sec-head"><span class="sec-num">04</span><span class="eyebrow" style="color:var(--text-dim)">What it costs</span></div>
       <h2>An hour of the smallest size.</h2>
       <p class="sec-lede">Per compute-second, and only while a warehouse runs. A suspended warehouse bills nothing.</p>
       <div class="chart">
@@ -298,7 +449,7 @@
 
   <section class="band" id="vpc">
     <div class="wrap">
-      <div class="sec-head"><span class="sec-num">03</span><span class="eyebrow" style="color:var(--text-dim)">Your VPC</span></div>
+      <div class="sec-head"><span class="sec-num">05</span><span class="eyebrow" style="color:var(--text-dim)">Your VPC</span></div>
       <h2>Data never leaves your account.</h2>
       <p class="sec-lede">Gateway, driver, executors and results all run inside your VPC, on your IAM and your S3, reached over an endpoint you open.</p>
       <figure class="vpc">
@@ -332,7 +483,7 @@
 
   <section class="band" id="profile">
     <div class="wrap">
-      <div class="sec-head"><span class="sec-num">04</span><span class="eyebrow" style="color:var(--text-dim)">The proof</span></div>
+      <div class="sec-head"><span class="sec-num">06</span><span class="eyebrow" style="color:var(--text-dim)">The proof</span></div>
       <h2>Where the query spent its time.</h2>
       <p class="sec-lede">Not a job log. The operators ranked by duration, the slow one first.</p>
       <div class="profile">
@@ -377,7 +528,7 @@
 
   <section class="band" id="cost">
     <div class="wrap">
-      <div class="sec-head"><span class="sec-num">05</span><span class="eyebrow" style="color:var(--text-dim)">The bill</span></div>
+      <div class="sec-head"><span class="sec-num">07</span><span class="eyebrow" style="color:var(--text-dim)">The bill</span></div>
       <h2>You pay for the seconds it runs.</h2>
       <p class="sec-lede">Metered per compute-second while a warehouse is up. Suspended warehouses bill nothing.</p>
       <figure class="info wide">
@@ -404,7 +555,7 @@
 
   <section class="band" id="lifecycle">
     <div class="wrap">
-      <div class="sec-head"><span class="sec-num">06</span><span class="eyebrow" style="color:var(--text-dim)">Lifecycle</span></div>
+      <div class="sec-head"><span class="sec-num">08</span><span class="eyebrow" style="color:var(--text-dim)">Lifecycle</span></div>
       <h2>Create it, run it, suspend it.</h2>
       <p class="sec-lede">A warehouse starts on demand and stops when idle. You never manage a node.</p>
       <figure class="info wide">
@@ -437,7 +588,7 @@
 
   <section class="band" id="faq">
     <div class="wrap">
-      <div class="sec-head"><span class="sec-num">07</span><span class="eyebrow" style="color:var(--text-dim)">Questions</span></div>
+      <div class="sec-head"><span class="sec-num">09</span><span class="eyebrow" style="color:var(--text-dim)">Questions</span></div>
       <h2>Straight answers.</h2>
       <div style="margin-top:var(--s8)">
         <details class="faq"><summary>How close is it to Snowflake?</summary>
@@ -490,7 +641,7 @@
       <a href="snowflake-alternative.html">snowflake alternative</a>
       <a href="https://github.com/prabodh1194/flashpoint">github</a>
     </div>
-    <span>MIT licensed · built on Apache Spark · not affiliated with the Apache Software Foundation</span>
+    <span>MIT licensed · built on Apache Spark · not affiliated with the Apache Software Foundation. An independent, personal project, not affiliated with, endorsed by or supported by any employer or vendor.</span>
   </div>
 </footer>
 <!-- Analytics: Umami Cloud (cookieless, free Hobby tier). OWNER: create the site, then uncomment
@@ -554,5 +705,33 @@
 </script>
 <!-- Cloudflare Web Analytics: cookieless, no banner, first-party provider. -->
 <script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "bd7e87646c024b2aae6d5b8db9255ec0"}'></script>
+<script>
+  // Persona carousel: no dependencies, keyboard accessible, respects reduced motion.
+  (function () {
+    var root = document.querySelector('.carousel');
+    if (!root) return;
+    var track = root.querySelector('.track');
+    var slides = root.querySelectorAll('.slide');
+    var dots = root.querySelectorAll('.dot');
+    var i = 0;
+    function go(n) {
+      i = (n + slides.length) % slides.length;
+      track.style.transform = 'translateX(' + (-100 * i) + '%)';
+      dots.forEach(function (d, k) {
+        d.classList.toggle('on', k === i);
+        d.setAttribute('aria-selected', String(k === i));
+      });
+      slides.forEach(function (s, k) { s.setAttribute('aria-hidden', String(k !== i)); });
+    }
+    root.querySelector('.prev').addEventListener('click', function () { go(i - 1); });
+    root.querySelector('.next').addEventListener('click', function () { go(i + 1); });
+    dots.forEach(function (d, k) { d.addEventListener('click', function () { go(k); }); });
+    root.addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowLeft') go(i - 1);
+      if (e.key === 'ArrowRight') go(i + 1);
+    });
+    go(0);
+  })();
+</script>
 </body>
 </html>
