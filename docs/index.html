@@ -302,29 +302,28 @@
       <h2>Data never leaves your account.</h2>
       <p class="sec-lede">Gateway, driver, executors and results all run inside your VPC, on your IAM and your S3, reached over an endpoint you open.</p>
       <figure class="vpc">
-            <svg viewBox="0 0 540 300" role="img" aria-label="A notebook connects over gRPC into your own AWS VPC, which holds the gateway, the Spark driver and executors, and S3.">
-              <title>Data stays in your VPC</title>
+            <svg viewBox="0 0 900 420" role="img" aria-label="Your notebook connects over gRPC into your own AWS account, which holds the gateway, the Fargate driver and executors, and S3, drawn as stacked layers.">
               <defs><marker id="va" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#f59e0b"/></marker></defs>
-              <rect x="140" y="10" width="390" height="244" rx="12" fill="none" stroke="#f59e0b" stroke-opacity=".45" stroke-dasharray="6 5"/>
-              <text x="164" y="32" fill="#5c6478" font-family="IBM Plex Mono" font-size="10.5" letter-spacing="1">YOUR AWS ACCOUNT · VPC</text>
-              <rect x="6" y="120" width="112" height="60" rx="8" fill="#13151a" stroke="#2a2f3d"/>
-              <text x="62" y="145" text-anchor="middle" fill="#e8eaf0" font-family="IBM Plex Sans" font-size="12.5">notebook</text>
-              <text x="62" y="162" text-anchor="middle" fill="#8b93a8" font-family="IBM Plex Mono" font-size="10">SQL client</text>
-              <line x1="118" y1="150" x2="158" y2="150" stroke="#f59e0b" stroke-width="1.6" marker-end="url(#va)"/>
-              <text x="138" y="138" text-anchor="middle" fill="#fbbf24" font-family="IBM Plex Mono" font-size="10">gRPC</text>
-              <rect x="170" y="118" width="130" height="64" rx="8" fill="#13151a" stroke="#f59e0b" stroke-opacity=".4"/>
-              <text x="235" y="143" text-anchor="middle" fill="#e8eaf0" font-family="IBM Plex Sans" font-size="12.5">Gateway</text>
-              <text x="235" y="160" text-anchor="middle" fill="#8b93a8" font-family="IBM Plex Mono" font-size="10">stateless REST</text>
-              <line x1="300" y1="150" x2="328" y2="150" stroke="#f59e0b" stroke-width="1.6" marker-end="url(#va)"/>
-              <rect x="334" y="52" width="182" height="122" rx="10" fill="#0f1416" stroke="#2a2f3d" stroke-dasharray="4 4"/>
-              <text x="425" y="72" text-anchor="middle" fill="#8b93a8" font-family="IBM Plex Mono" font-size="10">ECS Fargate</text>
-              <rect x="346" y="82" width="158" height="38" rx="6" fill="#151c1f" stroke="#60a5fa" stroke-opacity=".5"/>
-              <text x="425" y="106" text-anchor="middle" fill="#e8eaf0" font-family="IBM Plex Sans" font-size="12">Driver · on-demand</text>
-              <rect x="346" y="126" width="158" height="38" rx="6" fill="#151c1f" stroke="#60a5fa" stroke-opacity=".5"/>
-              <text x="425" y="150" text-anchor="middle" fill="#e8eaf0" font-family="IBM Plex Sans" font-size="12">Executors · spot</text>
-              <line x1="425" y1="174" x2="425" y2="198" stroke="#2a2f3d" stroke-width="1.4"/>
-              <rect x="346" y="200" width="158" height="40" rx="6" fill="#13151a" stroke="#34d399" stroke-opacity=".5"/>
-              <text x="425" y="225" text-anchor="middle" fill="#a7f3d0" font-family="IBM Plex Sans" font-size="12">S3 · results</text>
+              <rect x="210" y="24" width="666" height="372" rx="12" fill="none" stroke="#f59e0b" stroke-opacity=".45" stroke-dasharray="6 5"/>
+              <text x="228" y="48" fill="#5c6478" font-family="IBM Plex Mono, monospace" font-size="11" letter-spacing="1">YOUR AWS ACCOUNT · VPC</text>
+
+              <rect x="24" y="160" width="150" height="80" rx="8" fill="#1c1f27" stroke="#2a2f3d"/>
+              <text x="99" y="192" text-anchor="middle" fill="#e8eaf0" font-family="IBM Plex Sans, sans-serif" font-size="14">notebook</text>
+              <text x="99" y="212" text-anchor="middle" fill="#8b93a8" font-family="IBM Plex Mono, monospace" font-size="11">SQL client</text>
+              <line x1="174" y1="200" x2="208" y2="200" stroke="#f59e0b" stroke-width="1.6" marker-end="url(#va)"/>
+              <text x="186" y="190" text-anchor="middle" fill="#fbbf24" font-family="IBM Plex Mono, monospace" font-size="10">gRPC</text>
+
+              <rect x="380" y="90" width="300" height="62" rx="8" fill="#1b1407" stroke="#f59e0b"/>
+              <text x="402" y="118" fill="#fbbf24" font-family="IBM Plex Sans, sans-serif" font-size="15" font-weight="600">Gateway</text>
+              <text x="402" y="138" fill="#fbbf24" font-family="IBM Plex Mono, monospace" font-size="11">stateless REST</text>
+
+              <rect x="280" y="168" width="500" height="72" rx="8" fill="#13151a" stroke="#60a5fa" stroke-opacity=".5"/>
+              <text x="302" y="198" fill="#e8eaf0" font-family="IBM Plex Sans, sans-serif" font-size="15">ECS Fargate</text>
+              <text x="302" y="218" fill="#8b93a8" font-family="IBM Plex Mono, monospace" font-size="11">driver, on-demand  ·  executors, spot</text>
+
+              <rect x="340" y="256" width="380" height="62" rx="8" fill="#13151a" stroke="#34d399" stroke-opacity=".5"/>
+              <text x="362" y="284" fill="#e8eaf0" font-family="IBM Plex Sans, sans-serif" font-size="15">Amazon S3</text>
+              <text x="362" y="304" fill="#8b93a8" font-family="IBM Plex Mono, monospace" font-size="11">results, Parquet</text>
             </svg>
           </figure>
     </div>
