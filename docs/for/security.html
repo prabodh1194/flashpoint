@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A SQL warehouse that never sees your data | Flashpoint DB</title>
+<meta name="description" content="A warehouse control plane that runs entirely in your AWS account and VPC: your IAM, your S3, MIT licensed. No data egress and no third-party data processor.">
+<link rel="canonical" href="https://flashpointdb.com/for/security.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Flashpoint DB">
+<meta property="og:title" content="A SQL warehouse that never sees your data | Flashpoint DB">
+<meta property="og:description" content="A warehouse control plane that runs entirely in your AWS account and VPC: your IAM, your S3, MIT licensed. No data egress and no third-party data processor.">
+<meta property="og:url" content="https://flashpointdb.com/for/security.html">
+<meta property="og:image" content="https://flashpointdb.com/mock-worksheet.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="robots" content="index, follow">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/persona.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do you see our data?", "acceptedAnswer": {"@type": "Answer", "text": "No. There is no hosted service in the path. The gateway, the compute and the results all run in your account."}}, {"@type": "Question", "name": "Where does state live?", "acceptedAnswer": {"@type": "Answer", "text": "In your DynamoDB, in your account. The gateway is stateless and rebuilds from that state."}}, {"@type": "Question", "name": "Can we run it without public access?", "acceptedAnswer": {"@type": "Answer", "text": "The deployment can sit in private subnets. Reaching the endpoint is your networking choice, not a requirement of the product."}}, {"@type": "Question", "name": "Is the source auditable?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. The control plane is MIT licensed and the deployment is plain OpenTofu, so reviewers can read every line."}}]}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Flashpoint", "item": "https://flashpointdb.com/"}, {"@type": "ListItem", "position": 2, "name": "for security", "item": "https://flashpointdb.com/for/security.html"}]}</script>
+</head>
+<body>
+<nav>
+  <a class="logo" href="/">FLASHPOINT<span>_</span></a>
+  <span class="sp"></span>
+  <a class="n" href="/serverless-spark-connect.html">technical</a>
+  <a href="platform-engineers.html">for Spark teams</a> &middot; <a href="cost.html">for cost</a>
+  <a class="n" href="https://github.com/prabodh1194/flashpoint">github</a>
+</nav>
+
+<header class="wrap">
+  <p class="kicker">For security and compliance</p>
+  <h1>Your data never leaves <em>your account.</em></h1>
+  <p class="sub">No third-party data processor, no export path, no data residency question. The gateway, the compute and the results all live in your VPC.</p>
+  <div class="cta">
+    <a class="btn" href="#waitlist">Join the waitlist</a>
+    <a class="alt" href="/quickstart.html">or run it locally</a>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <h2><span>01 / the problem</span>A SaaS data platform is a third-party risk.</h2>
+    <p class="lede">Every hosted warehouse adds a data processor to your register, an egress path to review, and a residency question to answer. For many teams the review alone costs more than the platform.</p>
+    <figure class="info"><svg viewBox="0 0 640 280" role="img" aria-label="An analyst reaches into a dashed boundary labelled your AWS account, holding Spark and results. No third party is involved.">
+<g font-family="IBM Plex Mono, monospace">
+<rect x="150" y="20" width="478" height="228" rx="12" fill="none" stroke="#f59e0b" stroke-opacity=".45" stroke-dasharray="6 5"/>
+<text x="168" y="46" fill="#5b6f6d" font-size="11" letter-spacing="1">YOUR AWS ACCOUNT · VPC</text>
+<rect x="180" y="72" width="220" height="64" rx="8" fill="#101416" stroke="#233032"/>
+<text x="200" y="100" fill="#e9f1ef" font-family="-apple-system,sans-serif" font-size="14">Spark</text>
+<text x="200" y="120" fill="#94a8a6" font-size="11">your IAM, your S3</text>
+<rect x="180" y="152" width="220" height="64" rx="8" fill="#101416" stroke="#34d399" stroke-opacity=".5"/>
+<text x="200" y="180" fill="#e9f1ef" font-family="-apple-system,sans-serif" font-size="14">Results</text>
+<text x="200" y="200" fill="#94a8a6" font-size="11">your bucket</text>
+<rect x="18" y="106" width="110" height="52" rx="8" fill="#171d1f" stroke="#233032"/>
+<text x="40" y="136" fill="#e9f1ef" font-family="-apple-system,sans-serif" font-size="13">analyst</text>
+<line x1="128" y1="132" x2="148" y2="132" stroke="#f59e0b" stroke-width="1.6"/>
+<text x="18" y="196" fill="#5b6f6d" font-size="11">no third party</text>
+<text x="18" y="214" fill="#5b6f6d" font-size="11">no data export</text>
+</g></svg></figure>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2><span>02 / what changes</span>Same facts, better surface</h2>
+    <div class="ba">
+      <div class="ba-col"><h3>Today</h3><ul><li>A processor to assess and contract</li><li>An egress and residency review</li><li>Credentials to a system you do not own</li></ul></div>
+      <div class="ba-col after"><h3>With Flashpoint</h3><ul><li>Runs on your IAM and your S3</li><li>No data egress by design</li><li>MIT licensed, auditable source</li></ul></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2><span>03 / how it works</span>Three steps</h2>
+    <div class="grid2"><div class="card"><h3>Deploy into your account</h3><p>OpenTofu brings up the gateway, the task definitions and the state store in your AWS account.</p></div><div class="card"><h3>Keep your perimeter</h3><p>Compute runs in your VPC. Results land in your bucket. Your IAM decides who can reach what.</p></div><div class="card"><h3>Audit the source</h3><p>The control plane is MIT licensed, so your reviewers read the code instead of a whitepaper.</p></div></div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2><span>04 / questions</span>Straight answers</h2>
+    <details class="faq"><summary>Do you see our data?</summary><p>No. There is no hosted service in the path. The gateway, the compute and the results all run in your account.</p></details><details class="faq"><summary>Where does state live?</summary><p>In your DynamoDB, in your account. The gateway is stateless and rebuilds from that state.</p></details><details class="faq"><summary>Can we run it without public access?</summary><p>The deployment can sit in private subnets. Reaching the endpoint is your networking choice, not a requirement of the product.</p></details><details class="faq"><summary>Is the source auditable?</summary><p>Yes. The control plane is MIT licensed and the deployment is plain OpenTofu, so reviewers can read every line.</p></details>
+  </div>
+</section>
+
+<section class="waitlist" id="waitlist">
+  <div class="wrap wl">
+    <div>
+      <h2><span></span>Join the waitlist</h2>
+      <p class="lede">Early access opens in batches. One email when a batch opens, nothing else. Or run the whole stack locally tonight.</p>
+    </div>
+    <div>
+      <form class="wlform" action="https://waitlist.flashpointdb.com" method="post" aria-label="Join the waitlist">
+        <label class="hp" for="hp">Leave this field empty</label>
+        <input class="hp" id="hp" type="text" name="_gotcha" tabindex="-1" autocomplete="off">
+        <label class="hp" for="em">Email address</label>
+        <input id="em" type="email" name="email" required placeholder="you@company.com" autocomplete="email">
+        <button class="btn" type="submit">Join</button>
+      </form>
+      <p class="note">One email when signup opens. Stored with our mailing provider, never sold or shared.</p>
+    </div>
+  </div>
+</section>
+
+<footer class="wrap">
+  <p>Flashpoint DB &middot; MIT licensed &middot; built on Apache Spark &middot; not affiliated with the Apache Software Foundation.
+     Independent personal project, not affiliated with, endorsed by or supported by any employer or vendor.</p>
+  <p style="margin-top:8px"><a href="platform-engineers.html">for Spark teams</a> &middot; <a href="cost.html">for cost</a> &middot; <a href="/">home</a> &middot; <a href="/quickstart.html">quickstart</a> &middot; <a href="/serverless-spark-connect.html">technical</a></p>
+</footer>
+
+<script>
+  (function () {
+    var f = document.querySelector('form.wlform');
+    if (!f) return;
+    f.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var input = f.querySelector('input[type=email]');
+      var note = f.parentNode.querySelector('.note');
+      var email = (input.value || '').trim();
+      if (!email) return;
+      fetch('https://waitlist.flashpointdb.com', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email })
+      }).then(function (r) { return r.json(); }).then(function (d) {
+        note.textContent = d && d.ok ? (d.already ? 'You are already on the list.' : 'You are on the list.') : 'That address did not look right.';
+        if (d && d.ok) input.value = '';
+      }).catch(function () { note.textContent = 'Could not reach the waitlist. Try again.'; });
+    });
+  })();
+</script>
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "bd7e87646c024b2aae6d5b8db9255ec0"}'></script>
+</body>
+</html>
