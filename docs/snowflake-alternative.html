@@ -339,8 +339,8 @@
       <button type="submit" class="btn primary">Join the waitlist</button>
     </form>
     <p class="note">One email when a slot opens. No spam. Unsubscribe anytime.</p>
-    <p class="note" id="privacy"><strong>Privacy.</strong> Your email is stored by Buttondown, our
-       newsletter processor, and used only to send try-it invitations. No analytics cookies are set on
+    <p class="note" id="privacy"><strong>Privacy.</strong> Your email is stored in our own Cloudflare
+       Workers KV namespace and used only to send try-it invitations. No analytics cookies are set on
        this page. Ask to be removed at any time and the address is deleted.</p>
     <p class="note">Want the technical version? The
        <a href="serverless-spark-connect.html" style="color:var(--amber)">serverless deep dive</a> covers
@@ -368,18 +368,40 @@
 -->
 <script>
   // ---------------------------------------------------------------------------
-  // OWNER: this is the single waitlist endpoint for the whole site. Flip it once
-  // to your Buttondown embed-subscribe URL. Every .waitlist form uses it.
-  //   e.g. https://buttondown.email/api/emails/embed-subscribe/<your-username>
+  // Waitlist endpoint: the Cloudflare Worker on our own account, backed by KV.
+  // It accepts JSON or form-encoded POSTs and dedupes by email. Every
+  // .waitlist form on this page uses it.
   // ---------------------------------------------------------------------------
-  var WAITLIST_ENDPOINT = 'https://buttondown.email/api/emails/embed-subscribe/REPLACE_WITH_BUTTONDOWN_USERNAME';
+  var WAITLIST_ENDPOINT = 'https://waitlist.flashpointdb.com';
 
   function track(name) {
     if (window.umami && window.umami.track) window.umami.track(name, { path: location.pathname });
   }
   document.querySelectorAll('form.waitlist').forEach(function (form) {
     form.action = WAITLIST_ENDPOINT;
-    form.addEventListener('submit', function () { track('waitlist_signup'); });
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var input = form.querySelector('input[type=email]');
+      var button = form.querySelector('button');
+      var note = form.parentNode.querySelector('.note');
+      var email = (input.value || '').trim();
+      if (!email) return;
+      button.disabled = true;
+      if (note) note.textContent = 'Adding you to the list...';
+      fetch(WAITLIST_ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email }) })
+        .then(function (r) { return r.json().catch(function () { return {}; }); })
+        .then(function (d) {
+          if (d && d.ok) {
+            if (note) note.textContent = d.already ? 'You are already on the list.' : 'You are on the list. One email when a slot opens.';
+            input.value = '';
+            track('waitlist_signup');
+          } else if (note) {
+            note.textContent = 'That address did not look right. Try again.';
+          }
+        })
+        .catch(function () { if (note) note.textContent = 'Could not reach the waitlist. Try again in a moment.'; })
+        .then(function () { button.disabled = false; });
+    });
   });
   var fired75 = false;
   addEventListener('scroll', function () {
