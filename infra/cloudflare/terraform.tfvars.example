@@ -1,0 +1,14 @@
+# Copy to terraform.tfvars (git-ignored) and fill in the IDs.
+# The API token is NOT here — export CLOUDFLARE_API_TOKEN instead.
+
+account_id = "your-cloudflare-account-id"
+
+domain  = "flashpointdb.com"
+zone_id = "zone-id-of-flashpointdb-com"
+
+redirect_from    = "sparksql.dev"
+redirect_zone_id = "zone-id-of-sparksql-dev"
+
+# Leave false for the first apply so GitHub can issue its certificate,
+# then set true once "Enforce HTTPS" is available in the repository settings.
+proxy_pages_records = false
